@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "influencer-intel",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "platform:dev", "--", "-p", "3030"],
+      "port": 3030
+    }
+  ]
+}

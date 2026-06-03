@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+
+  --ii-bg: #ffffff;
+  --ii-surface: #f7f7f7;
+  --ii-ink: #111111;
+  --ii-muted: #6b6b6b;
+  --ii-faint: #999999;
+  --ii-border: #e5e5e5;
+  --ii-border-soft: #f0f0f0;
+  --ii-accent: #111111;
+  --ii-gold: #b8965a;
+}
+
+html, body {
+  background: var(--ii-bg);
+  color: var(--ii-ink);
+  font-feature-settings: 'cv11', 'ss03', 'ss04';
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+
+::selection { background: rgba(17, 17, 17, 0.08); }
+
+button, input, textarea, select {
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+.scroll-thin::-webkit-scrollbar { width: 4px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }

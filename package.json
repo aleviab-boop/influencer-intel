@@ -1,0 +1,27 @@
+{
+  "name": "influencer-intel",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "scraper",
+    "platform"
+  ],
+  "scripts": {
+    "scraper:dev": "npm --workspace scraper run dev",
+    "scraper:start": "npm --workspace scraper run start",
+    "scraper:capture": "npm --workspace scraper run capture-session",
+    "platform:dev": "npm --workspace platform run dev",
+    "platform:build": "npm --workspace platform run build",
+    "platform:start": "npm --workspace platform run start",
+    "db:health": "npm --workspace shared run db:health",
+    "db:smoke": "npm --workspace shared run db:smoke",
+    "db:diff": "npm --workspace shared run db:diff",
+    "db:fix": "npm --workspace shared run db:fix",
+    "db:check-session": "npm --workspace shared run db:check-session",
+    "typecheck": "npm --workspace shared run typecheck && npm --workspace scraper run typecheck && npm --workspace platform run typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

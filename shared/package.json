@@ -1,0 +1,35 @@
+{
+  "name": "@influencer-intel/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types/index.ts",
+    "./db": "./db/boltic-client.ts",
+    "./db/encryption": "./db/encryption.ts",
+    "./llm": "./llm/openai-client.ts",
+    "./ig-graph": "./ig-graph/client.ts",
+    "./ig-graph/types": "./ig-graph/types.ts",
+    "./content-scorer": "./content-scorer/gemini-client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:health": "tsx db/health-check.ts",
+    "db:smoke": "tsx db/smoke-test.ts",
+    "db:diff": "tsx db/diff-schema.ts",
+    "db:fix": "tsx db/apply-fixes.ts",
+    "db:check-session": "tsx db/check-session.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "openai": "^4.73.0",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.3.0"
+  }
+}
