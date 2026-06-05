@@ -370,7 +370,7 @@ function LogoItem({ name, slug }: { name: string; slug: string }) {
       src={`/logos/${slug}.png`}
       alt={name}
       onError={() => setErr(true)}
-      className="h-8 w-auto object-contain opacity-70 hover:opacity-100 grayscale hover:grayscale-0 transition select-none"
+      className="h-14 md:h-16 w-auto object-contain hover:scale-105 transition select-none"
     />
   );
 }
