@@ -14,7 +14,7 @@ const BANDS: Record<string, { t: string; c: string }> = {
 interface Result {
   authenticity: number;
   band: { t: string; c: string };
-  basis: 'per_post' | 'aggregate';
+  basis: 'verified' | 'per_post' | 'aggregate';
   postsAnalyzed: number;
   signals: { label: string; ok: boolean; detail: string }[];
 }
@@ -89,7 +89,11 @@ export default function FakeFollowerChecker() {
           <section className="max-w-3xl mx-auto px-6 -mt-6 relative z-10">
             <div className="ii-fadeup rounded-2xl bg-white border border-border shadow-[0_12px_40px_rgba(0,0,0,0.08)] p-7">
               {meta && <div className="text-[13px] text-ink-500 mb-1 text-center">{meta}</div>}
-              <div className="text-[11px] text-ink-400 mb-5 text-center">{result.basis === 'per_post' ? `Analyzed ${result.postsAnalyzed} recent posts` : 'Based on profile averages'}</div>
+              <div className="text-[11px] mb-5 text-center">
+                {result.basis === 'verified'
+                  ? <span className="text-emerald-600 font-medium">✓ Verified — reach-based, from {result.postsAnalyzed} connected posts</span>
+                  : <span className="text-ink-400">{result.basis === 'per_post' ? `Analyzed ${result.postsAnalyzed} recent posts` : 'Based on profile averages'}</span>}
+              </div>
               <div className="flex flex-col sm:flex-row items-center gap-7">
                 <Gauge value={result.authenticity} color={result.band.c} />
                 <div className="flex-1 w-full">

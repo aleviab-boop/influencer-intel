@@ -44,6 +44,14 @@ export interface RecentPost {
   posted_at?: string | null;
 }
 
+// Reach-based engagement from OAuth-synced insights (see lib/verified-metrics).
+export interface VerifiedEngagement {
+  posts: number;
+  er_pct: number;   // median reach-based ER (% of reach)
+  cpl_pct: number;  // median comments-per-like (%)
+  avg_reach: number;
+}
+
 export interface AuthenticityInput {
   follower_count?: number | string | null;
   following_count?: number | string | null;
@@ -52,16 +60,21 @@ export interface AuthenticityInput {
   engagement_rate?: number | string | null;
   cred_score?: number | string | null;
   recent_posts?: RecentPost[] | null;
+  verified?: VerifiedEngagement | null;
 }
 
 export interface AuthenticitySignal { label: string; ok: boolean; detail: string }
 export interface AuthenticityResult {
   score: number;            // 0–100
   band: 'high' | 'mixed' | 'low';
-  basis: 'per_post' | 'aggregate';
+  basis: 'verified' | 'per_post' | 'aggregate';
   posts_analyzed: number;
   signals: AuthenticitySignal[];
 }
+
+// Healthy reach-based ER baseline (% of reached accounts that engage). Reach-ER
+// runs far higher than follower-ER, so it gets its own benchmark.
+const REACH_ER_TARGET = 8;
 
 function bandOf(score: number): 'high' | 'mixed' | 'low' {
   return score >= 80 ? 'high' : score >= 55 ? 'mixed' : 'low';
@@ -81,6 +94,29 @@ export function scoreAuthenticity(input: AuthenticityInput): AuthenticityResult 
   const cred = num(input.cred_score);
   const target = tierTarget(followers);
   const { score: ffSc, ratio: ff } = ffScore(followers, following);
+
+  // ---- Verified path (OAuth reach-based insights) — highest confidence ----
+  const v = input.verified;
+  if (v && v.posts >= 3) {
+    const erScore = clamp((v.er_pct / REACH_ER_TARGET) * 100, 0, 100);
+    const cplScore = clamp((v.cpl_pct / 1.5) * 100, 0, 100);
+    const parts = cred != null
+      ? [erScore * 0.5, cplScore * 0.2, ffSc * 0.1, cred * 0.2]
+      : [erScore * 0.62, cplScore * 0.23, ffSc * 0.15];
+    const score = Math.round(parts.reduce((a, b) => a + b, 0));
+    return {
+      score,
+      band: bandOf(score),
+      basis: 'verified',
+      posts_analyzed: v.posts,
+      signals: [
+        { label: 'Reach-based engagement (verified)', ok: v.er_pct >= 3, detail: `${v.er_pct.toFixed(1)}% of reach engaged` },
+        { label: 'Comment authenticity', ok: v.cpl_pct >= 0.5, detail: `${v.cpl_pct.toFixed(2)}% comments-per-like` },
+        { label: 'Follower / following ratio', ok: ff >= 1, detail: ff >= 999 ? 'follows almost no one' : `${ff.toFixed(1)}×` },
+        ...(cred != null ? [{ label: 'Credibility score', ok: cred >= 70, detail: `${Math.round(cred)}/100` }] : []),
+      ],
+    };
+  }
 
   // Build per-post series when we have enough posts with engagement data.
   const posts = (input.recent_posts ?? [])

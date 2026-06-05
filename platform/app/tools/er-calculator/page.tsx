@@ -13,13 +13,16 @@ export default function ERCalculator() {
   const [comments, setComments] = useState('');
   const [looking, setLooking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [verified, setVerified] = useState<{ er_pct: number; cpl_pct: number; posts: number; avg_reach: number } | null>(null);
 
   async function lookup() {
     if (!handle.trim()) return;
     setLooking(true);
     setNote(null);
+    setVerified(null);
+    const clean = handle.trim().replace(/^@/, '');
     try {
-      const r = await fetch(`/api/creators?q=${encodeURIComponent(handle.trim().replace(/^@/, ''))}&limit=1`);
+      const r = await fetch(`/api/creators?q=${encodeURIComponent(clean)}&limit=1`);
       const d = await r.json();
       const c = (d.creators ?? [])[0];
       if (!c) { setNote('Not found in our database — enter the numbers manually.'); return; }
@@ -27,6 +30,11 @@ export default function ERCalculator() {
       setLikes(String(c.avg_likes ?? ''));
       setComments(String(c.avg_comments ?? ''));
       setNote(`Loaded @${c.handle}${c.display_name ? ` · ${c.display_name}` : ''}`);
+      // If this creator has connected via Instagram, prefer reach-based (verified) ER.
+      fetch(`/api/tools/verified-engagement?handle=${encodeURIComponent(clean)}`)
+        .then((x) => x.json())
+        .then((v) => { if (v?.verified) setVerified({ er_pct: v.er_pct, cpl_pct: v.cpl_pct, posts: v.posts, avg_reach: v.avg_reach }); })
+        .catch(() => {});
     } catch {
       setNote('Lookup failed.');
     } finally {
@@ -85,6 +93,14 @@ export default function ERCalculator() {
                 </>
               ) : (
                 <div className="mt-4 text-[13px] text-ink-400">Enter followers and engagement to see the verdict.</div>
+              )}
+              {verified && (
+                <div className="mt-5 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left">
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700"><span>✓ Verified · reach-based</span></div>
+                  <div className="mt-1 text-[22px] font-bold tabular-nums text-emerald-700">{verified.er_pct.toFixed(1)}%</div>
+                  <div className="text-[11px] text-emerald-700/80">of reach engaged · avg reach {verified.avg_reach.toLocaleString('en-IN')} · {verified.posts} connected posts</div>
+                  <div className="mt-1.5 text-[11px] text-ink-400">This creator connected via Instagram — measured against people actually reached, not follower count.</div>
+                </div>
               )}
             </div>
           </div>

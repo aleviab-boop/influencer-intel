@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { scoreAuthenticity } from '@/lib/authenticity';
+import { getVerifiedEngagement } from '@/lib/verified-metrics';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,9 @@ export async function GET(req: NextRequest) {
     const c = rows[0];
     if (!c) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+    // Prefer OAuth-verified reach-based engagement when the creator has synced it.
+    const verified = await getVerifiedEngagement(handle);
+
     const result = scoreAuthenticity({
       follower_count: c.follower_count as number | null,
       following_count: c.following_count as number | null,
@@ -33,6 +37,7 @@ export async function GET(req: NextRequest) {
       engagement_rate: c.engagement_rate as number | null,
       cred_score: c.cred_score as string | null,
       recent_posts: (c.recent_posts as []) ?? [],
+      verified,
     });
 
     const followers = Number(c.follower_count) || 0;
