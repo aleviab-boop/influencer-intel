@@ -39,6 +39,38 @@ export class IGGraphClient {
     return res.json() as Promise<T>;
   }
 
+  private async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    const url = new URL(`${GRAPH_API_BASE}/${GRAPH_API_VERSION}${path}`);
+    url.searchParams.set('access_token', this.accessToken);
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`IG Graph API ${res.status}: ${text}`);
+    }
+    return res.json() as Promise<T>;
+  }
+
+  // ---- Messaging / Comments (Comment-to-DM, Phase 2) -------------------
+
+  /** Private-reply to a comment — DMs the commenter (allowed once per comment). */
+  async sendPrivateReply(commentId: string, text: string): Promise<{ recipient_id?: string; message_id?: string }> {
+    return this.post('/me/messages', { recipient: { comment_id: commentId }, message: { text } });
+  }
+
+  /** Send a DM to a user by their Instagram-scoped id (within the 24h window). */
+  async sendMessage(recipientId: string, text: string): Promise<{ recipient_id?: string; message_id?: string }> {
+    return this.post('/me/messages', { recipient: { id: recipientId }, message: { text } });
+  }
+
+  /** Post a public reply under a comment. */
+  async replyToComment(commentId: string, text: string): Promise<{ id?: string }> {
+    return this.post(`/${commentId}/replies`, { message: text });
+  }
+
   private updateRateLimit(headers: Headers): void {
     const usage = headers.get('x-business-use-case-usage');
     if (!usage) return;

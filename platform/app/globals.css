@@ -12,7 +12,8 @@
   --ii-faint: #999999;
   --ii-border: #e5e5e5;
   --ii-border-soft: #f0f0f0;
-  --ii-accent: #111111;
+  --ii-accent: #6C4DF6;
+  --ii-accent-soft: #f4f2ff;
   --ii-gold: #b8965a;
 }
 
@@ -36,3 +37,48 @@ button, input, textarea, select {
 
 .scroll-thin::-webkit-scrollbar { width: 4px; }
 .scroll-thin::-webkit-scrollbar-thumb { background: #ddd; border-radius: 2px; }
+
+/* Subtle blueprint grid used behind hero / page headers. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(108, 77, 246, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(108, 77, 246, 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* App-wide theming: every filled primary button (Tailwind `bg-ink-900`) adopts
+   the accent (violet) without editing each page. Text/headings keep ink. */
+.bg-ink-900 { background-color: var(--ii-accent) !important; }
+.bg-ink-900:hover { filter: brightness(0.92); }
+
+/* Blinking caret for the animated hero search placeholder. */
+@keyframes ii-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.ii-caret { animation: ii-blink 1s steps(1) infinite; }
+
+/* Infinite logo marquees — each track holds two copies; -50% loops seamlessly.
+   Runs continuously (intentionally not gated on prefers-reduced-motion, since
+   this is a core brand animation). */
+@keyframes ii-marquee-left { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes ii-marquee-right { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+.ii-marquee-left { animation: ii-marquee-left 26s linear infinite; will-change: transform; }
+.ii-marquee-right { animation: ii-marquee-right 32s linear infinite; will-change: transform; }
+.ii-marquee-pause:hover .ii-marquee-left,
+.ii-marquee-pause:hover .ii-marquee-right { animation-play-state: paused; }
+
+/* Rotating logo ring — only the top arc is visible, giving a curved
+   semi-circle of logos that sweep across and tilt at the edges. */
+@keyframes ii-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.ii-spin { animation: ii-spin 70s linear infinite; will-change: transform; }
+.ii-marquee-pause:hover .ii-spin { animation-play-state: paused; }
+
+/* Scroll-showcase animations */
+@keyframes ii-bargrow { from { width: 0; } to { width: var(--w); } }
+.ii-bar { animation: ii-bargrow 1.1s cubic-bezier(.22,.61,.36,1) forwards; }
+@keyframes ii-pulse { 0%, 100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.18); opacity: .65; } }
+.ii-pulse { animation: ii-pulse 2.6s ease-in-out infinite; }
+@keyframes ii-fadeup { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.ii-fadeup { animation: ii-fadeup .55s cubic-bezier(.22,.61,.36,1) forwards; }
+@keyframes ii-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.ii-float { animation: ii-float 4s ease-in-out infinite; }
+@keyframes ii-countup { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.ii-countup { animation: ii-countup .5s ease forwards; }

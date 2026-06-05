@@ -1,5 +1,6 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { IGGraphClient } from '@influencer-intel/shared/ig-graph';
+import { getAccessToken } from './oauth-service';
 import type { ConnectedAccount, PostInsight, Creator, AudienceDemographics } from '@influencer-intel/shared/types';
 
 export async function syncConnectedAccount(accountId: string): Promise<{
@@ -17,7 +18,8 @@ export async function syncConnectedAccount(accountId: string): Promise<{
   });
 
   try {
-    const client = new IGGraphClient(account.access_token_encrypted);
+    const token = await getAccessToken(accountId);
+    const client = new IGGraphClient(token);
     const media = await client.getAllMedia(200);
     let postsAdded = 0;
     let insightsUpdated = 0;

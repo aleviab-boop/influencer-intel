@@ -11,12 +11,17 @@
     "./llm": "./llm/openai-client.ts",
     "./ig-graph": "./ig-graph/client.ts",
     "./ig-graph/types": "./ig-graph/types.ts",
-    "./content-scorer": "./content-scorer/gemini-client.ts"
+    "./content-scorer": "./content-scorer/gemini-client.ts",
+    "./scoring": "./scoring/quality.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:health": "tsx db/health-check.ts",
     "db:smoke": "tsx db/smoke-test.ts",
+    "db:discover-smoke": "tsx db/discover-smoke.ts",
+    "db:migrate": "tsx db/apply-migrations.ts",
+    "db:rescore-quality": "tsx db/rescore-quality.ts",
+    "score-smoke": "tsx scoring/quality-smoke.ts",
     "db:diff": "tsx db/diff-schema.ts",
     "db:fix": "tsx db/apply-fixes.ts",
     "db:check-session": "tsx db/check-session.ts"

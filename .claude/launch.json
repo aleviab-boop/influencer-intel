@@ -4,7 +4,7 @@
     {
       "name": "influencer-intel",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "platform:dev", "--", "-p", "3030"],
+      "runtimeArgs": ["run", "platform:dev"],
       "port": 3030
     }
   ]

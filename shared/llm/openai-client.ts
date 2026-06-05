@@ -58,6 +58,10 @@ export class OpenAIClient {
     vibe: string | null;
     reference_creators: string[];
     excluded_creators: string[];
+    genre: string | null;
+    niche: string | null;
+    region: string | null;
+    keywords: string[];
   }> {
     const res = await this.client.chat.completions.create({
       model: this.classificationModel,
@@ -117,6 +121,14 @@ Output ONLY a JSON object with these fields:
 - vibe: free-form ("premium", "mass", "festive-bright", "minimalist", "trendy")
 
 - reference_creators / excluded_creators: arrays of handles (without @)
+
+- genre: broad content vertical in plain words ("fashion", "beauty", "travel", "food", "fitness", "lifestyle"). Usually mirrors category but stays human-readable. null if unclear.
+
+- niche: the FINE-GRAINED sub-specialty implied by the prompt ("resortwear", "linen styling", "festive ethnic", "street food", "skincare routines"). Be specific. null if the prompt is too generic.
+
+- region: the geographic region/locale the campaign targets in plain words ("Goa", "West India", "South India", "Mumbai metro", "pan-India"). Broader than a single city — derive from the cities/state cues. null if unspecified.
+
+- keywords: 4-10 short lowercase keywords/phrases lifted from or implied by the prompt, used for tag matching ("summer", "goa", "lookbook", "resortwear", "beachwear"). Always return at least 3 when possible.
 
 When uncertain about a single field, infer reasonably from context — DON'T leave critical fields like target_cities or target_languages null when a reasonable inference exists (especially for region/festival cues).`,
         },
@@ -340,6 +352,50 @@ Write the reasoning.`,
       ],
     });
     return res.choices[0]?.message?.content?.trim() ?? '';
+  }
+
+  /**
+   * Generate ONE concrete reel/content concept to ask a creator to make for a
+   * campaign — Phase 3 "what video should they make". Fits the creator's style.
+   */
+  async generateContentBrief(input: {
+    handle: string;
+    display_name: string | null;
+    niche: string | null;
+    genre: string | null;
+    content_themes: string[];
+    campaign: string | null;
+  }): Promise<{
+    concept: string;
+    format: string;
+    hook: string;
+    rationale: string;
+    cta: string;
+  }> {
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are a short-form content strategist for Indian D2C brand campaigns. Given an influencer and a campaign, propose ONE concrete, production-ready Instagram concept that fits the creator's existing style and reaches their audience.
+Respond ONLY with JSON:
+{ "concept": "1-2 sentence description of the video", "format": "reel | carousel | story", "hook": "the literal first-3-seconds hook", "rationale": "why this fits THIS creator's audience", "cta": "the call to action" }
+Be specific. No hype, no filler.`,
+        },
+        {
+          role: 'user',
+          content: `Creator: @${input.handle}${input.display_name ? ` (${input.display_name})` : ''}
+Niche: ${input.niche ?? 'general'}
+Genre: ${input.genre ?? '—'}
+Recurring content themes: ${input.content_themes.join(', ') || 'unknown'}
+Campaign: ${input.campaign ?? 'general brand awareness'}
+
+Propose one content concept.`,
+        },
+      ],
+    });
+    return JSON.parse(res.choices[0]?.message?.content ?? '{}');
   }
 
   /**

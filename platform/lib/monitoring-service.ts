@@ -1,5 +1,6 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { IGGraphClient } from '@influencer-intel/shared/ig-graph';
+import { getAccessToken } from './oauth-service';
 import type {
   ConnectedAccount, PostInsight, MonitoringUpdate,
   PerformanceBucket, InsightConfidence,
@@ -78,7 +79,8 @@ export async function processCheckpoint(monitoredPostId: string): Promise<Monito
   const account = await db.findById<ConnectedAccount>('connected_accounts', post.connected_account_id);
   if (!account || account.connection_status !== 'active') return null;
 
-  const client = new IGGraphClient(account.access_token_encrypted);
+  const token = await getAccessToken(account.id);
+  const client = new IGGraphClient(token);
 
   // Fetch current metrics
   let currentMetrics = {

@@ -109,6 +109,158 @@ export interface ParsedBriefSpec {
   vibe: string | null;
   reference_creators: string[];
   excluded_creators: string[];
+  // Phase 1 discovery fields — broad genre, fine niche, geographic region,
+  // and free keywords extracted from the prompt for tag matching.
+  genre: string | null;
+  niche: string | null;
+  region: string | null;
+  keywords: string[];
+}
+
+// ============================================================
+// Phase 1 — prompt-driven discovery
+// ============================================================
+
+export type DiscoverySource = 'icmp' | 'trends' | 'scrape' | 'manual';
+
+// Phase 2 quality scoring (computed by shared/scoring/quality.ts)
+export type QualityBand = 'pass' | 'weak' | 'insufficient_data';
+
+export interface QualityBreakdown {
+  engagement: number;
+  comment_quality: number;
+  consistency: number;
+  authenticity: number;
+}
+
+export interface DiscoveryResult {
+  id: string;
+  prompt: string;
+  prompt_embedding: number[] | null;
+  creator_id: string;
+  rank: number;
+  relevance_score: number | null;
+  confidence_score: number | null;
+  matched_tags: string[] | null;
+  source: DiscoverySource | null;
+  created_at: string;
+}
+
+// ============================================================
+// Discover & Recruit — programs
+// ============================================================
+
+export type ProgramStatus = 'active' | 'paused' | 'closed';
+export type RecruitStatus = 'invited' | 'contacted' | 'recruited' | 'declined';
+
+export interface Program {
+  id: string;
+  brand_id: string | null;
+  name: string;
+  slug: string | null;
+  description: string | null;
+  source_prompt: string | null;
+  status: ProgramStatus;
+  budget: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProgramRecruit {
+  id: string;
+  program_id: string;
+  creator_id: string;
+  status: RecruitStatus;
+  source_prompt: string | null;
+  note: string | null;
+  relevance_score: number | null;
+  confidence_score: number | null;
+  deliverables: string | null;
+  due_date: string | null;
+  rate: number | null;
+  paid: boolean;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Comment-to-DM automations
+// ============================================================
+
+export type AutomationStatus = 'active' | 'paused' | 'draft';
+export type TriggerType = 'keyword' | 'any';
+export type RunStatus = 'simulated' | 'sent' | 'skipped' | 'failed';
+
+export interface Automation {
+  id: string;
+  connected_account_id: string | null;
+  name: string;
+  post_label: string | null;
+  media_id: string | null;
+  trigger_type: TriggerType;
+  keyword: string | null;
+  dm_message: string;
+  comment_reply: string | null;
+  status: AutomationStatus;
+  reply_count: number;
+  last_active_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationRun {
+  id: string;
+  automation_id: string;
+  commenter: string | null;
+  comment_text: string | null;
+  matched: boolean;
+  dm_sent: string | null;
+  status: RunStatus;
+  created_at: string;
+}
+
+// ============================================================
+// Media Management — creative assets
+// ============================================================
+
+export type AssetType = 'reel' | 'image' | 'carousel' | 'story';
+export type AssetStatus = 'draft' | 'in_review' | 'approved' | 'changes';
+
+export interface CreativeAsset {
+  id: string;
+  program_id: string | null;
+  creator_handle: string | null;
+  title: string;
+  asset_type: AssetType;
+  asset_url: string | null;
+  caption: string | null;
+  status: AssetStatus;
+  version: number;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// Phase 3 — predicted-vs-real tracking
+// ============================================================
+
+export interface PostOutcome {
+  id: string;
+  creator_id: string;
+  program_id: string | null;
+  post_url: string | null;
+  posted_at: string | null;
+  predicted_er: number | null;
+  predicted_likes: number | null;
+  predicted_views: number | null;
+  actual_likes: number | null;
+  actual_comments: number | null;
+  actual_views: number | null;
+  actual_er: number | null;
+  note: string | null;
+  created_at: string;
 }
 
 export interface OutreachRecord {
@@ -162,6 +314,19 @@ export interface Creator {
   primary_city: string | null;
   city_tier: CityTier | null;
   data_tier: DataTier;
+  // Phase 1 discovery facts (see migration 004)
+  genre: string | null;
+  niche: string | null;
+  region: string | null;
+  tags: string[] | null;
+  source: DiscoverySource | null;
+  source_url: string | null;
+  confidence_score: number | null;
+  // Phase 2 quality (see migration 006)
+  quality_score: number | null;
+  quality_breakdown: QualityBreakdown | null;
+  quality_band: QualityBand | null;
+  quality_scored_at: string | null;
   is_active: boolean;
   is_indian: boolean | null;
   is_verified_creator: boolean;

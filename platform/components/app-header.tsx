@@ -27,12 +27,9 @@ export function AppHeader() {
       .catch(() => setSession({ authenticated: false }));
   }, []);
 
-  const links = [
-    { href: '/creators', label: 'Discover', match: (p: string) => p.startsWith('/creators') || p.startsWith('/insights') },
-    { href: '/predict', label: 'Predict', match: (p: string) => p === '/predict' },
-    { href: '/briefs', label: 'Briefs', match: (p: string) => p.startsWith('/briefs') || p.startsWith('/shortlist') },
-    { href: '/stores', label: 'Stores', match: (p: string) => p.startsWith('/stores') },
-  ];
+  // Inner-app nav tabs removed — the app is navigated via the marketing site
+  // (Features menu) and the inline home search.
+  const links: { href: string; label: string; match: (p: string) => boolean }[] = [];
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -67,8 +64,14 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-[#e5e5e5]">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-[15px] font-semibold tracking-[0.04em] uppercase text-[#111]">
+        <Link href="/lander" className="flex items-center gap-2">
+          <span
+            className="w-6 h-6 rounded-md grid place-items-center text-white text-[13px] font-bold"
+            style={{ background: 'var(--ii-accent)' }}
+          >
+            i
+          </span>
+          <span className="text-[15px] font-semibold tracking-[0.02em] text-[#111]">
             Influencer Intel
           </span>
         </Link>
@@ -81,9 +84,10 @@ export function AppHeader() {
                 href={l.href}
                 className={`px-3 py-1.5 text-[13px] tracking-wide transition-colors ${
                   active
-                    ? 'text-[#111] font-medium'
+                    ? 'font-medium'
                     : 'text-[#999] hover:text-[#111]'
                 }`}
+                style={active ? { color: 'var(--ii-accent)' } : undefined}
               >
                 {l.label}
               </Link>
