@@ -11,6 +11,7 @@ interface Creator {
   follower_count: number | string | null;
   primary_category: string | null;
   quality_score: number | string | null;
+  verified: boolean;
 }
 interface Data {
   a: string;
@@ -62,7 +63,7 @@ export default function CompetitorsPage() {
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Competitor Analysis</div>
         <h1 className="text-2xl font-bold text-ink-900 mb-2">Who works with whom</h1>
-        <p className="text-[15px] text-ink-600 mb-6">Enter your brand and a competitor — we surface creators who mention each (from captions &amp; profile data) and the overlap between them.</p>
+        <p className="text-[15px] text-ink-600 mb-6">Enter your brand and a competitor — we surface creators with a detected partnership for each brand and the overlap between them. A <span className="font-medium text-emerald-700">Verified</span> tag means a paid-partnership label was spotted on their profile.</p>
 
         <div className="rounded-2xl bg-white border border-border shadow-card p-4 flex flex-col sm:flex-row gap-2 mb-6">
           <input value={a} onChange={(e) => setA(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()} placeholder="Your brand (e.g. Nykaa)" className={inp} />
@@ -125,7 +126,7 @@ function BrandColumn({ title, creators, overlapIds }: { title: string; creators:
         <span className="text-[12px] text-ink-400">{creators.length} creators</span>
       </div>
       {creators.length === 0 ? (
-        <div className="px-4 py-10 text-center text-sm text-ink-400">No creators found mentioning “{title}”.</div>
+        <div className="px-4 py-10 text-center text-sm text-ink-400">No creators with a detected “{title}” partnership.</div>
       ) : (
         <div className="max-h-[460px] overflow-auto scroll-thin">
           {creators.map((c) => (
@@ -133,7 +134,8 @@ function BrandColumn({ title, creators, overlapIds }: { title: string; creators:
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-medium text-ink-900 truncate flex items-center gap-1.5">
                   {c.display_name ?? `@${c.handle}`}
-                  {overlapIds.has(c.id) && <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white" style={{ background: ACCENT }}>BOTH</span>}
+                  {c.verified && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0">VERIFIED</span>}
+                  {overlapIds.has(c.id) && <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white shrink-0" style={{ background: ACCENT }}>BOTH</span>}
                 </div>
                 <div className="text-[11px] text-ink-400 truncate">{c.primary_category ?? 'creator'}</div>
               </div>
