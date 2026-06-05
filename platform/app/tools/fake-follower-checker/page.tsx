@@ -3,12 +3,19 @@
 import { useState } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
-const tierTarget = (f: number): number => (f >= 1e6 ? 1 : f >= 5e5 ? 1.3 : f >= 1e5 ? 1.8 : f >= 5e4 ? 2.5 : f >= 2e4 ? 3.5 : f >= 1e4 ? 4.5 : 6);
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
+
+const BANDS: Record<string, { t: string; c: string }> = {
+  high: { t: 'Highly authentic', c: '#10b981' },
+  mixed: { t: 'Mixed signals', c: '#f59e0b' },
+  low: { t: 'Low authenticity', c: '#f43f5e' },
+};
 
 interface Result {
   authenticity: number;
   band: { t: string; c: string };
+  basis: 'per_post' | 'aggregate';
+  postsAnalyzed: number;
   signals: { label: string; ok: boolean; detail: string }[];
 }
 
@@ -26,37 +33,19 @@ export default function FakeFollowerChecker() {
     setResult(null);
     setMeta(null);
     try {
-      const r = await fetch(`/api/creators?q=${encodeURIComponent(handle.trim().replace(/^@/, ''))}&limit=1`);
+      const r = await fetch(`/api/tools/authenticity?handle=${encodeURIComponent(handle.trim().replace(/^@/, ''))}`);
       const d = await r.json();
-      const c = (d.creators ?? [])[0];
-      if (!c) { setError('Creator not found in our database. Try another handle.'); return; }
-
-      const followers = Number(c.follower_count) || 0;
-      const following = Number(c.following_count) || 0;
-      const er = c.engagement_rate != null ? Number(c.engagement_rate) * 100 : followers > 0 ? ((Number(c.avg_likes) || 0) + (Number(c.avg_comments) || 0)) / followers * 100 : 0;
-      const cred = c.cred_score != null ? Number(c.cred_score) : null;
-
-      const target = tierTarget(followers);
-      const erScore = clamp((er / Math.max(0.1, target)) * 100, 0, 100);              // engagement health
-      const ff = following > 0 ? followers / following : followers > 0 ? 999 : 1;
-      const ffScore = clamp(ff >= 1 ? 70 + Math.min(30, (ff - 1) * 8) : ff * 70, 0, 100);
-      const commentRatio = (Number(c.avg_likes) || 0) > 0 ? (Number(c.avg_comments) || 0) / (Number(c.avg_likes) || 1) : 0;
-      const commentScore = clamp((commentRatio / 0.015) * 100, 0, 100);
-
-      const parts = cred != null ? [erScore * 0.4, commentScore * 0.2, ffScore * 0.2, cred * 0.2] : [erScore * 0.5, commentScore * 0.25, ffScore * 0.25];
-      const authenticity = Math.round(parts.reduce((a, b) => a + b, 0));
-      const band = authenticity >= 80 ? { t: 'Highly authentic', c: '#10b981' } : authenticity >= 55 ? { t: 'Mixed signals', c: '#f59e0b' } : { t: 'Low authenticity', c: '#f43f5e' };
-
-      setMeta(`@${c.handle}${c.display_name ? ` · ${c.display_name}` : ''} · ${followers.toLocaleString('en-IN')} followers`);
+      if (!r.ok || d.error) {
+        setError(d.error === 'not_found' ? 'Creator not found in our database. Try another handle.' : (d.error || 'Something went wrong.'));
+        return;
+      }
+      setMeta(`@${d.handle}${d.display_name ? ` · ${d.display_name}` : ''} · ${Number(d.followers).toLocaleString('en-IN')} followers`);
       setResult({
-        authenticity,
-        band,
-        signals: [
-          { label: 'Engagement vs tier', ok: er >= target * 0.6, detail: `${er.toFixed(2)}% (benchmark ${target.toFixed(1)}%)` },
-          { label: 'Comment authenticity', ok: commentRatio >= 0.005, detail: `${(commentRatio * 100).toFixed(2)}% comments-per-like` },
-          { label: 'Follower / following ratio', ok: ff >= 1, detail: ff >= 999 ? 'follows almost no one' : `${ff.toFixed(1)}×` },
-          ...(cred != null ? [{ label: 'Credibility score', ok: cred >= 70, detail: `${Math.round(cred)}/100` }] : []),
-        ],
+        authenticity: d.score,
+        band: BANDS[d.band] ?? { t: 'Mixed signals', c: '#f59e0b' },
+        basis: d.basis,
+        postsAnalyzed: d.posts_analyzed,
+        signals: d.signals ?? [],
       });
     } catch (e) {
       setError((e as Error).message);
@@ -99,7 +88,8 @@ export default function FakeFollowerChecker() {
         {result && (
           <section className="max-w-3xl mx-auto px-6 -mt-6 relative z-10">
             <div className="ii-fadeup rounded-2xl bg-white border border-border shadow-[0_12px_40px_rgba(0,0,0,0.08)] p-7">
-              {meta && <div className="text-[13px] text-ink-500 mb-5 text-center">{meta}</div>}
+              {meta && <div className="text-[13px] text-ink-500 mb-1 text-center">{meta}</div>}
+              <div className="text-[11px] text-ink-400 mb-5 text-center">{result.basis === 'per_post' ? `Analyzed ${result.postsAnalyzed} recent posts` : 'Based on profile averages'}</div>
               <div className="flex flex-col sm:flex-row items-center gap-7">
                 <Gauge value={result.authenticity} color={result.band.c} />
                 <div className="flex-1 w-full">
