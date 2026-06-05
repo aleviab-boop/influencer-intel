@@ -563,9 +563,9 @@ function StatsBand() {
 }
 
 const CASES = [
-  { brand: 'Bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto' },
-  { brand: 'Wellfa', metric: '120+', label: 'creators activated', tag: 'Wellness' },
-  { brand: 'Triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion' },
+  { brand: 'Bajaj', slug: 'bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto' },
+  { brand: 'Wellfa', slug: 'welfa', metric: '120+', label: 'creators activated', tag: 'Wellness' },
+  { brand: 'Triumph', slug: 'triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion' },
 ];
 
 function CaseStudies() {
@@ -579,8 +579,9 @@ function CaseStudies() {
         <div className="grid md:grid-cols-3 gap-5">
           {CASES.map((c) => (
             <div key={c.brand} className="rounded-2xl border border-[#eee] overflow-hidden">
-              <div className="h-36 grid place-items-center text-white text-2xl font-bold" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b8bff)` }}>
-                {c.brand}
+              <div className="h-36 grid place-items-center bg-white px-8">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/logos/${c.slug}.png`} alt={c.brand} className="max-h-12 w-auto object-contain" />
               </div>
               <div className="p-5">
                 <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-md" style={{ background: ACCENT_SOFT, color: ACCENT }}>{c.tag}</span>
