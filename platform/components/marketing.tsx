@@ -100,7 +100,7 @@ export function MarketingNav() {
             </div>
           </div>
           <Link href="/pricing" className="hover:text-[#111]">Pricing</Link>
-          <a href="/lander#for-influencers" className="hover:text-[#111]">For Influencers</a>
+          <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
           <Link href="/lander" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
