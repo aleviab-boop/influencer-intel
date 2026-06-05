@@ -90,7 +90,7 @@ export function MarketingNav() {
               <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
                 <Link href="/tools/fake-follower-checker" className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
                   <span style={{ color: ACCENT }}><FeatureIcon name="shield" /></span>
-                  <span className="text-[15px] font-medium text-[#222]">Fake Follower Check</span>
+                  <span className="text-[15px] font-medium text-[#222]">Authenticity Score</span>
                 </Link>
                 <Link href="/tools/er-calculator" className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
                   <span style={{ color: ACCENT }}><FeatureIcon name="gauge" /></span>
@@ -115,7 +115,7 @@ export function MarketingNav() {
 
 function footerHref(label: string): string {
   const map: Record<string, string> = {
-    'Fake Follower Checker': '/tools/fake-follower-checker',
+    'Authenticity Score': '/tools/fake-follower-checker',
     'ER Calculator': '/tools/er-calculator',
     'Influencer Database': '/influencer-database',
     'Campaign Management': '/campaigns',
@@ -130,7 +130,7 @@ function footerHref(label: string): string {
 export function MarketingFooter() {
   const cols = [
     { h: 'Product', links: ['Influencer Database', 'Campaign Management', 'Comment to DM', 'Competitor Analysis', 'Search', 'Payouts'] },
-    { h: 'Resources', links: ['Fake Follower Checker', 'ER Calculator', 'Influencer directories', 'Case studies'] },
+    { h: 'Resources', links: ['Authenticity Score', 'ER Calculator', 'Influencer directories', 'Case studies'] },
     { h: 'About', links: ['Team', 'Contact', 'Privacy Policy', 'Terms'] },
   ];
   return (

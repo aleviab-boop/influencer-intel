@@ -45,7 +45,7 @@ export default function FakeFollowerChecker() {
 
       const parts = cred != null ? [erScore * 0.4, commentScore * 0.2, ffScore * 0.2, cred * 0.2] : [erScore * 0.5, commentScore * 0.25, ffScore * 0.25];
       const authenticity = Math.round(parts.reduce((a, b) => a + b, 0));
-      const band = authenticity >= 80 ? { t: 'Low risk', c: '#10b981' } : authenticity >= 55 ? { t: 'Medium risk', c: '#f59e0b' } : { t: 'High risk', c: '#f43f5e' };
+      const band = authenticity >= 80 ? { t: 'Highly authentic', c: '#10b981' } : authenticity >= 55 ? { t: 'Mixed signals', c: '#f59e0b' } : { t: 'Low authenticity', c: '#f43f5e' };
 
       setMeta(`@${c.handle}${c.display_name ? ` · ${c.display_name}` : ''} · ${followers.toLocaleString('en-IN')} followers`);
       setResult({
@@ -77,8 +77,8 @@ export default function FakeFollowerChecker() {
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold mb-5" style={{ background: ACCENT_SOFT, color: ACCENT }}>
               <Shield /> Free tool
             </span>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-ink-900">Fake Follower Checker</h1>
-            <p className="mt-4 text-[16px] text-ink-600 max-w-xl mx-auto">Estimate how authentic a creator’s audience really is — scored on engagement, comment quality and follower ratios from our database of Indian creators.</p>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-ink-900">Authenticity Score</h1>
+            <p className="mt-4 text-[16px] text-ink-600 max-w-xl mx-auto">Estimate how authentic a creator’s audience really is — a 0–100 score from engagement, comment quality and follower ratios across our database of Indian creators.</p>
 
             <div className="mt-8 max-w-xl mx-auto rounded-2xl bg-white border-2 border-[#e3def9] focus-within:border-[#6C4DF6] shadow-[0_12px_50px_rgba(108,77,246,0.12)] transition-colors p-2 flex gap-2">
               <input
@@ -113,7 +113,7 @@ export default function FakeFollowerChecker() {
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 text-[12px] text-ink-400">~{100 - result.authenticity}% of the audience looks low-quality or inactive.</div>
+                  <div className="mt-4 text-[12px] text-ink-400">An estimated {100 - result.authenticity}% of engagement signals look low-quality or inactive.</div>
                 </div>
               </div>
               <p className="mt-6 pt-5 border-t border-border-soft text-[12px] text-ink-400">Heuristic estimate from public engagement signals — not a definitive audit.</p>
