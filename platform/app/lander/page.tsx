@@ -50,6 +50,10 @@ function FeatureIcon({ name }: { name: string }) {
       return (<svg {...common}><rect x="3" y="6" width="13" height="12" rx="2" /><path d="M16 10l5-3v10l-5-3" /></svg>);
     case 'payout':
       return (<svg {...common}><circle cx="12" cy="12" r="9" /><path d="M9 8h6M9 11h6M14 8c0 3-2 4-5 4l4 4" /></svg>);
+    case 'shield':
+      return (<svg {...common}><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></svg>);
+    case 'gauge':
+      return (<svg {...common}><path d="M3.5 18a9 9 0 1 1 17 0" /><path d="M12 18l4.5-5.5" /></svg>);
     default:
       return null;
   }
@@ -127,10 +131,16 @@ function MarketingNav() {
               Services
               <svg className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
             </button>
-            <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 w-[260px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
+            <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 w-[340px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
               <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-                <Link href="/tools/fake-follower-checker" className="block px-5 py-3.5 border-b border-[#f3f3f3] hover:bg-[#f6f4ff] text-[15px] font-medium text-[#222]">Fake Follower Check</Link>
-                <Link href="/tools/er-calculator" className="block px-5 py-3.5 hover:bg-[#f6f4ff] text-[15px] font-medium text-[#222]">Engagement Rate (ER)</Link>
+                <Link href="/tools/fake-follower-checker" className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
+                  <span style={{ color: ACCENT }}><FeatureIcon name="shield" /></span>
+                  <span className="text-[15px] font-medium text-[#222]">Fake Follower Check</span>
+                </Link>
+                <Link href="/tools/er-calculator" className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
+                  <span style={{ color: ACCENT }}><FeatureIcon name="gauge" /></span>
+                  <span className="text-[15px] font-medium text-[#222]">Engagement Rate (ER)</span>
+                </Link>
               </div>
             </div>
           </div>
