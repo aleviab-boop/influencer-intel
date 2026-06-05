@@ -144,7 +144,7 @@ function MarketingNav() {
               </div>
             </div>
           </div>
-          <a href="#pricing" className="hover:text-[#111]">Pricing</a>
+          <Link href="/pricing" className="hover:text-[#111]">Pricing</Link>
           <a href="#for-influencers" className="hover:text-[#111]">For Influencers</a>
         </nav>
         <div className="flex items-center gap-3">
