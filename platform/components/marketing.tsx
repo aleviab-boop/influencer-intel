@@ -54,7 +54,7 @@ export function FeatureIcon({ name }: { name: string }) {
 export function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
         <Link href="/lander" className="flex items-center gap-2">
           <span className="w-7 h-7 rounded-lg grid place-items-center text-white text-sm font-bold" style={{ background: ACCENT }}>
             i

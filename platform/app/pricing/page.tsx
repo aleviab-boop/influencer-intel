@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
@@ -8,6 +8,7 @@ type Billing = 'monthly' | 'annual';
 
 interface Plan {
   name: string;
+  tagline: string;
   credits: string;
   price: number | null; // null = Custom
   cta: string;
@@ -19,6 +20,7 @@ interface Plan {
 const PLANS: Plan[] = [
   {
     name: 'Free',
+    tagline: 'Kick the tyres on real creator data.',
     credits: '100 credits (one-time)',
     price: 0,
     cta: 'Start free',
@@ -27,6 +29,7 @@ const PLANS: Plan[] = [
   },
   {
     name: 'Startup',
+    tagline: 'For small teams running their first campaigns.',
     credits: '6,999 credits / mo',
     price: 6999,
     cta: 'Get started',
@@ -35,6 +38,7 @@ const PLANS: Plan[] = [
   },
   {
     name: 'Growth',
+    tagline: 'For brands scaling always-on influencer programs.',
     credits: '21,999 credits / mo',
     price: 19999,
     cta: 'Get started',
@@ -44,6 +48,7 @@ const PLANS: Plan[] = [
   },
   {
     name: 'Enterprise',
+    tagline: 'For agencies & large teams that need it all.',
     credits: 'Custom credits',
     price: null,
     cta: 'Contact us',
@@ -62,6 +67,57 @@ function PriceLabel({ plan, billing }: { plan: Plan; billing: Billing }) {
     <div>
       <div className="text-4xl font-bold tracking-tight">{inr(perMonth)}<span className="text-[15px] font-medium text-ink-400"> /mo</span></div>
       {billing === 'annual' && <div className="text-[12px] text-emerald-600 font-medium mt-0.5">billed yearly · 2 months free</div>}
+    </div>
+  );
+}
+
+// 3D pointer-tilt plan card. Whichever card the cursor is over lifts, tilts and
+// gets the accent highlight — no plan is permanently highlighted.
+function PlanCard({ plan, billing }: { plan: Plan; billing: Billing }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  function onMove(e: React.MouseEvent) {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width - 0.5;  // -0.5 .. 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5;
+    el.style.transform = `perspective(900px) rotateX(${(-py * 9).toFixed(2)}deg) rotateY(${(px * 11).toFixed(2)}deg) translateY(-10px) scale(1.035)`;
+  }
+  function onLeave() {
+    if (ref.current) ref.current.style.transform = '';
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+      className="group relative rounded-3xl bg-white p-6 flex flex-col border border-border shadow-card hover:shadow-[0_28px_70px_rgba(108,77,246,0.22)] hover:border-[#6C4DF6] will-change-transform"
+      style={{ transition: 'transform .15s ease-out, box-shadow .25s ease, border-color .25s ease', transformStyle: 'preserve-3d' }}
+    >
+      {plan.popular && (
+        <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[11px] font-semibold text-white shadow-sm" style={{ background: ACCENT }}>Most popular</span>
+      )}
+      <div className="text-[18px] font-bold text-ink-900">{plan.name}</div>
+      <div className="text-[12px] text-ink-400 mt-0.5">{plan.credits}</div>
+      <p className="text-[12.5px] text-ink-500 mt-2 leading-relaxed min-h-[34px]">{plan.tagline}</p>
+      <div className="mt-4 min-h-[68px]"><PriceLabel plan={plan} billing={billing} /></div>
+      <Link
+        href={plan.ctaHref}
+        className="mt-5 w-full text-center px-4 py-2.5 rounded-xl text-[14px] font-semibold border transition-colors text-white bg-ink-900 border-transparent group-hover:bg-ink-800"
+      >
+        {plan.cta}
+      </Link>
+      <div className="mt-6 text-[11px] font-semibold uppercase tracking-wider text-ink-400">What you get</div>
+      <ul className="mt-3 space-y-2.5">
+        {plan.features.map((f) => (
+          <li key={f} className="flex items-start gap-2.5 text-[13.5px] text-ink-700">
+            <Check />
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -124,6 +180,7 @@ const FAQS = [
 export default function PricingPage() {
   const [billing, setBilling] = useState<Billing>('monthly');
   const [open, setOpen] = useState<number | null>(0);
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
@@ -156,37 +213,10 @@ export default function PricingPage() {
         </section>
 
         {/* Plan cards */}
-        <section className="max-w-6xl mx-auto px-6 pb-8 -mt-2">
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
+        <section className="max-w-6xl mx-auto px-6 pb-8 pt-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch" style={{ perspective: '1200px' }}>
             {PLANS.map((p) => (
-              <div
-                key={p.name}
-                className={`relative rounded-3xl bg-white p-6 flex flex-col ${p.popular ? 'border-2 shadow-[0_18px_60px_rgba(108,77,246,0.18)] lg:-mt-3 lg:mb-3' : 'border border-border shadow-card'}`}
-                style={p.popular ? { borderColor: ACCENT } : undefined}
-              >
-                {p.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[11px] font-semibold text-white" style={{ background: ACCENT }}>Most popular</span>
-                )}
-                <div className="text-[18px] font-bold text-ink-900">{p.name}</div>
-                <div className="text-[12px] text-ink-400 mt-0.5">{p.credits}</div>
-                <div className="mt-5 min-h-[68px]"><PriceLabel plan={p} billing={billing} /></div>
-                <Link
-                  href={p.ctaHref}
-                  className={`mt-5 w-full text-center px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-colors ${p.popular ? 'text-white bg-ink-900 hover:bg-ink-800' : 'border border-border text-ink-900 hover:bg-[#faf9ff]'}`}
-                  style={p.popular ? undefined : { color: ACCENT, borderColor: '#e3def9' }}
-                >
-                  {p.cta}
-                </Link>
-                <div className="mt-6 text-[11px] font-semibold uppercase tracking-wider text-ink-400">Features</div>
-                <ul className="mt-3 space-y-2.5">
-                  {p.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-[13.5px] text-ink-700">
-                      <Check />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <PlanCard key={p.name} plan={p} billing={billing} />
             ))}
           </div>
         </section>
@@ -195,15 +225,23 @@ export default function PricingPage() {
         <section className="max-w-6xl mx-auto px-6 py-16">
           <div className="text-center mb-10">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-ink-900">Compare all features</h2>
-            <p className="mt-2 text-[15px] text-ink-600">Find the right plan for your team and budget.</p>
+            <p className="mt-2 text-[15px] text-ink-600">Hover a plan to see exactly what’s included.</p>
           </div>
 
-          <div className="rounded-2xl border border-border overflow-hidden shadow-card">
+          <div className="rounded-2xl border border-border overflow-hidden shadow-card" onMouseLeave={() => setHoveredCol(null)}>
             {/* header */}
             <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr_1fr] bg-[#f7f7fb] border-b border-border">
               <div className="px-5 py-4 text-[13px] font-semibold text-ink-700">Features</div>
-              {PLANS.map((p) => (
-                <div key={p.name} className={`px-3 py-4 text-center text-[13px] font-semibold ${p.popular ? 'text-[var(--ii-accent)]' : 'text-ink-700'}`} style={p.popular ? { background: ACCENT_SOFT } : undefined}>{p.name}</div>
+              {PLANS.map((p, i) => (
+                <div
+                  key={p.name}
+                  onMouseEnter={() => setHoveredCol(i)}
+                  className="relative px-3 py-4 text-center text-[13px] font-semibold border-l border-border-soft cursor-default transition-colors"
+                  style={hoveredCol === i ? { background: ACCENT_SOFT, color: ACCENT } : { color: '#333' }}
+                >
+                  {p.name}
+                  {hoveredCol === i && <span className="absolute left-0 right-0 -bottom-px h-0.5" style={{ background: ACCENT }} />}
+                </div>
               ))}
             </div>
 
@@ -213,14 +251,21 @@ export default function PricingPage() {
                   <div className="px-5 py-2.5 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-ink-500">
                     <span style={{ color: ACCENT }}><GroupIcon name={sec.icon} /></span>{sec.group}
                   </div>
-                  <div className="col-span-4" style={{ background: 'transparent' }} />
+                  {PLANS.map((p, i) => (
+                    <div key={i} onMouseEnter={() => setHoveredCol(i)} className="border-l border-border-soft transition-colors" style={hoveredCol === i ? { background: ACCENT_SOFT } : undefined} />
+                  ))}
                 </div>
                 {sec.rows.map((row) => (
                   <div key={row.label} className="grid grid-cols-[1.6fr_1fr_1fr_1fr_1fr] border-b border-border-soft last:border-0">
                     <div className="px-5 py-3 text-[13.5px] text-ink-700">{row.label}</div>
                     {row.values.map((v, i) => (
-                      <div key={i} className={`px-3 py-3 grid place-items-center text-center text-[13px] ${PLANS[i]?.popular ? 'bg-[#faf9ff]' : ''}`}>
-                        <CellView v={v} highlight={!!PLANS[i]?.popular} />
+                      <div
+                        key={i}
+                        onMouseEnter={() => setHoveredCol(i)}
+                        className="px-3 py-3 grid place-items-center text-center text-[13px] border-l border-border-soft transition-colors"
+                        style={hoveredCol === i ? { background: ACCENT_SOFT } : undefined}
+                      >
+                        <CellView v={v} highlight={hoveredCol === i} />
                       </div>
                     ))}
                   </div>
