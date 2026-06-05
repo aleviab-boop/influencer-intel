@@ -4,11 +4,12 @@ import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav } from '@/components/marketing';
 
-type RecruitStatus = 'invited' | 'contacted' | 'recruited' | 'declined';
-const PIPELINE: RecruitStatus[] = ['invited', 'contacted', 'recruited', 'declined'];
+type RecruitStatus = 'applied' | 'invited' | 'contacted' | 'recruited' | 'declined';
+const PIPELINE: RecruitStatus[] = ['applied', 'invited', 'contacted', 'recruited', 'declined'];
 const STAGE: Record<RecruitStatus, { label: string; dot: string; tint: string; ring: string }> = {
+  applied: { label: 'Applied', dot: '#6C4DF6', tint: '#f6f4ff', ring: '#c9bdfb' },
   invited: { label: 'Invited', dot: '#94a3b8', tint: '#f8fafc', ring: '#cbd5e1' },
-  contacted: { label: 'Contacted', dot: '#6C4DF6', tint: '#f6f4ff', ring: '#c9bdfb' },
+  contacted: { label: 'Contacted', dot: '#0ea5e9', tint: '#f0f9ff', ring: '#bae6fd' },
   recruited: { label: 'Recruited', dot: '#10b981', tint: '#f0fdf4', ring: '#a7f3d0' },
   declined: { label: 'Declined', dot: '#f43f5e', tint: '#fff1f2', ring: '#fecdd3' },
 };

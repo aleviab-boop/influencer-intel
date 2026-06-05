@@ -151,7 +151,7 @@ export interface DiscoveryResult {
 // ============================================================
 
 export type ProgramStatus = 'active' | 'paused' | 'closed';
-export type RecruitStatus = 'invited' | 'contacted' | 'recruited' | 'declined';
+export type RecruitStatus = 'applied' | 'invited' | 'contacted' | 'recruited' | 'declined';
 
 export interface Program {
   id: string;

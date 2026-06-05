@@ -23,8 +23,8 @@ export default function ForInfluencersPage() {
             </h1>
             <p className="mt-5 text-[17px] text-ink-600 max-w-2xl mx-auto">Join thousands of Indian creators getting matched with real brand campaigns. Set your rates, collaborate on your terms, and get paid on time — every time.</p>
             <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
-              <Link href="/lander" className="px-6 py-3 rounded-xl text-white text-[15px] font-semibold bg-ink-900 hover:bg-ink-800 transition-colors">Create your profile</Link>
-              <Link href="/lander" className="px-6 py-3 rounded-xl text-[15px] font-semibold border border-border hover:bg-[#faf9ff] transition-colors" style={{ color: ACCENT, borderColor: '#e3def9' }}>See how it works</Link>
+              <Link href="/creator" className="px-6 py-3 rounded-xl text-white text-[15px] font-semibold bg-ink-900 hover:bg-ink-800 transition-colors">Create your profile</Link>
+              <a href="#how-it-works" className="px-6 py-3 rounded-xl text-[15px] font-semibold border border-border hover:bg-[#faf9ff] transition-colors" style={{ color: ACCENT, borderColor: '#e3def9' }}>See how it works</a>
             </div>
             <p className="mt-3 text-[12px] text-ink-400">Free to join · No subscription · Keep 100% of your rate</p>
           </div>
@@ -43,7 +43,7 @@ export default function ForInfluencersPage() {
         </section>
 
         {/* How it works */}
-        <section className="max-w-5xl mx-auto px-6 py-16">
+        <section id="how-it-works" className="max-w-5xl mx-auto px-6 py-16 scroll-mt-20">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-ink-900">Start earning in 3 steps</h2>
             <p className="mt-2 text-[15px] text-ink-600">No agencies, no chasing payments — just collaborations that fit you.</p>
@@ -102,7 +102,7 @@ export default function ForInfluencersPage() {
           <div className="rounded-3xl px-8 py-14 text-center text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Your next brand deal is waiting</h2>
             <p className="mt-3 text-[16px] text-white/85 max-w-xl mx-auto">Create your profile in minutes and start getting matched with campaigns that fit your niche and your rate.</p>
-            <Link href="/lander" className="inline-block mt-7 px-7 py-3.5 rounded-xl bg-white text-[15px] font-semibold" style={{ color: ACCENT }}>Join free as a creator</Link>
+            <Link href="/creator" className="inline-block mt-7 px-7 py-3.5 rounded-xl bg-white text-[15px] font-semibold" style={{ color: ACCENT }}>Join free as a creator</Link>
           </div>
         </section>
       </main>
