@@ -34,8 +34,9 @@ export async function GET(req: NextRequest) {
     where.push(`(LOWER(primary_city) LIKE $${li} OR LOWER(primary_state) LIKE $${li} OR LOWER(bio) LIKE $${li})`);
   }
   if (category) {
-    params.push(category.toLowerCase());
-    where.push(`LOWER(primary_category) = $${params.length}`);
+    params.push(`%${category.toLowerCase()}%`);
+    const ci = params.length;
+    where.push(`(LOWER(primary_category) LIKE $${ci} OR LOWER(raw_metadata->'vision'->>'niche') LIKE $${ci})`);
   }
   if (tier) {
     if (tier === 'mega') where.push(`follower_count >= 1000000`);

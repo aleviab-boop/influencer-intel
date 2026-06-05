@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-// The old creators directory is now the Influencer Database feature page.
+// The old creators directory now lives at the functional database browser.
 export default function CreatorsPage() {
-  redirect('/influencer-database');
+  redirect('/database');
 }

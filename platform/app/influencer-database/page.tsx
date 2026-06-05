@@ -3,6 +3,7 @@ import { FeaturePage, MockTable, MockStats, MockBars } from '@/components/featur
 export default function Page() {
   return (
     <FeaturePage
+      ctaHref="/database"
       hero={{
         title: 'The largest scored creator database',
         subtitle: 'Browse 2.4M+ Indian creators across Instagram and YouTube — every profile credibility-scored with 12+ data metrics.',
