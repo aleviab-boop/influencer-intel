@@ -122,10 +122,21 @@ const TREND_MAP: Record<string, string> = {
   insufficient_data: 'Insufficient data',
 };
 
+interface AuthScore {
+  score: number;
+  band: 'high' | 'mixed' | 'low';
+  basis: 'verified' | 'per_post' | 'aggregate';
+  posts_analyzed: number;
+  signals: { label: string; ok: boolean; detail: string }[];
+}
+const BAND_COLOR: Record<string, string> = { high: '#0a7d3c', mixed: '#b8860b', low: '#cc0000' };
+const BASIS_NOTE: Record<string, string> = { verified: 'reach-verified', per_post: 'recent posts', aggregate: 'profile averages' };
+
 export default function InsightsPage({ params }: { params: Promise<{ handle: string }> }) {
   const [handle, setHandle] = useState('');
   const [creator, setCreator] = useState<CreatorBasic | null>(null);
   const [insights, setInsights] = useState<InsightsData | null>(null);
+  const [auth, setAuth] = useState<AuthScore | null>(null);
   const [prediction, setPrediction] = useState<PredictionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'overview' | 'content' | 'brand_work' | 'predict' | 'monitor'>('overview');
@@ -143,6 +154,10 @@ export default function InsightsPage({ params }: { params: Promise<{ handle: str
       if (!cr.ok) { setError('Creator not found'); setLoading(false); return; }
       const cd = await cr.json();
       setCreator(cd);
+      fetch(`/api/tools/authenticity?handle=${encodeURIComponent(h)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d && !d.error) setAuth(d); })
+        .catch(() => {});
       const ir = await fetch(`/api/insights/${cd.id}`);
       if (ir.ok) setInsights(await ir.json());
     } catch (err) {
@@ -216,6 +231,7 @@ export default function InsightsPage({ params }: { params: Promise<{ handle: str
       <main className="max-w-4xl mx-auto px-6 py-8">
         {tab === 'overview' && isScraped && <ScrapedOverview data={insights as ScrapedData} />}
         {tab === 'overview' && isConnected && <ConnectedOverview data={insights as ConnectedData} />}
+        {tab === 'overview' && auth && <AuthenticityCard auth={auth} />}
         {tab === 'overview' && !insights && <NoData handle={handle} />}
         {tab === 'content' && isScraped && <ContentTab data={insights as ScrapedData} />}
         {tab === 'content' && !isScraped && <p className="text-[#999] text-sm py-12 text-center">Connect Instagram to unlock content library</p>}
@@ -739,6 +755,27 @@ function NoData({ handle }: { handle: string }) {
       <a href="/api/oauth/instagram" className="px-5 py-2 bg-[#111] text-white text-[13px] hover:bg-[#333] inline-block">
         Connect Instagram
       </a>
+    </div>
+  );
+}
+
+function AuthenticityCard({ auth }: { auth: AuthScore }) {
+  return (
+    <div className="border border-[#e5e5e5] p-6 mt-8">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="text-[11px] uppercase tracking-[0.12em] text-[#999]">Authenticity</div>
+        <span className="text-[14px] font-medium tabular-nums" style={{ color: BAND_COLOR[auth.band] }}>{auth.score}/100</span>
+        <span className="text-[11px] text-[#ccc]">{BASIS_NOTE[auth.basis]}{auth.basis !== 'aggregate' ? ` · ${auth.posts_analyzed} posts` : ''}</span>
+      </div>
+      <div className="space-y-1.5">
+        {auth.signals.map((s) => (
+          <div key={s.label} className="flex items-center gap-2 text-[12px]">
+            <span style={{ color: s.ok ? '#0a7d3c' : '#cc0000' }}>{s.ok ? '✓' : '!'}</span>
+            <span className="text-[#6b6b6b]">{s.label}</span>
+            <span className="ml-auto text-[#999] tabular-nums">{s.detail}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
