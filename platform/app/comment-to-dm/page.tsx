@@ -274,7 +274,7 @@ function FAQ() {
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-10">Frequently asked questions</h2>
         <div className="space-y-2">
           {FAQS.map((f, i) => (
-            <div key={f.q} className="rounded-xl bg-white border border-[#ececff]">
+            <div key={f.q} className="rounded-xl bg-white border border-[#FFE7DD]">
               <button onClick={() => setOpen(open === i ? null : i)} className="w-full flex items-center justify-between px-5 py-4 text-left">
                 <span className="text-[15px] font-medium">{f.q}</span>
                 <span className="text-[20px] leading-none" style={{ color: ACCENT }}>{open === i ? '−' : '+'}</span>

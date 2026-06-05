@@ -56,7 +56,7 @@ function Hero() {
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && go()}
               placeholder="Find influencers to collaborate with"
-              className="flex-1 px-4 py-3 border border-border bg-white text-[15px] rounded-lg focus:outline-none focus:border-[#6C4DF6]"
+              className="flex-1 px-4 py-3 border border-border bg-white text-[15px] rounded-lg focus:outline-none focus:border-[#F2542D]"
             />
             <button onClick={go} className="px-5 py-3 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
               Get Started →
@@ -213,7 +213,7 @@ function CollabMock() {
       <div className="space-y-1.5">
         {rows.map((r) => (
           <div key={r.n} className="flex items-center gap-3 px-2 py-2 text-[12px]">
-            <input type="checkbox" className="accent-[#6C4DF6]" readOnly />
+            <input type="checkbox" className="accent-[#F2542D]" readOnly />
             <div className="w-7 h-7 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${hue(r.n)}, ${hue(r.n, 40)})` }} />
             <span className="flex-1 truncate font-medium">{r.n}</span>
             <span className="text-[#999] w-14 text-right">{r.f}</span>
@@ -268,7 +268,7 @@ function FAQ() {
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-10">Frequently asked questions</h2>
         <div className="space-y-2">
           {FAQS.map((f, i) => (
-            <div key={f.q} className="rounded-xl bg-white border border-[#ececff]">
+            <div key={f.q} className="rounded-xl bg-white border border-[#FFE7DD]">
               <button onClick={() => setOpen(open === i ? null : i)} className="w-full flex items-center justify-between px-5 py-4 text-left">
                 <span className="text-[15px] font-medium">{f.q}</span>
                 <span className="text-[20px] leading-none" style={{ color: ACCENT }}>{open === i ? '−' : '+'}</span>

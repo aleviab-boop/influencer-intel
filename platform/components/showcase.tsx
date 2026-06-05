@@ -69,7 +69,7 @@ export function Showcase() {
                     style={{
                       background: on ? 'white' : 'rgba(255,255,255,0.45)',
                       borderColor: on ? ACCENT : 'transparent',
-                      boxShadow: on ? `0 12px 40px rgba(108,77,246,0.16)` : 'none',
+                      boxShadow: on ? `0 12px 40px rgba(242,84,45,0.16)` : 'none',
                       opacity: on ? 1 : 0.62,
                     }}
                   >
@@ -111,10 +111,10 @@ function Glass({ children, className = '' }: { children: React.ReactNode; classN
   );
 }
 
-function bar(w: string, delay = 0, grad = `linear-gradient(90deg, ${ACCENT}, #9b7bff)`): { className: string; style: CSSProperties } {
+function bar(w: string, delay = 0, grad = `linear-gradient(90deg, ${ACCENT}, #FF7A45)`): { className: string; style: CSSProperties } {
   return {
     className: 'ii-bar h-2.5 rounded-full',
-    style: { ['--w' as string]: w, width: w, background: grad, boxShadow: `0 0 14px rgba(108,77,246,0.55)`, animationDelay: `${delay}s` } as CSSProperties,
+    style: { ['--w' as string]: w, width: w, background: grad, boxShadow: `0 0 14px rgba(242,84,45,0.55)`, animationDelay: `${delay}s` } as CSSProperties,
   };
 }
 
@@ -260,10 +260,10 @@ function CampaignMock() {
 }
 
 function gradFor(c: string): string {
-  if (c === 'emerald') return 'linear-gradient(90deg, #10b981, #6C4DF6)';
-  if (c === 'green') return 'linear-gradient(90deg, #34d399, #6C4DF6)';
-  if (c === 'gray') return 'linear-gradient(90deg, #c4c4d6, #9b8bff)';
-  return `linear-gradient(90deg, ${ACCENT}, #9b7bff)`;
+  if (c === 'emerald') return 'linear-gradient(90deg, #10b981, #F2542D)';
+  if (c === 'green') return 'linear-gradient(90deg, #34d399, #F2542D)';
+  if (c === 'gray') return 'linear-gradient(90deg, #c4c4d6, #FF8A5B)';
+  return `linear-gradient(90deg, ${ACCENT}, #FF7A45)`;
 }
 function pill(c: string): CSSProperties {
   const map: Record<string, [string, string]> = {
@@ -286,7 +286,7 @@ function CompetitorMock() {
           <div key={k}>
             <div className="flex justify-between text-[12px] mb-1"><span className="font-medium">{k}</span><span className="text-[#888]">{v}</span></div>
             <div className="h-2.5 rounded-full bg-[#e9e9f6] overflow-hidden">
-              <div {...bar(v, i * 0.12, i === 0 ? `linear-gradient(90deg, ${ACCENT}, #9b7bff)` : 'linear-gradient(90deg,#c9c9dd,#aab)')} />
+              <div {...bar(v, i * 0.12, i === 0 ? `linear-gradient(90deg, ${ACCENT}, #FF7A45)` : 'linear-gradient(90deg,#c9c9dd,#aab)')} />
             </div>
           </div>
         ))}

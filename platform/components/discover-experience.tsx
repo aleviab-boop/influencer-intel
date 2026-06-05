@@ -147,7 +147,7 @@ export function DiscoverExperience({ initialPrompt = '' }: { initialPrompt?: str
 
       {loading && results.length === 0 && (
         <div className="flex-1 min-h-[42vh] flex flex-col items-center justify-center">
-          <div className="w-12 h-12 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+          <div className="w-12 h-12 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" />
           <div className="mt-4 text-sm text-ink-400">Discovering influencers…</div>
         </div>
       )}

@@ -74,7 +74,7 @@ export default function AutomationsPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+            <div className="w-10 h-10 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" />
           </div>
         ) : items.length === 0 ? (
           <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">
@@ -261,7 +261,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Summary({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-2xl bg-white border border-border p-4 shadow-card">
-      <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
+      <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#F2542D]' : 'text-ink-900'}`}>{value}</div>
       <div className="text-[11px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div>
     </div>
   );

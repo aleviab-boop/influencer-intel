@@ -8,7 +8,7 @@ type RecruitStatus = 'invited' | 'contacted' | 'recruited' | 'declined';
 const PIPELINE: RecruitStatus[] = ['invited', 'contacted', 'recruited', 'declined'];
 const STAGE: Record<RecruitStatus, { label: string; dot: string; tint: string; ring: string }> = {
   invited: { label: 'Invited', dot: '#94a3b8', tint: '#f8fafc', ring: '#cbd5e1' },
-  contacted: { label: 'Contacted', dot: '#6C4DF6', tint: '#f6f4ff', ring: '#c9bdfb' },
+  contacted: { label: 'Contacted', dot: '#F2542D', tint: '#FFF3EE', ring: '#F4C3B0' },
   recruited: { label: 'Recruited', dot: '#10b981', tint: '#f0fdf4', ring: '#a7f3d0' },
   declined: { label: 'Declined', dot: '#f43f5e', tint: '#fff1f2', ring: '#fecdd3' },
 };
@@ -103,7 +103,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+            <div className="w-10 h-10 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" />
           </div>
         ) : error ? (
           <div className="py-16 text-center text-sm text-rose-700">{error}</div>
@@ -150,7 +150,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 </div>
               </div>
               <div className="h-2.5 rounded-full bg-[#eef] overflow-hidden">
-                <div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${budget > 0 ? pct : 0}%`, background: over ? 'linear-gradient(90deg,#ef4444,#f87171)' : 'linear-gradient(90deg,#6C4DF6,#9b7bff)', boxShadow: budget > 0 ? '0 0 12px rgba(108,77,246,.45)' : 'none' }} />
+                <div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${budget > 0 ? pct : 0}%`, background: over ? 'linear-gradient(90deg,#ef4444,#f87171)' : 'linear-gradient(90deg,#F2542D,#FF7A45)', boxShadow: budget > 0 ? '0 0 12px rgba(242,84,45,.45)' : 'none' }} />
               </div>
               {over && <div className="mt-1.5 text-[12px] text-rose-600">Over budget by {inr(spent - budget)}</div>}
             </div>
@@ -206,7 +206,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-2xl bg-white border border-border p-3.5 shadow-card">
-      <div className={`text-xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
+      <div className={`text-xl font-bold tabular-nums ${accent ? 'text-[#F2542D]' : 'text-ink-900'}`}>{value}</div>
       <div className="text-[11px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div>
     </div>
   );

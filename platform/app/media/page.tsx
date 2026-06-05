@@ -22,7 +22,7 @@ interface Program { id: string; name: string }
 
 const STATUS: Record<AssetStatus, { label: string; cls: string }> = {
   draft: { label: 'Draft', cls: 'text-ink-600 bg-[#f2f2f7]' },
-  in_review: { label: 'In review', cls: 'text-violet-700 bg-violet-50' },
+  in_review: { label: 'In review', cls: 'text-orange-700 bg-orange-50' },
   approved: { label: 'Approved', cls: 'text-emerald-700 bg-emerald-50' },
   changes: { label: 'Changes', cls: 'text-amber-700 bg-amber-50' },
 };
@@ -95,7 +95,7 @@ export default function MediaPage() {
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
+          <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" /></div>
         ) : assets.length === 0 ? (
           <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">No creatives yet. Add one to start the approval workflow.</div>
         ) : (
@@ -185,6 +185,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="text-[12px] text-ink-500 mb-1 block">{label}</span>{children}</label>;
 }
 function Summary({ label, value, accent, tone }: { label: string; value: string; accent?: boolean; tone?: 'green' }) {
-  const color = tone === 'green' ? 'text-emerald-700' : accent ? 'text-[#6C4DF6]' : 'text-ink-900';
+  const color = tone === 'green' ? 'text-emerald-700' : accent ? 'text-[#F2542D]' : 'text-ink-900';
   return <div className="rounded-2xl bg-white border border-border p-4 shadow-card"><div className={`text-2xl font-bold tabular-nums ${color}`}>{value}</div><div className="text-[11px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div></div>;
 }

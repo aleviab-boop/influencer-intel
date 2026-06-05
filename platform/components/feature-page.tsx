@@ -94,7 +94,7 @@ function FAQ({ faqs }: { faqs: { q: string; a: string }[] }) {
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-10">Frequently asked questions</h2>
         <div className="space-y-2">
           {faqs.map((f, i) => (
-            <div key={f.q} className="rounded-xl bg-white border border-[#ececff]">
+            <div key={f.q} className="rounded-xl bg-white border border-[#FFE7DD]">
               <button onClick={() => setOpen(open === i ? null : i)} className="w-full flex items-center justify-between px-5 py-4 text-left">
                 <span className="text-[15px] font-medium">{f.q}</span>
                 <span className="text-[20px] leading-none" style={{ color: ACCENT }}>{open === i ? '−' : '+'}</span>
@@ -155,7 +155,7 @@ export function MockBars({ values, labels }: { values: number[]; labels?: string
       <div className="flex items-end gap-3 h-44">
         {values.map((v, i) => (
           <div key={i} className="flex-1 flex flex-col items-center gap-2">
-            <div className="w-full rounded-t-md" style={{ height: `${(v / max) * 100}%`, background: `linear-gradient(to top, ${ACCENT}, #9b8bff)` }} />
+            <div className="w-full rounded-t-md" style={{ height: `${(v / max) * 100}%`, background: `linear-gradient(to top, ${ACCENT}, #FF8A5B)` }} />
             {labels && <span className="text-[10px] text-[#999]">{labels[i]}</span>}
           </div>
         ))}
