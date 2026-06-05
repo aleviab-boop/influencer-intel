@@ -42,13 +42,22 @@ export default function CreatorPortal() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [applying, setApplying] = useState<string | null>(null);
+  const [igConfigured, setIgConfigured] = useState<boolean | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
 
-  // Resolve handle from URL (?handle=) or localStorage on first load.
+  // Resolve handle from URL (?handle=) or localStorage on first load; surface
+  // OAuth outcome; check whether Instagram login is set up.
   useEffect(() => {
-    const fromUrl = new URLSearchParams(window.location.search).get('handle');
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('handle');
+    const oauthErr = params.get('oauth_error');
+    if (oauthErr) setBanner(oauthErr === 'not_configured'
+      ? 'Instagram sign-in isn’t set up yet — continue with your handle below.'
+      : 'Instagram sign-in didn’t complete. Try again, or use your handle below.');
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('creator_handle') : null;
     const h = (fromUrl || stored || '').trim();
-    if (h) setHandle(h);
+    if (h) { setHandle(h); if (params.get('connected')) localStorage.setItem('creator_handle', h.replace(/^@/, '')); }
+    fetch('/api/oauth/status').then((r) => r.json()).then((d) => setIgConfigured(!!d.configured)).catch(() => setIgConfigured(false));
   }, []);
 
   const loadApplications = useCallback(async (h: string) => {
@@ -121,8 +130,25 @@ export default function CreatorPortal() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M5.5 21a6.5 6.5 0 0 1 13 0" /></svg>
             </div>
             <h1 className="text-2xl font-bold text-ink-900">Creator dashboard</h1>
-            <p className="mt-2 text-[15px] text-ink-600">Enter your Instagram handle to see your profile and apply to brand campaigns.</p>
-            <div className="mt-6 rounded-2xl bg-white border-2 border-[#e3def9] focus-within:border-[#6C4DF6] shadow-[0_12px_40px_rgba(108,77,246,0.1)] transition-colors p-2 flex gap-2">
+            <p className="mt-2 text-[15px] text-ink-600">Sign in to see your profile and apply to brand campaigns.</p>
+
+            {banner && <div className="mt-5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-4 py-2.5">{banner}</div>}
+
+            {/* Instagram OAuth (primary) */}
+            <a
+              href="/api/oauth/instagram?flow=creator"
+              className="mt-6 flex items-center justify-center gap-2.5 w-full px-6 py-3.5 rounded-xl text-white text-[15px] font-semibold shadow-sm hover:brightness-105 transition"
+              style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+              Continue with Instagram
+            </a>
+            {igConfigured === false && <p className="mt-2 text-[12px] text-ink-400">Instagram login isn’t configured on this environment yet — use your handle below.</p>}
+
+            <div className="my-5 flex items-center gap-3 text-[12px] text-ink-400"><span className="flex-1 h-px bg-border" />or<span className="flex-1 h-px bg-border" /></div>
+
+            {/* Handle entry (fallback) */}
+            <div className="rounded-2xl bg-white border-2 border-[#e3def9] focus-within:border-[#6C4DF6] shadow-[0_12px_40px_rgba(108,77,246,0.1)] transition-colors p-2 flex gap-2">
               <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && signIn()} placeholder="@yourhandle" className="flex-1 px-4 py-3 bg-transparent text-[15px] text-ink-900 placeholder:text-ink-400 focus:outline-none" />
               <button onClick={signIn} className="px-6 py-3 text-sm font-semibold text-white bg-ink-900 rounded-xl hover:bg-ink-800">Continue</button>
             </div>
