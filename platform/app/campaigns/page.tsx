@@ -113,7 +113,7 @@ export default function CampaignsPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" />
+            <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
           </div>
         ) : programs.length === 0 ? (
           <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">
@@ -127,9 +127,9 @@ export default function CampaignsPage() {
               const spent = num(p.spent);
               const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
               return (
-                <Link key={p.id} href={`/campaigns/${p.id}`} className="group block p-5 rounded-2xl bg-white border border-border hover:border-[#F2542D]/40 hover:shadow-hover transition-all">
+                <Link key={p.id} href={`/campaigns/${p.id}`} className="group block p-5 rounded-2xl bg-white border border-border hover:border-[#6C4DF6]/40 hover:shadow-hover transition-all">
                   <div className="flex items-start justify-between mb-3">
-                    <span className="font-semibold text-ink-900 truncate group-hover:text-[#F2542D] transition-colors">{p.name}</span>
+                    <span className="font-semibold text-ink-900 truncate group-hover:text-[#6C4DF6] transition-colors">{p.name}</span>
                     <StatusDot status={p.status} />
                   </div>
                   <div className="flex items-center gap-2 mb-4">
@@ -143,7 +143,7 @@ export default function CampaignsPage() {
                         <span>of {inr(budget)}</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-[#eef] overflow-hidden">
-                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: spent > budget ? '#ef4444' : 'linear-gradient(90deg,#F2542D,#FF7A45)' }} />
+                        <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: spent > budget ? '#ef4444' : 'linear-gradient(90deg,#6C4DF6,#9b7bff)' }} />
                       </div>
                     </>
                   ) : (
@@ -162,7 +162,7 @@ export default function CampaignsPage() {
 function Summary({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="rounded-2xl bg-white border border-border p-4 shadow-card">
-      <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#F2542D]' : 'text-ink-900'}`}>{value}</div>
+      <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
       <div className="text-[11px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div>
     </div>
   );

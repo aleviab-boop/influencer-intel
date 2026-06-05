@@ -80,7 +80,7 @@ export default function PayoutsPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" />
+            <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
           </div>
         ) : rows.length === 0 ? (
           <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">
@@ -116,7 +116,7 @@ export default function PayoutsPage() {
 }
 
 function Summary({ label, value, accent, tone }: { label: string; value: string; accent?: boolean; tone?: 'green' }) {
-  const color = tone === 'green' ? 'text-emerald-700' : accent ? 'text-[#F2542D]' : 'text-ink-900';
+  const color = tone === 'green' ? 'text-emerald-700' : accent ? 'text-[#6C4DF6]' : 'text-ink-900';
   return (
     <div className="rounded-2xl bg-white border border-border p-4 shadow-card">
       <div className={`text-2xl font-bold tabular-nums ${color}`}>{value}</div>

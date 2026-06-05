@@ -8,8 +8,8 @@ import { Showcase } from '@/components/showcase';
 
 // Reelax-style influencer-marketing landing page, themed for Influencer Intel
 // with a violet accent. CTAs wire to the real app (/discover, /programs, …).
-const ACCENT = '#F2542D';
-const ACCENT_SOFT = '#FFF1EC';
+const ACCENT = '#6C4DF6';
+const ACCENT_SOFT = '#F4F2FF';
 
 const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
@@ -113,7 +113,7 @@ function MarketingNav() {
                   <Link
                     key={f.label}
                     href={f.href}
-                    className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#FFF3EE] transition-colors"
+                    className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors"
                   >
                     <span style={{ color: ACCENT }}><FeatureIcon name={f.icon} /></span>
                     <span className="text-[15px] font-medium text-[#222]">{f.label}</span>
@@ -129,8 +129,8 @@ function MarketingNav() {
             </button>
             <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 w-[260px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
               <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-                <Link href="/tools/fake-follower-checker" className="block px-5 py-3.5 border-b border-[#f3f3f3] hover:bg-[#FFF3EE] text-[15px] font-medium text-[#222]">Fake Follower Check</Link>
-                <Link href="/tools/er-calculator" className="block px-5 py-3.5 hover:bg-[#FFF3EE] text-[15px] font-medium text-[#222]">Engagement Rate (ER)</Link>
+                <Link href="/tools/fake-follower-checker" className="block px-5 py-3.5 border-b border-[#f3f3f3] hover:bg-[#f6f4ff] text-[15px] font-medium text-[#222]">Fake Follower Check</Link>
+                <Link href="/tools/er-calculator" className="block px-5 py-3.5 hover:bg-[#f6f4ff] text-[15px] font-medium text-[#222]">Engagement Rate (ER)</Link>
               </div>
             </div>
           </div>
@@ -213,7 +213,7 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
       />
       <div className="max-w-4xl mx-auto px-6 pt-16 pb-16 text-center">
         <span
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-medium mb-6 bg-white border border-[#FFE7DD] shadow-sm"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-medium mb-6 bg-white border border-[#ececff] shadow-sm"
           style={{ color: ACCENT }}
         >
           India’s AI-native InfluencerOS 🌐
@@ -229,7 +229,7 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
 
         {/* Animated search box */}
         <div className="mt-9 relative max-w-3xl mx-auto text-left">
-          <div className="rounded-2xl bg-white border-2 transition-colors p-4 pb-16 shadow-[0_12px_50px_rgba(242,84,45,0.12)] focus-within:border-[#F2542D] border-[#FAD9CC]">
+          <div className="rounded-2xl bg-white border-2 transition-colors p-4 pb-16 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] border-[#e3def9]">
             <div className="relative">
               <textarea
                 value={value}
@@ -271,7 +271,7 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
               onClick={go}
               aria-label="Search"
               className="absolute right-4 bottom-4 w-12 h-12 rounded-full grid place-items-center text-white shadow-md hover:brightness-95"
-              style={{ background: `linear-gradient(135deg, ${ACCENT}, #FF7A45)` }}
+              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                 <circle cx="11" cy="11" r="7" />
@@ -286,7 +286,7 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
             <button
               key={c}
               onClick={() => onSearch(c)}
-              className="px-3.5 py-1.5 rounded-full border border-[#F6CFC0] text-[13px] hover:bg-white bg-white/70"
+              className="px-3.5 py-1.5 rounded-full border border-[#dcd6f7] text-[13px] hover:bg-white bg-white/70"
               style={{ color: ACCENT }}
             >
               {c}
@@ -471,7 +471,7 @@ function FeatureGrid() {
             <Link
               key={f.t}
               href={f.href}
-              className="group p-5 rounded-2xl bg-white border border-[#FFE7DD] hover:shadow-[0_8px_30px_rgba(242,84,45,0.12)] transition-shadow"
+              className="group p-5 rounded-2xl bg-white border border-[#ececff] hover:shadow-[0_8px_30px_rgba(108,77,246,0.12)] transition-shadow"
             >
               <div className="w-10 h-10 rounded-xl grid place-items-center mb-4 text-white" style={{ background: ACCENT }}>
                 <span className="text-[16px] font-bold">{f.t.charAt(0)}</span>
@@ -614,7 +614,7 @@ function FAQ() {
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-10">Frequently asked questions</h2>
         <div className="space-y-2">
           {FAQS.map((f, i) => (
-            <div key={f.q} className="rounded-xl bg-white border border-[#FFE7DD]">
+            <div key={f.q} className="rounded-xl bg-white border border-[#ececff]">
               <button
                 onClick={() => setOpen(open === i ? null : i)}
                 className="w-full flex items-center justify-between px-5 py-4 text-left"
@@ -627,7 +627,7 @@ function FAQ() {
           ))}
         </div>
 
-        <div className="mt-12 text-center rounded-2xl bg-white border border-[#FFE7DD] p-10">
+        <div className="mt-12 text-center rounded-2xl bg-white border border-[#ececff] p-10">
           <h3 className="text-2xl font-bold tracking-tight">Ready to run smarter campaigns?</h3>
           <p className="mt-2 text-[15px] text-[#555]">Start discovering creators in under five minutes.</p>
           <Link href="/lander" className="mt-6 inline-block px-6 py-3 rounded-xl text-white text-[15px] font-medium" style={{ background: ACCENT }}>

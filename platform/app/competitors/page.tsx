@@ -74,7 +74,7 @@ export default function CompetitorsPage() {
         {error && <div className="mb-6 text-sm text-rose-700">{error}</div>}
 
         {loading ? (
-          <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#FBE3DA] border-t-[#F2542D] animate-spin" /></div>
+          <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
         ) : data ? (
           <>
             {/* share of voice */}
@@ -86,7 +86,7 @@ export default function CompetitorsPage() {
                 </div>
                 <div className="flex h-6 rounded-full overflow-hidden border border-border">
                   <div className="grid place-items-center text-[11px] text-white font-medium" style={{ width: `${aPct}%`, background: ACCENT }}>{aPct > 12 ? `${data.a} ${aPct}%` : ''}</div>
-                  <div className="grid place-items-center text-[11px] text-ink-700 font-medium bg-[#FBE1D6]" style={{ width: `${100 - aPct}%` }}>{100 - aPct > 12 ? `${data.b} ${100 - aPct}%` : ''}</div>
+                  <div className="grid place-items-center text-[11px] text-ink-700 font-medium bg-[#e5e1f7]" style={{ width: `${100 - aPct}%` }}>{100 - aPct > 12 ? `${data.b} ${100 - aPct}%` : ''}</div>
                 </div>
                 <div className="mt-2 flex justify-between text-[12px] text-ink-500"><span>{data.a}: {aN}</span><span>{data.b}: {bN}</span></div>
               </div>
@@ -102,7 +102,7 @@ export default function CompetitorsPage() {
                 <div className="text-[13px] font-semibold text-ink-900 mb-3">Shared creators ({data.overlap.length})</div>
                 <div className="flex flex-wrap gap-2">
                   {data.overlap.map((c) => (
-                    <a key={c.id} href={c.profile_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 rounded-full text-[12px] border border-[#F6CFC0] hover:bg-[#FFF3EE]" style={{ color: ACCENT }}>
+                    <a key={c.id} href={c.profile_url} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 rounded-full text-[12px] border border-[#dcd6f7] hover:bg-[#f6f4ff]" style={{ color: ACCENT }}>
                       {c.display_name ?? `@${c.handle}`}
                     </a>
                   ))}

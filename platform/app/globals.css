@@ -12,8 +12,8 @@
   --ii-faint: #999999;
   --ii-border: #e5e5e5;
   --ii-border-soft: #f0f0f0;
-  --ii-accent: #F2542D;
-  --ii-accent-soft: #FFF1EC;
+  --ii-accent: #6C4DF6;
+  --ii-accent-soft: #F4F2FF;
   --ii-gold: #b8965a;
 }
 
@@ -41,13 +41,13 @@ button, input, textarea, select {
 /* Subtle blueprint grid used behind hero / page headers. */
 .grid-bg {
   background-image:
-    linear-gradient(to right, rgba(242, 84, 45, 0.07) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(242, 84, 45, 0.07) 1px, transparent 1px);
+    linear-gradient(to right, rgba(108, 77, 246, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(108, 77, 246, 0.07) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
 /* App-wide theming: every filled primary button (Tailwind `bg-ink-900`) adopts
-   the accent (red-orange) without editing each page. Text/headings keep ink. */
+   the accent (violet) without editing each page. Text/headings keep ink. */
 .bg-ink-900 { background-color: var(--ii-accent) !important; }
 .bg-ink-900:hover { filter: brightness(0.92); }
 
