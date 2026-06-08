@@ -11,13 +11,24 @@ const BANDS: Record<string, { t: string; c: string }> = {
   low: { t: 'Low authenticity', c: '#f43f5e' },
 };
 
+interface PostView { url: string | null; type: string | null; posted_at: string | null; likes: number; comments: number; views: number; er_pct: number }
+interface Metrics { posts: number; avg_likes: number; avg_comments: number; avg_views: number; median_er_pct: number; median_cpl_pct: number; consistency: 'steady' | 'variable' | 'erratic'; top_er_pct: number; low_er_pct: number }
 interface Result {
   authenticity: number;
   band: { t: string; c: string };
   basis: 'verified' | 'per_post' | 'aggregate' | 'credibility' | 'insufficient';
   postsAnalyzed: number;
   signals: { label: string; ok: boolean; detail: string }[];
+  metrics: Metrics | null;
+  posts: PostView[];
 }
+
+const kfmt = (v: number): string => (v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(v));
+const fmtDate = (s: string | null): string => {
+  if (!s) return '—';
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+};
 
 export default function FakeFollowerChecker() {
   const [handle, setHandle] = useState('');
@@ -46,6 +57,8 @@ export default function FakeFollowerChecker() {
         basis: d.basis,
         postsAnalyzed: d.posts_analyzed,
         signals: d.signals ?? [],
+        metrics: d.metrics ?? null,
+        posts: d.posts ?? [],
       });
     } catch (e) {
       setError((e as Error).message);
@@ -124,6 +137,50 @@ export default function FakeFollowerChecker() {
               )}
               <p className="mt-6 pt-5 border-t border-border-soft text-[12px] text-ink-400">Heuristic estimate from public signals — not a definitive audit.</p>
             </div>
+
+            {/* Post-level metrics */}
+            {result.metrics && result.posts.length > 0 && (
+              <div className="ii-fadeup mt-5 rounded-2xl bg-white border border-border shadow-[0_12px_40px_rgba(0,0,0,0.06)] p-7">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+                  <h3 className="text-[15px] font-bold text-ink-900">Recent post analysis</h3>
+                  <span className="text-[12px] text-ink-400">{result.metrics.posts} posts · engagement looks {result.metrics.consistency}</span>
+                </div>
+
+                {/* aggregate metric tiles */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                  <MetricTile label="Avg likes" value={kfmt(result.metrics.avg_likes)} />
+                  <MetricTile label="Avg comments" value={kfmt(result.metrics.avg_comments)} />
+                  <MetricTile label="Avg views" value={result.metrics.avg_views > 0 ? kfmt(result.metrics.avg_views) : '—'} />
+                  <MetricTile label="Median ER" value={`${result.metrics.median_er_pct}%`} accent />
+                  <MetricTile label="Comments / like" value={`${result.metrics.median_cpl_pct}%`} />
+                </div>
+
+                {/* per-post table */}
+                <div className="rounded-xl border border-border overflow-hidden">
+                  <div className="hidden sm:grid grid-cols-[1fr_0.8fr_0.8fr_0.8fr_0.9fr] px-4 py-2.5 bg-[#f7f7fb] text-[11px] uppercase tracking-wider text-ink-400 font-semibold">
+                    <span>Post</span><span className="text-right">Likes</span><span className="text-right">Comments</span><span className="text-right">Views</span><span className="text-right">ER</span>
+                  </div>
+                  {result.posts.map((p, i) => {
+                    const best = p.er_pct === result.metrics!.top_er_pct;
+                    return (
+                      <a key={i} href={p.url ?? undefined} target="_blank" rel="noopener noreferrer" className="grid grid-cols-2 sm:grid-cols-[1fr_0.8fr_0.8fr_0.8fr_0.9fr] gap-y-1 px-4 py-2.5 border-t border-border-soft items-center text-[13px] hover:bg-[#faf9ff] transition-colors">
+                        <span className="text-ink-700 col-span-2 sm:col-span-1 flex items-center gap-2">
+                          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#f2f2f7] text-ink-500 capitalize">{p.type ?? 'post'}</span>
+                          <span className="text-ink-400">{fmtDate(p.posted_at)}</span>
+                        </span>
+                        <span className="text-ink-700 tabular-nums sm:text-right"><span className="sm:hidden text-ink-400">Likes </span>{kfmt(p.likes)}</span>
+                        <span className="text-ink-700 tabular-nums sm:text-right"><span className="sm:hidden text-ink-400">Comments </span>{kfmt(p.comments)}</span>
+                        <span className="text-ink-500 tabular-nums sm:text-right"><span className="sm:hidden text-ink-400">Views </span>{p.views > 0 ? kfmt(p.views) : '—'}</span>
+                        <span className="tabular-nums sm:text-right font-medium flex items-center sm:justify-end gap-1.5" style={{ color: best ? '#10b981' : '#374151' }}>
+                          <span className="sm:hidden text-ink-400">ER </span>{p.er_pct}%{best && <span className="text-[10px]">▲ top</span>}
+                        </span>
+                      </a>
+                    );
+                  })}
+                </div>
+                <p className="mt-3 text-[11px] text-ink-400">ER per post = (likes + comments) ÷ followers. Consistency compares engagement across posts — wildly uneven or eerily flat engagement is a red flag.</p>
+              </div>
+            )}
           </section>
         )}
 
@@ -152,6 +209,15 @@ export default function FakeFollowerChecker() {
         </section>
       </main>
       <MarketingFooter />
+    </div>
+  );
+}
+
+function MetricTile({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="rounded-xl border border-border bg-[#fafafc] px-3 py-3 text-center">
+      <div className={`text-[18px] font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div>
     </div>
   );
 }
