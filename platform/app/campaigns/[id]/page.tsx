@@ -330,6 +330,17 @@ function RecruitCard({ r, onPatch }: { r: Recruit; onPatch: (creatorId: string, 
           </a>
           <div className="text-[11px] text-ink-500 truncate">{[r.genre, r.region].filter(Boolean).join(' · ') || r.platform}</div>
         </div>
+        <a
+          href={r.profile_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          title={`Open @${r.handle} on Instagram`}
+          className="shrink-0 w-7 h-7 grid place-items-center rounded-lg text-white hover:brightness-105 transition"
+          style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+        </a>
       </div>
 
       <div className="mt-2 flex items-center gap-1.5 text-[10px]">
