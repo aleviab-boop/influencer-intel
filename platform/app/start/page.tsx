@@ -24,8 +24,8 @@ export default function StartPage() {
               title="Find creators & run campaigns"
               desc="Discover the right influencers with AI, recruit them into campaigns, track performance and pay them — all in one place."
               features={['AI creator discovery & scoring', 'Campaign pipeline & budgets', 'Competitor & authenticity intel', 'Payouts and analytics']}
-              primary={{ label: 'Enter as a brand', href: '/lander' }}
-              secondary={{ label: 'Log in', href: '/login' }}
+              primary={{ label: 'Sign up as an agency', href: '/signup?role=agency' }}
+              secondary={{ label: 'Log in', href: '/login?role=agency' }}
               icon="brand"
             />
             <PathCard
@@ -33,8 +33,8 @@ export default function StartPage() {
               title="Get paid brand deals"
               desc="Create your profile, get matched with brand campaigns that fit your niche, apply in a click and get paid on time."
               features={['Free to join — keep your rate', 'Get matched with real campaigns', 'Apply & track your deals', 'See your authenticity & ER']}
-              primary={{ label: 'Enter as a creator', href: '/creator' }}
-              secondary={{ label: 'Learn more', href: '/for-influencers' }}
+              primary={{ label: 'Sign up as a creator', href: '/signup?role=influencer' }}
+              secondary={{ label: 'Log in', href: '/login?role=influencer' }}
               icon="creator"
             />
           </div>
