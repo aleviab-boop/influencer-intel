@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { MarketingNav } from '@/components/marketing';
+import { MarketingNav, ACCENT } from '@/components/marketing';
+
+interface PayoutMethod {
+  id: string;
+  label: string;
+  type: 'upi' | 'bank' | 'paypal' | 'other';
+  detail: string | null;
+  is_default: boolean;
+}
 
 interface PayoutRow {
   program_id: string;
@@ -21,10 +29,16 @@ interface PayoutRow {
 const num = (v: number | string | null): number => (v == null ? 0 : Number(v) || 0);
 const inr = (n: number): string => '₹' + Math.round(n).toLocaleString('en-IN');
 
+const TYPE_LABEL: Record<string, string> = { upi: 'UPI', bank: 'Bank transfer', paypal: 'PayPal', other: 'Other' };
+
 export default function PayoutsPage() {
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'paid'>('all');
+  const [methods, setMethods] = useState<PayoutMethod[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [mForm, setMForm] = useState<{ label: string; type: PayoutMethod['type']; detail: string }>({ label: '', type: 'upi', detail: '' });
+  const [mBusy, setMBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -36,9 +50,35 @@ export default function PayoutsPage() {
       setLoading(false);
     }
   }
+  async function loadMethods() {
+    const d = await fetch('/api/payout-methods').then((r) => r.json()).catch(() => ({}));
+    setMethods(d.methods ?? []);
+  }
   useEffect(() => {
     void load();
+    void loadMethods();
   }, []);
+
+  async function addMethod() {
+    if (mForm.label.trim().length < 2) return;
+    setMBusy(true);
+    try {
+      const r = await fetch('/api/payout-methods', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mForm) });
+      if (r.ok) { setMForm({ label: '', type: 'upi', detail: '' }); setAdding(false); await loadMethods(); }
+    } finally {
+      setMBusy(false);
+    }
+  }
+  async function removeMethod(id: string) {
+    if (!confirm('Remove this payout method?')) return;
+    setMethods((ms) => ms.filter((m) => m.id !== id));
+    await fetch(`/api/payout-methods/${id}`, { method: 'DELETE' }).catch(() => loadMethods());
+    loadMethods();
+  }
+  async function makeDefault(id: string) {
+    setMethods((ms) => ms.map((m) => ({ ...m, is_default: m.id === id })));
+    await fetch(`/api/payout-methods/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_default: true }) }).catch(() => loadMethods());
+  }
 
   async function setPaid(row: PayoutRow, paid: boolean) {
     setRows((rs) => rs.map((r) => (r.creator_id === row.creator_id && r.program_id === row.program_id ? { ...r, paid, paid_at: paid ? new Date().toISOString() : null } : r)));
@@ -69,6 +109,52 @@ export default function PayoutsPage() {
             <Summary label="Creators" value={String(rows.length)} />
           </div>
         )}
+
+        {/* Payout methods */}
+        <div className="rounded-2xl bg-white border border-border shadow-card p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-[13px] font-semibold text-ink-900">Payout methods</div>
+              <div className="text-[12px] text-ink-400">How you pay creators. Add or remove your options.</div>
+            </div>
+            {!adding && <button onClick={() => setAdding(true)} className="px-3.5 py-2 text-[13px] font-semibold text-white rounded-lg" style={{ background: ACCENT }}>+ Add method</button>}
+          </div>
+
+          {adding && (
+            <div className="mb-3 p-3 rounded-xl border border-border bg-[#faf9ff] grid sm:grid-cols-[1.2fr_0.9fr_1.4fr_auto] gap-2 items-center">
+              <input value={mForm.label} onChange={(e) => setMForm((f) => ({ ...f, label: e.target.value }))} placeholder="Label (e.g. Razorpay UPI)" className={minp} autoFocus />
+              <select value={mForm.type} onChange={(e) => setMForm((f) => ({ ...f, type: e.target.value as PayoutMethod['type'] }))} className={minp}>
+                {(['upi', 'bank', 'paypal', 'other'] as const).map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+              </select>
+              <input value={mForm.detail} onChange={(e) => setMForm((f) => ({ ...f, detail: e.target.value }))} placeholder="Detail (e.g. brand@upi · optional)" className={minp} />
+              <div className="flex gap-2">
+                <button onClick={addMethod} disabled={mBusy || mForm.label.trim().length < 2} className="px-3 py-2 text-[13px] font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-50">{mBusy ? '…' : 'Save'}</button>
+                <button onClick={() => setAdding(false)} className="px-2 py-2 text-[13px] text-ink-500 hover:text-ink-900">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {methods.length === 0 ? (
+            <div className="text-[13px] text-ink-400 py-3">No payout methods yet. Add one to record how creators get paid.</div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {methods.map((m) => (
+                <div key={m.id} className="flex items-center gap-2.5 pl-3 pr-2 py-2 rounded-xl border border-border bg-white">
+                  <span className="w-7 h-7 rounded-lg grid place-items-center text-[11px] font-bold" style={{ background: '#f4f2ff', color: ACCENT }}>{m.type.toUpperCase().slice(0, 2)}</span>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-ink-900 flex items-center gap-1.5">
+                      {m.label}
+                      {m.is_default && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Default</span>}
+                    </div>
+                    <div className="text-[11px] text-ink-400">{TYPE_LABEL[m.type]}{m.detail ? ` · ${m.detail}` : ''}</div>
+                  </div>
+                  {!m.is_default && <button onClick={() => makeDefault(m.id)} className="text-[11px] text-ink-400 hover:text-[#6C4DF6] px-1">Set default</button>}
+                  <button onClick={() => removeMethod(m.id)} title="Remove" className="w-6 h-6 grid place-items-center rounded-md text-ink-300 hover:text-rose-600 hover:bg-rose-50">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {!loading && rows.length > 0 && (
           <div className="flex gap-1 p-1 rounded-lg bg-white border border-border w-max mb-4">
@@ -115,6 +201,7 @@ export default function PayoutsPage() {
   );
 }
 
+const minp = 'w-full px-3 py-2 border border-border bg-white text-[13px] text-ink-900 rounded-lg focus:outline-none focus:border-ink-900';
 function Summary({ label, value, accent, tone }: { label: string; value: string; accent?: boolean; tone?: 'green' }) {
   const color = tone === 'green' ? 'text-emerald-700' : accent ? 'text-[#6C4DF6]' : 'text-ink-900';
   return (
