@@ -67,7 +67,7 @@ export interface AuthenticitySignal { label: string; ok: boolean; detail: string
 export interface AuthenticityResult {
   score: number;            // 0–100
   band: 'high' | 'mixed' | 'low';
-  basis: 'verified' | 'per_post' | 'aggregate';
+  basis: 'verified' | 'per_post' | 'aggregate' | 'credibility' | 'insufficient';
   posts_analyzed: number;
   signals: AuthenticitySignal[];
 }
@@ -157,28 +157,58 @@ export function scoreAuthenticity(input: AuthenticityInput): AuthenticityResult 
     return { score, band: bandOf(score), basis: 'per_post', posts_analyzed: posts.length, signals };
   }
 
-  // ---- Aggregate fallback (profile averages) ----
+  // ---- Aggregate (profile averages) — only when we actually have engagement data ----
   const avgLikes = num(input.avg_likes) ?? 0;
   const avgComments = num(input.avg_comments) ?? 0;
-  const er = num(input.engagement_rate) != null
-    ? (num(input.engagement_rate) as number) * 100
-    : followers > 0 ? ((avgLikes + avgComments) / followers) * 100 : 0;
-  const commentRatio = avgLikes > 0 ? avgComments / avgLikes : 0;
+  const erRaw = num(input.engagement_rate);
+  const hasEngagement = (erRaw != null && erRaw > 0) || avgLikes > 0 || avgComments > 0;
 
-  const erScore = clamp((er / Math.max(0.1, target)) * 100, 0, 100);
-  const cplScore = clamp((commentRatio / 0.015) * 100, 0, 100);
+  if (hasEngagement) {
+    const er = erRaw != null ? erRaw * 100 : followers > 0 ? ((avgLikes + avgComments) / followers) * 100 : 0;
+    const commentRatio = avgLikes > 0 ? avgComments / avgLikes : 0;
 
-  const parts = cred != null
-    ? [erScore * 0.4, cplScore * 0.2, ffSc * 0.2, cred * 0.2]
-    : [erScore * 0.5, cplScore * 0.25, ffSc * 0.25];
-  const score = Math.round(parts.reduce((a, b) => a + b, 0));
+    const erScore = clamp((er / Math.max(0.1, target)) * 100, 0, 100);
+    const cplScore = clamp((commentRatio / 0.015) * 100, 0, 100);
 
-  signals.push(
-    { label: 'Engagement vs tier', ok: er >= target * 0.6, detail: `${er.toFixed(2)}% (benchmark ${target.toFixed(1)}%)` },
-    { label: 'Comment authenticity', ok: commentRatio >= 0.005, detail: `${(commentRatio * 100).toFixed(2)}% comments-per-like` },
-    { label: 'Follower / following ratio', ok: ff >= 1, detail: ff >= 999 ? 'follows almost no one' : `${ff.toFixed(1)}×` },
-    ...(cred != null ? [{ label: 'Credibility score', ok: cred >= 70, detail: `${Math.round(cred)}/100` }] : []),
-  );
+    const parts = cred != null
+      ? [erScore * 0.4, cplScore * 0.2, ffSc * 0.2, cred * 0.2]
+      : [erScore * 0.5, cplScore * 0.25, ffSc * 0.25];
+    const score = Math.round(parts.reduce((a, b) => a + b, 0));
 
-  return { score, band: bandOf(score), basis: 'aggregate', posts_analyzed: 0, signals };
+    signals.push(
+      { label: 'Engagement vs tier', ok: er >= target * 0.6, detail: `${er.toFixed(2)}% (benchmark ${target.toFixed(1)}%)` },
+      { label: 'Comment authenticity', ok: commentRatio >= 0.005, detail: `${(commentRatio * 100).toFixed(2)}% comments-per-like` },
+      { label: 'Follower / following ratio', ok: ff >= 1, detail: ff >= 999 ? 'follows almost no one' : `${ff.toFixed(1)}×` },
+      ...(cred != null ? [{ label: 'Credibility score', ok: cred >= 70, detail: `${Math.round(cred)}/100` }] : []),
+    );
+
+    return { score, band: bandOf(score), basis: 'aggregate', posts_analyzed: 0, signals };
+  }
+
+  // ---- No engagement data: don't penalize missing data as zero engagement.
+  // Lean on the credibility score (an authenticity signal in its own right). ----
+  if (cred != null) {
+    const score = Math.round(cred);
+    return {
+      score,
+      band: bandOf(score),
+      basis: 'credibility',
+      posts_analyzed: 0,
+      signals: [
+        { label: 'Credibility score', ok: cred >= 70, detail: `${Math.round(cred)}/100` },
+        { label: 'Follower / following ratio', ok: ff >= 1, detail: ff >= 999 ? 'follows almost no one' : `${ff.toFixed(1)}×` },
+      ],
+    };
+  }
+
+  // ---- Truly insufficient: no engagement and no credibility on file. ----
+  return {
+    score: 0,
+    band: 'low',
+    basis: 'insufficient',
+    posts_analyzed: 0,
+    signals: [
+      { label: 'Follower / following ratio', ok: ff >= 1, detail: ff >= 999 ? 'follows almost no one' : `${ff.toFixed(1)}×` },
+    ],
+  };
 }

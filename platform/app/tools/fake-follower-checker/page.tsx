@@ -14,7 +14,7 @@ const BANDS: Record<string, { t: string; c: string }> = {
 interface Result {
   authenticity: number;
   band: { t: string; c: string };
-  basis: 'verified' | 'per_post' | 'aggregate';
+  basis: 'verified' | 'per_post' | 'aggregate' | 'credibility' | 'insufficient';
   postsAnalyzed: number;
   signals: { label: string; ok: boolean; detail: string }[];
 }
@@ -89,28 +89,40 @@ export default function FakeFollowerChecker() {
           <section className="max-w-3xl mx-auto px-6 -mt-6 relative z-10">
             <div className="ii-fadeup rounded-2xl bg-white border border-border shadow-[0_12px_40px_rgba(0,0,0,0.08)] p-7">
               {meta && <div className="text-[13px] text-ink-500 mb-1 text-center">{meta}</div>}
-              <div className="text-[11px] mb-5 text-center">
-                {result.basis === 'verified'
-                  ? <span className="text-emerald-600 font-medium">✓ Verified — reach-based, from {result.postsAnalyzed} connected posts</span>
-                  : <span className="text-ink-400">{result.basis === 'per_post' ? `Analyzed ${result.postsAnalyzed} recent posts` : 'Based on profile averages'}</span>}
-              </div>
-              <div className="flex flex-col sm:flex-row items-center gap-7">
-                <Gauge value={result.authenticity} color={result.band.c} />
-                <div className="flex-1 w-full">
-                  <div className="inline-block px-3 py-1 rounded-full text-[13px] font-semibold text-white mb-3" style={{ background: result.band.c }}>{result.band.t}</div>
-                  <div className="space-y-2.5">
-                    {result.signals.map((s) => (
-                      <div key={s.label} className="flex items-center gap-2.5 text-[13px]">
-                        <span className={`w-5 h-5 shrink-0 rounded-full grid place-items-center text-white text-[11px] ${s.ok ? 'bg-emerald-500' : 'bg-rose-500'}`}>{s.ok ? '✓' : '!'}</span>
-                        <span className="text-ink-700">{s.label}</span>
-                        <span className="ml-auto text-ink-400 tabular-nums">{s.detail}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 text-[12px] text-ink-400">An estimated {100 - result.authenticity}% of engagement signals look low-quality or inactive.</div>
+              {result.basis === 'insufficient' ? (
+                <div className="py-8 text-center">
+                  <div className="text-[15px] font-semibold text-ink-900">Not enough public data to score yet</div>
+                  <p className="mt-2 text-[13px] text-ink-500 max-w-md mx-auto">We don’t have recent engagement or a credibility signal on file for this creator. Connecting their Instagram gives a verified, reach-based score.</p>
                 </div>
-              </div>
-              <p className="mt-6 pt-5 border-t border-border-soft text-[12px] text-ink-400">Heuristic estimate from public engagement signals — not a definitive audit.</p>
+              ) : (
+                <>
+                  <div className="text-[11px] mb-5 text-center">
+                    {result.basis === 'verified' ? <span className="text-emerald-600 font-medium">✓ Verified — reach-based, from {result.postsAnalyzed} connected posts</span>
+                      : result.basis === 'per_post' ? <span className="text-ink-400">Analyzed {result.postsAnalyzed} recent posts</span>
+                      : result.basis === 'credibility' ? <span className="text-ink-400">Based on credibility signals — limited recent engagement on file</span>
+                      : <span className="text-ink-400">Based on profile averages</span>}
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-center gap-7">
+                    <Gauge value={result.authenticity} color={result.band.c} />
+                    <div className="flex-1 w-full">
+                      <div className="inline-block px-3 py-1 rounded-full text-[13px] font-semibold text-white mb-3" style={{ background: result.band.c }}>{result.band.t}</div>
+                      <div className="space-y-2.5">
+                        {result.signals.map((s) => (
+                          <div key={s.label} className="flex items-center gap-2.5 text-[13px]">
+                            <span className={`w-5 h-5 shrink-0 rounded-full grid place-items-center text-white text-[11px] ${s.ok ? 'bg-emerald-500' : 'bg-rose-500'}`}>{s.ok ? '✓' : '!'}</span>
+                            <span className="text-ink-700">{s.label}</span>
+                            <span className="ml-auto text-ink-400 tabular-nums">{s.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {(result.basis === 'per_post' || result.basis === 'aggregate' || result.basis === 'verified') && (
+                        <div className="mt-4 text-[12px] text-ink-400">An estimated {100 - result.authenticity}% of engagement signals look low-quality or inactive.</div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+              <p className="mt-6 pt-5 border-t border-border-soft text-[12px] text-ink-400">Heuristic estimate from public signals — not a definitive audit.</p>
             </div>
           </section>
         )}

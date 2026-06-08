@@ -125,12 +125,12 @@ const TREND_MAP: Record<string, string> = {
 interface AuthScore {
   score: number;
   band: 'high' | 'mixed' | 'low';
-  basis: 'verified' | 'per_post' | 'aggregate';
+  basis: 'verified' | 'per_post' | 'aggregate' | 'credibility' | 'insufficient';
   posts_analyzed: number;
   signals: { label: string; ok: boolean; detail: string }[];
 }
 const BAND_COLOR: Record<string, string> = { high: '#0a7d3c', mixed: '#b8860b', low: '#cc0000' };
-const BASIS_NOTE: Record<string, string> = { verified: 'reach-verified', per_post: 'recent posts', aggregate: 'profile averages' };
+const BASIS_NOTE: Record<string, string> = { verified: 'reach-verified', per_post: 'recent posts', aggregate: 'profile averages', credibility: 'credibility signals', insufficient: 'limited data' };
 
 export default function InsightsPage({ params }: { params: Promise<{ handle: string }> }) {
   const [handle, setHandle] = useState('');
@@ -765,7 +765,7 @@ function AuthenticityCard({ auth }: { auth: AuthScore }) {
       <div className="flex items-center gap-3 mb-4">
         <div className="text-[11px] uppercase tracking-[0.12em] text-[#999]">Authenticity</div>
         <span className="text-[14px] font-medium tabular-nums" style={{ color: BAND_COLOR[auth.band] }}>{auth.score}/100</span>
-        <span className="text-[11px] text-[#ccc]">{BASIS_NOTE[auth.basis]}{auth.basis !== 'aggregate' ? ` · ${auth.posts_analyzed} posts` : ''}</span>
+        <span className="text-[11px] text-[#ccc]">{BASIS_NOTE[auth.basis]}{(auth.basis === 'per_post' || auth.basis === 'verified') ? ` · ${auth.posts_analyzed} posts` : ''}</span>
       </div>
       <div className="space-y-1.5">
         {auth.signals.map((s) => (
