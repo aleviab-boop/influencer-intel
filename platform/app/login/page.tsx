@@ -25,7 +25,7 @@ export default function LoginPage() {
     e.preventDefault();
     if (!email.trim()) return;
     try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
-    if (role === 'influencer') { router.push('/creator'); return; }
+    // for now both roles land on /lander (checkout flow still honoured)
     const params = new URLSearchParams(window.location.search);
     const next = params.get('next');
     const p = params.get('plan');

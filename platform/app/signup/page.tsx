@@ -23,9 +23,9 @@ export default function SignupPage() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !/.+@.+\..+/.test(email)) return;
-    // demo auth — remember the chosen role, then land on the right home
+    // demo auth — remember the chosen role; for now both roles land on /lander
     try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
-    router.push(role === 'influencer' ? '/creator' : '/lander');
+    router.push('/lander');
   }
 
   return (
