@@ -575,7 +575,7 @@ function StatsBand() {
 // Paste each brand's SociableKit Instagram-feed `data-embed-id` here to show
 // their live reels feed in the card. Empty → falls back to the brand logo.
 const CASES = [
-  { brand: 'Bajaj', slug: 'bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto', feedId: '' },
+  { brand: 'Bajaj', slug: 'bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto', feedId: '25687815' },
   { brand: 'Wellfa', slug: 'welfa', metric: '120+', label: 'creators activated', tag: 'Wellness', feedId: '' },
   { brand: 'Triumph', slug: 'triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion', feedId: '' },
 ];
