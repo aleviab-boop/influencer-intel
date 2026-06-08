@@ -104,6 +104,7 @@ export function MarketingNav() {
         </nav>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
+          <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
           <Link href="/book-demo" className="px-4 py-2 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
             Book a demo
           </Link>
