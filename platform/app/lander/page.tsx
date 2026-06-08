@@ -572,11 +572,26 @@ function StatsBand() {
   );
 }
 
+// Paste each brand's SociableKit Instagram-feed `data-embed-id` here to show
+// their live reels feed in the card. Empty → falls back to the brand logo.
 const CASES = [
-  { brand: 'Bajaj', slug: 'bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto' },
-  { brand: 'Wellfa', slug: 'welfa', metric: '120+', label: 'creators activated', tag: 'Wellness' },
-  { brand: 'Triumph', slug: 'triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion' },
+  { brand: 'Bajaj', slug: 'bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto', feedId: '' },
+  { brand: 'Wellfa', slug: 'welfa', metric: '120+', label: 'creators activated', tag: 'Wellness', feedId: '' },
+  { brand: 'Triumph', slug: 'triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion', feedId: '' },
 ];
+
+function SociableKitFeed({ embedId }: { embedId: string }) {
+  useEffect(() => {
+    const src = 'https://widgets.sociablekit.com/instagram-feed/widget.js';
+    if (!document.querySelector(`script[src="${src}"]`)) {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = true;
+      document.body.appendChild(s);
+    }
+  }, []);
+  return <div className="sk-instagram-feed" data-embed-id={embedId} />;
+}
 
 function CaseStudies() {
   return (
@@ -589,10 +604,14 @@ function CaseStudies() {
         <div className="grid md:grid-cols-3 gap-5">
           {CASES.map((c) => (
             <div key={c.brand} className="rounded-2xl border border-[#eee] overflow-hidden">
-              <div className="h-36 grid place-items-center bg-white px-8">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/logos/${c.slug}.png`} alt={c.brand} className="max-h-12 w-auto object-contain" />
-              </div>
+              {c.feedId ? (
+                <div className="bg-white p-1 min-h-[180px]"><SociableKitFeed embedId={c.feedId} /></div>
+              ) : (
+                <div className="h-36 grid place-items-center bg-white px-8">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/logos/${c.slug}.png`} alt={c.brand} className="max-h-12 w-auto object-contain" />
+                </div>
+              )}
               <div className="p-5">
                 <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-md" style={{ background: ACCENT_SOFT, color: ACCENT }}>{c.tag}</span>
                 <div className="mt-3 text-3xl font-bold">{c.metric}</div>
