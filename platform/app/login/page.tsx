@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MarketingNav, ACCENT } from '@/components/marketing';
@@ -9,10 +9,21 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [plan, setPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPlan(new URLSearchParams(window.location.search).get('plan'));
+  }, []);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (email.trim()) router.push('/lander');
+    if (!email.trim()) return;
+    const params = new URLSearchParams(window.location.search);
+    const plan = params.get('plan');
+    const next = params.get('next');
+    if (next) router.push(next);
+    else if (plan) router.push(`/checkout?plan=${encodeURIComponent(plan)}`);
+    else router.push('/lander');
   }
 
   return (
@@ -23,7 +34,7 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <div className="w-12 h-12 mx-auto rounded-2xl grid place-items-center mb-4 text-white text-lg font-bold" style={{ background: ACCENT }}>i</div>
             <h1 className="text-2xl font-bold text-ink-900">Log in to Influencer Intel</h1>
-            <p className="mt-2 text-[14px] text-ink-600">Welcome back — pick up where you left off.</p>
+            <p className="mt-2 text-[14px] text-ink-600">{plan ? <>Log in to continue to checkout for the <span className="font-semibold capitalize" style={{ color: ACCENT }}>{plan}</span> plan.</> : 'Welcome back — pick up where you left off.'}</p>
           </div>
 
           <form onSubmit={submit} className="rounded-2xl bg-white border border-border shadow-card p-6 space-y-4">

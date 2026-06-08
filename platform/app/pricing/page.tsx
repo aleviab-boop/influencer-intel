@@ -24,7 +24,7 @@ const PLANS: Plan[] = [
     credits: '100 credits (one-time)',
     price: 0,
     cta: 'Start free',
-    ctaHref: '/lander',
+    ctaHref: '/login?plan=free',
     features: ['Marketplace campaign', 'Influencer database access', '1 brand', '1 team member', 'Basic support'],
   },
   {
@@ -33,7 +33,7 @@ const PLANS: Plan[] = [
     credits: '6,999 credits / mo',
     price: 6999,
     cta: 'Get started',
-    ctaHref: '/lander',
+    ctaHref: '/login?plan=startup',
     features: ['Everything in Free', 'Basic analytics', 'Comment-to-DM (manual)', '3 brands', '3 team members', 'Priority support'],
   },
   {
@@ -42,7 +42,7 @@ const PLANS: Plan[] = [
     credits: '21,999 credits / mo',
     price: 19999,
     cta: 'Get started',
-    ctaHref: '/lander',
+    ctaHref: '/login?plan=growth',
     popular: true,
     features: ['Everything in Startup', 'Advanced analytics & insights', 'Competitor research (full)', 'AI search', '10 brands', '10 team members'],
   },
@@ -52,7 +52,7 @@ const PLANS: Plan[] = [
     credits: 'Custom credits',
     price: null,
     cta: 'Contact us',
-    ctaHref: '/lander',
+    ctaHref: '/book-demo',
     features: ['Everything in Growth', 'Discounted credits', 'API access', 'Comment-to-DM (automated)', 'Unlimited brands & seats', 'Dedicated manager'],
   },
 ];
