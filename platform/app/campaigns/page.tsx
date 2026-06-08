@@ -13,6 +13,8 @@ interface ProgramSummary {
   recruited_count: number;
   budget: number | string | null;
   spent: number | string | null;
+  start_date: string | null;
+  end_date: string | null;
   created_at: string;
 }
 
@@ -21,6 +23,16 @@ const inr = (n: number): string => '₹' + Math.round(n).toLocaleString('en-IN')
 const fmtDate = (s: string): string => {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+const fmtShort = (s: string): string => {
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+};
+const fmtRange = (start: string | null, end: string | null): string | null => {
+  if (start && end) return `Runs ${fmtShort(start)} – ${fmtShort(end)}`;
+  if (start) return `Starts ${fmtShort(start)}`;
+  if (end) return `Ends ${fmtShort(end)}`;
+  return null;
 };
 
 const FILTERS = ['all', 'active', 'paused', 'closed'] as const;
@@ -180,7 +192,14 @@ export default function CampaignsPage() {
                       <StatusBadge status={p.status} />
                     </div>
                     <div className="text-[12px] text-ink-400 mt-1 flex items-center gap-2 flex-wrap">
-                      <span>Created {fmtDate(p.created_at)}</span>
+                      {fmtRange(p.start_date, p.end_date) ? (
+                        <span className="inline-flex items-center gap-1 text-ink-600 font-medium">
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg>
+                          {fmtRange(p.start_date, p.end_date)}
+                        </span>
+                      ) : (
+                        <span>Created {fmtDate(p.created_at)}</span>
+                      )}
                       <span className="text-ink-300">·</span>
                       <span className="text-ink-600">{p.recruit_count} creators</span>
                       <span className="text-ink-300">·</span>

@@ -31,7 +31,7 @@ export interface ProgramRecruitView extends ProgramRecruit {
 export async function listPrograms(): Promise<ProgramSummary[]> {
   const db = getBolticClient();
   return db.query<ProgramSummary>(
-    `SELECT p.*,
+    `SELECT p.*, p.start_date::text AS start_date, p.end_date::text AS end_date,
             COUNT(pr.id)::int AS recruit_count,
             COUNT(pr.id) FILTER (WHERE pr.status = 'recruited')::int AS recruited_count,
             COALESCE(SUM(pr.rate) FILTER (WHERE pr.status <> 'declined'), 0)::float AS spent
