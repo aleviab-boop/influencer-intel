@@ -24,10 +24,21 @@ interface PayoutRow {
   due_date: string | null;
   paid: boolean;
   paid_at: string | null;
+  payout_upi: string | null;
 }
 
 const num = (v: number | string | null): number => (v == null ? 0 : Number(v) || 0);
 const inr = (n: number): string => '₹' + Math.round(n).toLocaleString('en-IN');
+
+// Build a UPI intent link. Tapping it opens the user's own UPI app (Google Pay /
+// PhonePe / Paytm) pre-filled — the user authorises the payment themselves.
+function upiLink(row: PayoutRow): string | null {
+  const vpa = (row.payout_upi ?? '').trim();
+  if (!vpa) return null;
+  const params = new URLSearchParams({ pa: vpa, pn: row.display_name ?? row.handle, cu: 'INR', tn: `${row.program_name} payout` });
+  if (row.rate != null && num(row.rate) > 0) params.set('am', String(num(row.rate)));
+  return `upi://pay?${params.toString()}`;
+}
 
 const TYPE_LABEL: Record<string, string> = { upi: 'UPI', bank: 'Bank transfer', paypal: 'PayPal', other: 'Other' };
 
@@ -86,6 +97,17 @@ export default function PayoutsPage() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ creator_id: row.creator_id, paid }),
+    }).catch(() => load());
+  }
+
+  async function setUpi(row: PayoutRow, payout_upi: string) {
+    const v = payout_upi.trim() || null;
+    if (v === (row.payout_upi ?? null)) return;
+    setRows((rs) => rs.map((r) => (r.creator_id === row.creator_id && r.program_id === row.program_id ? { ...r, payout_upi: v } : r)));
+    await fetch(`/api/programs/${row.program_id}/recruits`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator_id: row.creator_id, payout_upi: v }),
     }).catch(() => load());
   }
 
@@ -174,25 +196,45 @@ export default function PayoutsPage() {
           </div>
         ) : (
           <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
-            <div className="hidden md:grid grid-cols-[1.4fr_1fr_1fr_0.8fr_0.8fr_auto] gap-3 px-4 py-2.5 text-[11px] uppercase tracking-wider text-ink-400 border-b border-border">
-              <span>Creator</span><span>Campaign</span><span>Deliverables</span><span>Due</span><span>Rate</span><span></span>
+            <div className="hidden md:grid grid-cols-[1.3fr_1fr_0.7fr_1.1fr_1.5fr] gap-3 px-4 py-2.5 text-[11px] uppercase tracking-wider text-ink-400 border-b border-border">
+              <span>Creator</span><span>Campaign</span><span>Rate</span><span>Creator UPI</span><span>Payment</span>
             </div>
-            {visible.map((r) => (
-              <div key={`${r.program_id}-${r.creator_id}`} className="grid grid-cols-2 md:grid-cols-[1.4fr_1fr_1fr_0.8fr_0.8fr_auto] gap-3 px-4 py-3 items-center border-b border-border-soft last:border-0 text-[13px]">
-                <a href={r.profile_url} target="_blank" rel="noopener noreferrer" className="font-medium text-ink-900 hover:text-ink-600 truncate">{r.display_name ?? `@${r.handle}`}</a>
-                <span className="text-ink-600 truncate">{r.program_name}</span>
-                <span className="text-ink-500 truncate hidden md:block">{r.deliverables || '—'}</span>
-                <span className="text-ink-500 hidden md:block">{r.due_date ? r.due_date.slice(0, 10) : '—'}</span>
-                <span className="font-semibold tabular-nums text-ink-900">{r.rate != null ? inr(num(r.rate)) : '—'}</span>
-                <div className="text-right">
-                  {r.paid ? (
-                    <button onClick={() => setPaid(r, false)} className="px-3 py-1.5 text-[12px] rounded-lg text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100">✓ Paid</button>
-                  ) : (
-                    <button onClick={() => setPaid(r, true)} disabled={r.rate == null} className="px-3 py-1.5 text-[12px] rounded-lg text-white bg-ink-900 hover:bg-ink-800 disabled:opacity-40">Mark paid</button>
-                  )}
+            {visible.map((r) => {
+              const link = upiLink(r);
+              return (
+                <div key={`${r.program_id}-${r.creator_id}`} className="grid grid-cols-2 md:grid-cols-[1.3fr_1fr_0.7fr_1.1fr_1.5fr] gap-3 px-4 py-3 items-center border-b border-border-soft last:border-0 text-[13px]">
+                  <a href={r.profile_url} target="_blank" rel="noopener noreferrer" className="font-medium text-ink-900 hover:text-ink-600 truncate">{r.display_name ?? `@${r.handle}`}</a>
+                  <span className="text-ink-600 truncate">{r.program_name}</span>
+                  <span className="font-semibold tabular-nums text-ink-900">{r.rate != null ? inr(num(r.rate)) : '—'}</span>
+                  <input
+                    defaultValue={r.payout_upi ?? ''}
+                    onBlur={(e) => setUpi(r, e.target.value)}
+                    placeholder="creator@upi"
+                    className="px-2.5 py-1.5 border border-border bg-white text-[12px] text-ink-900 rounded-lg focus:outline-none focus:border-ink-900 min-w-0"
+                  />
+                  <div className="flex items-center gap-2 col-span-2 md:col-span-1">
+                    {link ? (
+                      <a
+                        href={link}
+                        onClick={(e) => { if (!confirm(`Open your UPI app to pay ${inr(num(r.rate))} to ${r.payout_upi}? You’ll confirm the payment in the app.`)) e.preventDefault(); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold text-white rounded-lg hover:brightness-105"
+                        style={{ background: 'linear-gradient(135deg,#1a73e8,#34a853)' }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7h20v10H2zM2 11h20" /></svg>
+                        Pay via UPI
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-ink-300">Add UPI to pay</span>
+                    )}
+                    {r.paid ? (
+                      <button onClick={() => setPaid(r, false)} className="px-3 py-1.5 text-[12px] rounded-lg text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100">✓ Paid</button>
+                    ) : (
+                      <button onClick={() => setPaid(r, true)} disabled={r.rate == null} className="px-3 py-1.5 text-[12px] rounded-lg text-white bg-ink-900 hover:bg-ink-800 disabled:opacity-40">Mark paid</button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {visible.length === 0 && <div className="px-4 py-10 text-center text-sm text-ink-400">Nothing {filter}.</div>}
           </div>
         )}

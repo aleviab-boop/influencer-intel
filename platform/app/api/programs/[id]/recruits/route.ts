@@ -52,6 +52,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       due_date: typeof body.due_date === 'string' ? body.due_date : body.due_date === null ? null : undefined,
       rate: typeof body.rate === 'number' ? body.rate : body.rate === null ? null : undefined,
       paid: typeof body.paid === 'boolean' ? body.paid : undefined,
+      payout_upi: typeof body.payout_upi === 'string' ? body.payout_upi : body.payout_upi === null ? null : undefined,
     });
     if (!recruit) return NextResponse.json({ error: 'recruit not found' }, { status: 404 });
     return NextResponse.json({ recruit });

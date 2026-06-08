@@ -168,6 +168,7 @@ export async function updateRecruit(input: {
   due_date?: string | null;
   rate?: number | null;
   paid?: boolean;
+  payout_upi?: string | null;
 }): Promise<ProgramRecruit | null> {
   const db = getBolticClient();
   const set: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -176,6 +177,7 @@ export async function updateRecruit(input: {
   if (input.deliverables !== undefined) set.deliverables = input.deliverables;
   if (input.due_date !== undefined) set.due_date = input.due_date;
   if (input.rate !== undefined) set.rate = input.rate;
+  if (input.payout_upi !== undefined) set.payout_upi = input.payout_upi;
   if (input.paid !== undefined) {
     set.paid = input.paid;
     set.paid_at = input.paid ? new Date().toISOString() : null;
@@ -201,6 +203,7 @@ export interface PayoutRow {
   due_date: string | null;
   paid: boolean;
   paid_at: string | null;
+  payout_upi: string | null;
 }
 
 // Every non-declined recruit with a rate or recruited status — the payables list.
@@ -210,7 +213,7 @@ export async function listPayouts(): Promise<PayoutRow[]> {
     `SELECT pr.program_id, p.name AS program_name, pr.creator_id,
             c.handle, c.display_name, c.profile_url,
             pr.status, pr.rate, pr.deliverables, pr.due_date::text AS due_date,
-            pr.paid, pr.paid_at
+            pr.paid, pr.paid_at, pr.payout_upi
      FROM program_recruits pr
      JOIN programs p ON p.id = pr.program_id
      JOIN creators c ON c.id = pr.creator_id
