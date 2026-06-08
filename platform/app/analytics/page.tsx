@@ -116,9 +116,54 @@ export default function AnalyticsPage() {
   );
 }
 
+function CountUp({ value, active, ms = 700 }: { value: number; active: boolean; ms?: number }) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    if (!active) { setV(0); return; }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / ms);
+      setV(Math.round(value * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, active, ms]);
+  return <>{v.toLocaleString('en-IN')}</>;
+}
+
+function AccuracyDonut({ value, active }: { value: number; active: boolean }) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, value));
+  const off = active ? c * (1 - pct / 100) : c;
+  const color = pct >= 80 ? '#10b981' : pct >= 55 ? ACCENT : '#f59e0b';
+  return (
+    <div className="relative w-[66px] h-[66px] shrink-0">
+      <svg viewBox="0 0 66 66" className="w-full h-full -rotate-90">
+        <circle cx="33" cy="33" r={r} fill="none" stroke="#eef0f6" strokeWidth="7" />
+        <circle cx="33" cy="33" r={r} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset .9s cubic-bezier(.22,.61,.36,1)' }} />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center">
+        <span className="text-[15px] font-bold tabular-nums" style={{ color }}><CountUp value={pct} active={active} />%</span>
+      </div>
+    </div>
+  );
+}
+
 function PerformanceSection({ outcomes, onReload }: { outcomes: Outcome[]; onReload: () => void }) {
   const [metric, setMetric] = useState<'likes' | 'views'>('likes');
   const [logging, setLogging] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [hover, setHover] = useState<number | null>(null);
+
+  // Replay the grow-in animation whenever the metric or data changes.
+  useEffect(() => {
+    setMounted(false);
+    const t = setTimeout(() => setMounted(true), 40);
+    return () => clearTimeout(t);
+  }, [metric, outcomes]);
 
   const pick = (o: Outcome) => metric === 'likes'
     ? { p: n(o.predicted_likes), a: n(o.actual_likes), hasP: o.predicted_likes != null, hasA: o.actual_likes != null }
@@ -155,33 +200,64 @@ function PerformanceSection({ outcomes, onReload }: { outcomes: Outcome[]; onRel
         </div>
       ) : (
         <>
-          {/* summary tiles */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3">
-              <div className="text-2xl font-bold tabular-nums" style={{ color: ACCENT }}>{accuracy}%</div>
-              <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">Forecast accuracy</div>
+          {/* summary: accuracy donut + tiles */}
+          <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr] gap-3 mb-5 items-stretch">
+            <div className="rounded-xl bg-[#fafafc] border border-border px-5 py-3 flex items-center gap-3">
+              <AccuracyDonut value={accuracy ?? 0} active={mounted} />
+              <div className="text-[10px] uppercase tracking-wider text-ink-400 leading-tight">Forecast<br />accuracy</div>
             </div>
-            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3">
-              <div className="text-2xl font-bold tabular-nums text-ink-900">{rows.length}</div>
+            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3 flex flex-col justify-center">
+              <div className="text-2xl font-bold tabular-nums text-ink-900"><CountUp value={rows.length} active={mounted} /></div>
               <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">Posts tracked</div>
             </div>
-            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3">
-              <div className="text-2xl font-bold tabular-nums" style={{ color: avgVar >= 0 ? '#10b981' : '#f43f5e' }}>{avgVar >= 0 ? '+' : ''}{avgVar}%</div>
+            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3 flex-col justify-center hidden sm:flex">
+              <div className="text-2xl font-bold tabular-nums" style={{ color: avgVar >= 0 ? '#10b981' : '#f43f5e' }}>{avgVar >= 0 ? '+' : '−'}<CountUp value={Math.abs(avgVar)} active={mounted} />%</div>
               <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">Avg vs forecast</div>
             </div>
           </div>
 
-          {/* chart */}
-          <div className="flex items-end gap-3 h-40 px-1 border-b border-border-soft pb-0">
-            {rows.map((r) => (
-              <div key={r.o.id} className="flex-1 flex flex-col items-center gap-1.5 min-w-0 group">
-                <div className="w-full flex items-end justify-center gap-1 h-32 relative">
-                  <div className="w-1/2 max-w-[16px] rounded-t transition-all" style={{ height: `${(r.p / maxV) * 100}%`, background: '#cdbcff' }} title={`predicted ${k(r.p)}`} />
-                  <div className="w-1/2 max-w-[16px] rounded-t transition-all" style={{ height: `${(r.a / maxV) * 100}%`, background: ACCENT }} title={`actual ${k(r.a)}`} />
-                </div>
-                <div className="text-[10px] text-ink-400 truncate w-full text-center">{label(r.o).replace('@', '').slice(0, 7)}</div>
-              </div>
-            ))}
+          {/* interactive chart */}
+          <div className="relative pt-2" onMouseLeave={() => setHover(null)}>
+            {/* gridlines */}
+            <div className="absolute left-0 right-0 top-2 h-36 pointer-events-none">
+              {[0, 25, 50, 75, 100].map((g) => (
+                <div key={g} className="absolute left-0 right-0 border-t border-dashed border-[#eef0f6]" style={{ top: `${100 - g}%` }} />
+              ))}
+            </div>
+            <div className="relative flex items-end gap-2 sm:gap-3 h-36 px-1">
+              {rows.map((r, i) => {
+                const v = Math.round(((r.a - r.p) / Math.max(1, r.p)) * 100);
+                const dim = hover !== null && hover !== i;
+                return (
+                  <div
+                    key={r.o.id}
+                    className="flex-1 h-full flex items-end justify-center min-w-0 relative cursor-default transition-opacity"
+                    style={{ opacity: dim ? 0.4 : 1 }}
+                    onMouseEnter={() => setHover(i)}
+                  >
+                    {/* tooltip */}
+                    {hover === i && (
+                      <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 z-20 w-max max-w-[180px] rounded-lg bg-ink-900 text-white px-3 py-2 shadow-lg text-[11px] leading-relaxed">
+                        <div className="font-semibold mb-0.5 truncate">{label(r.o)}</div>
+                        <div className="text-white/70">Predicted <span className="text-white font-medium tabular-nums">{k(r.p)}</span></div>
+                        <div className="text-white/70">Actual <span className="text-white font-medium tabular-nums">{k(r.a)}</span></div>
+                        <div className="mt-0.5" style={{ color: v >= 0 ? '#6ee7b7' : '#fda4af' }}>{v >= 0 ? '▲' : '▼'} {Math.abs(v)}% vs forecast</div>
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 -mt-1 rotate-45 bg-ink-900" />
+                      </div>
+                    )}
+                    <div className="w-full h-full flex items-end justify-center gap-1">
+                      <div className="w-1/2 max-w-[18px] rounded-t" style={{ height: mounted ? `${(r.p / maxV) * 100}%` : '0%', background: '#cdbcff', transition: 'height .7s cubic-bezier(.22,.61,.36,1)', transitionDelay: `${i * 45}ms` }} />
+                      <div className="w-1/2 max-w-[18px] rounded-t" style={{ height: mounted ? `${(r.a / maxV) * 100}%` : '0%', background: ACCENT, transition: 'height .7s cubic-bezier(.22,.61,.36,1)', transitionDelay: `${i * 45 + 90}ms` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2 sm:gap-3 px-1 mt-1.5 border-t border-border-soft pt-1.5">
+              {rows.map((r, i) => (
+                <div key={r.o.id} className="flex-1 text-[10px] text-center truncate min-w-0" style={{ color: hover === i ? ACCENT : '#9aa0ad', fontWeight: hover === i ? 600 : 400 }}>{label(r.o).replace('@', '').slice(0, 7)}</div>
+              ))}
+            </div>
           </div>
           <div className="mt-3 flex gap-4 text-[12px] text-ink-600"><Legend c="#cdbcff" label="Predicted" /><Legend c={ACCENT} label="Actual" /></div>
 
