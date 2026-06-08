@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT } from '@/components/marketing';
 
@@ -59,31 +59,27 @@ export default function DatabasePage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(t);
   }, [q]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const params = new URLSearchParams({ limit: '60', sort });
     if (debouncedQ.trim()) params.set('q', debouncedQ.trim());
     if (category) params.set('category', category);
     if (tier) params.set('tier', tier);
     if (verified) params.set('verified', '1');
-
-    let active = true;
     setLoading(true);
-    fetch(`/api/creators?${params.toString()}`)
+    return fetch(`/api/creators?${params.toString()}`)
       .then((r) => r.json())
-      .then((d) => {
-        if (!active) return;
-        setCreators(d.creators ?? []);
-        setTotal(d.total ?? null);
-      })
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
+      .then((d) => { setCreators(d.creators ?? []); setTotal(d.total ?? null); })
+      .finally(() => setLoading(false));
   }, [debouncedQ, category, tier, verified, sort]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const hasFilters = useMemo(() => !!(debouncedQ || category || tier || verified), [debouncedQ, category, tier, verified]);
 
@@ -96,9 +92,14 @@ export default function DatabasePage() {
             <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Influencer Database</div>
             <h1 className="text-2xl font-bold text-ink-900">Browse creators</h1>
           </div>
-          {total != null && <div className="text-[13px] text-ink-500">{total.toLocaleString('en-IN')} creators indexed</div>}
+          <div className="flex items-center gap-3">
+            {total != null && <div className="text-[13px] text-ink-500">{total.toLocaleString('en-IN')} creators indexed</div>}
+            <button onClick={() => setCreating((c) => !c)} className="px-4 py-2 text-sm font-semibold text-white bg-ink-900 rounded-xl hover:bg-ink-800">+ Add creator</button>
+          </div>
         </div>
         <p className="text-[15px] text-ink-600 mb-6">Search and filter our scored database of Indian creators — every profile ranked by followers, engagement and a 0–100 quality score.</p>
+
+        {creating && <AddCreatorForm onAdded={() => { setCreating(false); void load(); }} onCancel={() => setCreating(false)} />}
 
         {/* Controls */}
         <div className="rounded-2xl bg-white border border-border shadow-card p-3 flex flex-wrap items-center gap-2 mb-5">
@@ -154,6 +155,62 @@ export default function DatabasePage() {
       </main>
     </div>
   );
+}
+
+function AddCreatorForm({ onAdded, onCancel }: { onAdded: () => void; onCancel: () => void }) {
+  const [f, setF] = useState({ handle: '', display_name: '', primary_category: '', primary_city: '', follower_count: '', following_count: '', avg_likes: '', avg_comments: '', bio: '', profile_photo_url: '' });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  async function submit() {
+    setErr(null);
+    if (f.handle.trim().replace(/^@/, '').length < 2) return setErr('Handle is required.');
+    setBusy(true);
+    try {
+      const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
+      const r = await fetch('/api/creators', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          handle: f.handle, display_name: f.display_name || undefined, primary_category: f.primary_category || undefined,
+          primary_city: f.primary_city || undefined, follower_count: num(f.follower_count), following_count: num(f.following_count),
+          avg_likes: num(f.avg_likes), avg_comments: num(f.avg_comments), bio: f.bio || undefined, profile_photo_url: f.profile_photo_url || undefined,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setErr(d.error ?? 'Failed to add creator.'); return; }
+      onAdded();
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="mb-6 p-5 rounded-2xl bg-white border border-border shadow-card">
+      <div className="text-[13px] font-semibold text-ink-900 mb-4">Add a creator</div>
+      <div className="grid md:grid-cols-3 gap-3">
+        <Field label="Instagram handle *"><input value={f.handle} onChange={set('handle')} placeholder="@handle" className={dinp} autoFocus /></Field>
+        <Field label="Display name"><input value={f.display_name} onChange={set('display_name')} placeholder="Full name" className={dinp} /></Field>
+        <Field label="Category"><input value={f.primary_category} onChange={set('primary_category')} placeholder="fashion" className={dinp} /></Field>
+        <Field label="City"><input value={f.primary_city} onChange={set('primary_city')} placeholder="Mumbai" className={dinp} /></Field>
+        <Field label="Followers"><input type="number" value={f.follower_count} onChange={set('follower_count')} placeholder="0" className={dinp} /></Field>
+        <Field label="Following"><input type="number" value={f.following_count} onChange={set('following_count')} placeholder="0" className={dinp} /></Field>
+        <Field label="Avg likes / post"><input type="number" value={f.avg_likes} onChange={set('avg_likes')} placeholder="0" className={dinp} /></Field>
+        <Field label="Avg comments / post"><input type="number" value={f.avg_comments} onChange={set('avg_comments')} placeholder="0" className={dinp} /></Field>
+        <Field label="Profile photo URL"><input value={f.profile_photo_url} onChange={set('profile_photo_url')} placeholder="https://…" className={dinp} /></Field>
+      </div>
+      <Field label="Bio (optional)" className="mt-3"><textarea value={f.bio} onChange={set('bio')} rows={2} placeholder="Short bio…" className={`${dinp} resize-none`} /></Field>
+      <p className="mt-2 text-[11px] text-ink-400">Engagement rate is computed automatically from followers + avg likes/comments.</p>
+      {err && <div className="mt-2 text-sm text-rose-700">{err}</div>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onCancel} className="px-4 py-2 text-sm text-ink-600 hover:text-ink-900">Cancel</button>
+        <button onClick={submit} disabled={busy} className="px-5 py-2 text-sm font-semibold text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-50">{busy ? 'Adding…' : 'Add to database'}</button>
+      </div>
+    </div>
+  );
+}
+
+const dinp = 'w-full px-3 py-2 border border-border bg-white text-sm text-ink-900 rounded-lg focus:outline-none focus:border-ink-900';
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return <label className={`block ${className ?? ''}`}><span className="text-[12px] text-ink-500 mb-1 block">{label}</span>{children}</label>;
 }
 
 function Avatar({ c }: { c: Creator }) {

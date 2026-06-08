@@ -74,6 +74,64 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ creators: rows, total: total[0]?.count ?? 0 });
 }
 
+// POST /api/creators — manually add a creator profile to the database.
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
+  const handle = typeof body?.handle === 'string' ? body.handle.trim().replace(/^@/, '') : '';
+  if (handle.length < 2) return NextResponse.json({ error: 'handle is required' }, { status: 400 });
+  const platform = body?.platform === 'youtube' ? 'youtube' : 'instagram';
+
+  const numOrNull = (v: unknown): number | null => {
+    const x = Number(v);
+    return Number.isFinite(x) && v !== '' && v != null ? x : null;
+  };
+
+  try {
+    const db = getBolticClient();
+    const dup = await db.query<{ id: string }>(
+      `SELECT id FROM creators WHERE platform = $1 AND LOWER(handle) = LOWER($2) LIMIT 1`,
+      [platform, handle],
+    );
+    if (dup.length > 0) return NextResponse.json({ error: `@${handle} is already in the database` }, { status: 409 });
+
+    const followers = numOrNull(body.follower_count);
+    const avgLikes = numOrNull(body.avg_likes);
+    const avgComments = numOrNull(body.avg_comments);
+    const engagement_rate = followers && followers > 0 && (avgLikes != null || avgComments != null)
+      ? ((avgLikes ?? 0) + (avgComments ?? 0)) / followers
+      : null;
+
+    const profile_url = platform === 'youtube'
+      ? `https://www.youtube.com/@${handle}`
+      : `https://www.instagram.com/${handle}/`;
+
+    const creator = await db.insert<Record<string, unknown>>('creators', {
+      platform,
+      handle,
+      profile_url,
+      display_name: typeof body.display_name === 'string' && body.display_name.trim() ? body.display_name.trim() : null,
+      bio: typeof body.bio === 'string' && body.bio.trim() ? body.bio.trim() : null,
+      profile_photo_url: typeof body.profile_photo_url === 'string' && body.profile_photo_url.trim() ? body.profile_photo_url.trim() : null,
+      primary_category: typeof body.primary_category === 'string' && body.primary_category.trim() ? body.primary_category.trim() : null,
+      primary_city: typeof body.primary_city === 'string' && body.primary_city.trim() ? body.primary_city.trim() : null,
+      follower_count: followers,
+      following_count: numOrNull(body.following_count),
+      posts_count: numOrNull(body.posts_count),
+      avg_likes: avgLikes,
+      avg_comments: avgComments,
+      engagement_rate,
+      is_active: true,
+      is_indian: true,
+      data_tier: 'tier_a',
+      source: 'manual',
+    });
+    return NextResponse.json({ creator });
+  } catch (err) {
+    console.error('[creators] create failed:', err);
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
+
 async function enqueueStaleRefreshes(
   db: ReturnType<typeof getBolticClient>,
   creators: Record<string, unknown>[],
