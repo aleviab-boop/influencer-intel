@@ -103,8 +103,8 @@ export function MarketingNav() {
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
-          <Link href="/lander" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
-          <Link href="/lander" className="px-4 py-2 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
+          <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
+          <Link href="/book-demo" className="px-4 py-2 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
             Book a demo
           </Link>
         </div>
