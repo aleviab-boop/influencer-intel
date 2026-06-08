@@ -158,6 +158,7 @@ function AutomationCard({ a, onChanged }: { a: Automation; onChanged: () => Prom
   const [result, setResult] = useState<{ matched: boolean; fired: boolean; dm_sent: string | null } | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'sending' | 'done'>('idle');
 
   async function patch(patch: Partial<Automation>) {
     await fetch(`/api/automations/${a.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
@@ -176,10 +177,15 @@ function AutomationCard({ a, onChanged }: { a: Automation; onChanged: () => Prom
   async function runTest() {
     if (!comment.trim()) return;
     setBusy(true);
+    setResult(null);
+    setPhase('sending');
     try {
       const r = await fetch(`/api/automations/${a.id}/simulate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comment: comment.trim(), commenter: '@test_user' }) });
       const d = await r.json();
+      // brief "typing…" beat so the demo reads like a real reply
+      await new Promise((res) => setTimeout(res, 1000));
       setResult(d);
+      setPhase('done');
       await loadRuns();
       await onChanged();
     } finally {
@@ -209,7 +215,7 @@ function AutomationCard({ a, onChanged }: { a: Automation; onChanged: () => Prom
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button onClick={() => patch({ status: a.status === 'active' ? 'paused' : 'active' })} className="px-2.5 py-1.5 text-[12px] rounded-md border border-border hover:bg-[#faf9ff]">{a.status === 'active' ? 'Pause' : 'Activate'}</button>
-          <button onClick={() => { setOpen((o) => !o); if (!open) void loadRuns(); }} className="px-2.5 py-1.5 text-[12px] rounded-md border border-border hover:bg-[#faf9ff]">Test</button>
+          <button onClick={() => { setOpen((o) => !o); if (!open) { setPhase('idle'); setResult(null); void loadRuns(); } }} className="px-2.5 py-1.5 text-[12px] rounded-md border border-border hover:bg-[#faf9ff]">Test</button>
           <button onClick={remove} className="px-2 py-1.5 text-[12px] rounded-md text-ink-400 hover:text-rose-600">✕</button>
         </div>
       </div>
@@ -221,9 +227,41 @@ function AutomationCard({ a, onChanged }: { a: Automation; onChanged: () => Prom
             <input value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && runTest()} placeholder={`Try “${a.keyword ?? 'anything'}”`} className={inp} />
             <button onClick={runTest} disabled={busy} className="px-4 py-2 text-sm font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-50 whitespace-nowrap">{busy ? 'Running…' : 'Run'}</button>
           </div>
-          {result && (
-            <div className={`mt-3 p-3 rounded-lg text-[13px] ${result.fired ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-              {result.fired ? <>✓ Matched — DM sent: <span className="italic">“{result.dm_sent}”</span></> : result.matched ? '⏸ Matched but automation is paused — nothing sent.' : '✗ No keyword match — skipped.'}
+
+          {/* animated conversation */}
+          {phase !== 'idle' && (
+            <div className="mt-3 rounded-xl border border-border bg-white p-3 space-y-2">
+              {/* incoming comment */}
+              <div className="flex items-end gap-2 ii-fadeup">
+                <span className="w-6 h-6 rounded-full shrink-0" style={{ background: 'linear-gradient(135deg, hsl(265 70% 60%), hsl(305 70% 50%))' }} />
+                <div className="max-w-[80%]">
+                  <div className="text-[10px] text-ink-400 mb-0.5">@test_user commented</div>
+                  <div className="px-3 py-1.5 rounded-2xl rounded-bl-sm bg-[#f1f0f7] text-ink-800 text-[13px]">{comment}</div>
+                </div>
+              </div>
+
+              {/* typing → reply */}
+              {phase === 'sending' ? (
+                <div className="flex justify-end">
+                  <div className="px-3.5 py-2.5 rounded-2xl rounded-br-sm bg-[#ece9fb] inline-flex gap-1 items-center">
+                    {[0, 150, 300].map((d) => <span key={d} className="w-1.5 h-1.5 rounded-full bg-[#9b8bff] animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+                  </div>
+                </div>
+              ) : result?.fired ? (
+                <div className="ii-fadeup">
+                  <div className="flex justify-end">
+                    <div className="max-w-[80%]">
+                      <div className="text-[10px] text-emerald-600 text-right mb-0.5 font-medium">✓ Auto-DM sent</div>
+                      <div className="px-3.5 py-2 rounded-2xl rounded-br-sm text-white text-[13px] leading-relaxed" style={{ background: 'linear-gradient(135deg,#6C4DF6,#9b7bff)' }}>{result.dm_sent}</div>
+                    </div>
+                  </div>
+                  {a.comment_reply && <div className="mt-1.5 text-[11px] text-ink-400 text-right">+ public reply: “{a.comment_reply}”</div>}
+                </div>
+              ) : (
+                <div className={`ii-fadeup text-[13px] px-3 py-2 rounded-lg ${result?.matched ? 'bg-amber-50 text-amber-800' : 'bg-[#f4f4f6] text-ink-600'}`}>
+                  {result?.matched ? '⏸ Matched, but this automation is paused — nothing sent.' : '✗ No keyword match — skipped, no DM sent.'}
+                </div>
+              )}
             </div>
           )}
           {runs.length > 0 && (
