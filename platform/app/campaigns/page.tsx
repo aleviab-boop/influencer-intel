@@ -97,12 +97,12 @@ export default function CampaignsPage() {
           <button onClick={() => setCreating((c) => !c)} className="px-4 py-2.5 text-sm font-semibold text-white bg-ink-900 rounded-xl hover:bg-ink-800 transition-colors">+ New campaign</button>
         </div>
 
-        {/* Metric strip */}
+        {/* Metric strip — each tile drills into the relevant page */}
         <div className="rounded-2xl bg-white border border-border shadow-card grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-border-soft mb-5 overflow-hidden">
-          <Metric label="Total campaigns" value={String(programs.length)} sub={`${activeCount} active`} />
-          <Metric label="Creators recruited" value={String(totalRecruited)} />
-          <Metric label="Confirmed" value={String(totalConfirmed)} />
-          <Metric label="Total committed spend" value={inr(totalSpend)} accent />
+          <Metric label="Total campaigns" value={String(programs.length)} sub={`${activeCount} active`} href="/analytics" />
+          <Metric label="Creators recruited" value={String(totalRecruited)} href="/database" />
+          <Metric label="Confirmed" value={String(totalConfirmed)} href="/payouts" />
+          <Metric label="Total committed spend" value={inr(totalSpend)} accent href="/payouts" />
         </div>
 
         {/* Create row */}
@@ -192,12 +192,15 @@ export default function CampaignsPage() {
   );
 }
 
-function Metric({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
+function Metric({ label, value, sub, accent, href }: { label: string; value: string; sub?: string; accent?: boolean; href: string }) {
   return (
-    <div className="px-5 py-4">
-      <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
+    <Link href={href} className="group px-5 py-4 block hover:bg-[#faf9ff] transition-colors">
+      <div className="flex items-start justify-between">
+        <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
+        <svg className="w-3.5 h-3.5 text-ink-300 group-hover:text-[#6C4DF6] transition-colors mt-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M7 7h10v10" /></svg>
+      </div>
       <div className="text-[11px] uppercase tracking-wider text-ink-400 mt-0.5">{label}{sub && <span className="ml-1.5 normal-case tracking-normal text-emerald-600">· {sub}</span>}</div>
-    </div>
+    </Link>
   );
 }
 
