@@ -605,18 +605,7 @@ function CaseStudies() {
           {CASES.map((c) => (
             <div key={c.brand} className="rounded-2xl border border-[#eee] overflow-hidden">
               {c.feedId ? (
-                <div>
-                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#f0f0f0] bg-white">
-                    <span className="w-6 h-6 grid place-items-center rounded-md text-white shrink-0" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
-                    </span>
-                    <span className="text-[13px] font-semibold text-[#111]">{c.brand}</span>
-                    <span className="text-[11px] text-[#999]">latest on Instagram</span>
-                  </div>
-                  <div className="bg-white p-1 max-h-[460px] overflow-y-auto scroll-thin">
-                    <SociableKitFeed embedId={c.feedId} />
-                  </div>
-                </div>
+                <div className="bg-white p-1 min-h-[180px]"><SociableKitFeed embedId={c.feedId} /></div>
               ) : (
                 <div className="h-36 grid place-items-center bg-white px-8">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -624,6 +613,14 @@ function CaseStudies() {
                 </div>
               )}
               <div className="p-5">
+                {c.feedId && (
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#111] mb-2.5">
+                    <span className="w-4 h-4 grid place-items-center rounded text-white shrink-0" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /></svg>
+                    </span>
+                    {c.brand} on Instagram
+                  </div>
+                )}
                 <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-md" style={{ background: ACCENT_SOFT, color: ACCENT }}>{c.tag}</span>
                 <div className="mt-3 text-3xl font-bold">{c.metric}</div>
                 <div className="text-[13px] text-[#777]">{c.label}</div>
