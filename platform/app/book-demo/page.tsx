@@ -9,12 +9,30 @@ const SIZES = ['Just me', '2–10', '11–50', '51–200', '200+'];
 export default function BookDemoPage() {
   const [form, setForm] = useState({ name: '', email: '', company: '', size: '', goal: '' });
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const valid = form.name.trim() && /.+@.+\..+/.test(form.email) && form.company.trim();
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (valid) setDone(true);
+    if (!valid || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/demo-leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, email: form.email, company: form.company, team_size: form.size, goal: form.goal }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(d.error ?? 'Something went wrong. Please try again.'); return; }
+      setDone(true);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -58,7 +76,8 @@ export default function BookDemoPage() {
                     <select value={form.size} onChange={set('size')} className={inp}><option value="">Select…</option>{SIZES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
                   </Field>
                   <Field label="What are you hoping to do? (optional)"><textarea value={form.goal} onChange={set('goal')} rows={3} placeholder="e.g. run always-on micro-influencer campaigns" className={`${inp} resize-none`} /></Field>
-                  <button type="submit" disabled={!valid} className="w-full px-4 py-3 rounded-xl text-white text-[14px] font-semibold bg-ink-900 hover:bg-ink-800 disabled:opacity-50 transition-colors">Request my demo</button>
+                  {error && <p className="text-[13px] text-rose-700">{error}</p>}
+                  <button type="submit" disabled={!valid || submitting} className="w-full px-4 py-3 rounded-xl text-white text-[14px] font-semibold bg-ink-900 hover:bg-ink-800 disabled:opacity-50 transition-colors">{submitting ? 'Sending…' : 'Request my demo'}</button>
                   <p className="text-[11px] text-ink-400 text-center">No spam. We’ll only use this to set up your demo.</p>
                 </form>
               )}
