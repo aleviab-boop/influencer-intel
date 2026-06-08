@@ -22,19 +22,12 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<{ totals: Totals; per_campaign: Perf[]; outcomes: Outcome[] } | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>('all');
-  const [logging, setLogging] = useState(false);
 
   function load() {
     setLoading(true);
     fetch(`/api/analytics?period=${period}`).then((r) => r.json()).then(setData).catch(() => {}).finally(() => setLoading(false));
   }
   useEffect(load, [period]);
-
-  const outs = (data?.outcomes ?? []).filter((o) => o.predicted_likes != null && o.actual_likes != null);
-  const accuracy = outs.length
-    ? Math.round(100 - (outs.reduce((s, o) => s + Math.abs(n(o.predicted_likes) - n(o.actual_likes)) / Math.max(1, n(o.predicted_likes)), 0) / outs.length) * 100)
-    : null;
-  const maxLikes = Math.max(1, ...outs.flatMap((o) => [n(o.predicted_likes), n(o.actual_likes)]));
 
   // Derived efficiency metrics + campaign status breakdown.
   const t = data?.totals;
@@ -97,46 +90,8 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* predicted vs real */}
-            <div className="rounded-2xl bg-white border border-border shadow-card p-5 mb-6">
-              <div className="flex items-center justify-between mb-4 gap-3">
-                <div>
-                  <div className="text-[13px] font-semibold text-ink-900">Predicted vs. real performance</div>
-                  <div className="text-[12px] text-ink-400">Likes per recorded post</div>
-                </div>
-                <div className="flex items-center gap-4">
-                  {accuracy != null && (
-                    <div className="text-right">
-                      <div className="text-2xl font-bold tabular-nums" style={{ color: ACCENT }}>{accuracy}%</div>
-                      <div className="text-[11px] uppercase tracking-wider text-ink-400">accuracy</div>
-                    </div>
-                  )}
-                  <button onClick={() => setLogging((v) => !v)} className="px-3.5 py-2 text-[13px] font-semibold text-white rounded-lg shrink-0" style={{ background: ACCENT }}>{logging ? 'Close' : '+ Log result'}</button>
-                </div>
-              </div>
-
-              {logging && <LogOutcome onLogged={() => { setLogging(false); load(); }} />}
-              {outs.length === 0 ? (
-                <div className="text-sm text-ink-400 py-10 text-center">No recorded outcomes yet. Log post results in <a href="/monitor" className="text-ink-900 underline">Monitor</a>.</div>
-              ) : (
-                <>
-                  <div className="flex items-end gap-4 h-44 px-2">
-                    {outs.slice(0, 10).map((o) => (
-                      <div key={o.id} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-                        <div className="w-full flex items-end justify-center gap-1 h-36">
-                          <div className="w-1/2 rounded-t" style={{ height: `${(n(o.predicted_likes) / maxLikes) * 100}%`, background: '#cdbcff' }} title={`predicted ${k(n(o.predicted_likes))}`} />
-                          <div className="w-1/2 rounded-t" style={{ height: `${(n(o.actual_likes) / maxLikes) * 100}%`, background: ACCENT }} title={`actual ${k(n(o.actual_likes))}`} />
-                        </div>
-                        <div className="text-[10px] text-ink-400 truncate w-full text-center">{(o.name ?? o.handle ?? '').slice(0, 8)}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex gap-4 text-[12px] text-ink-600">
-                    <Legend c="#cdbcff" label="Predicted" /><Legend c={ACCENT} label="Actual" />
-                  </div>
-                </>
-              )}
-            </div>
+            {/* performance */}
+            <PerformanceSection outcomes={data.outcomes} onReload={load} />
 
             {/* per-campaign */}
             <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
@@ -157,6 +112,101 @@ export default function AnalyticsPage() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function PerformanceSection({ outcomes, onReload }: { outcomes: Outcome[]; onReload: () => void }) {
+  const [metric, setMetric] = useState<'likes' | 'views'>('likes');
+  const [logging, setLogging] = useState(false);
+
+  const pick = (o: Outcome) => metric === 'likes'
+    ? { p: n(o.predicted_likes), a: n(o.actual_likes), hasP: o.predicted_likes != null, hasA: o.actual_likes != null }
+    : { p: n(o.predicted_views), a: n(o.actual_views), hasP: o.predicted_views != null, hasA: o.actual_views != null };
+
+  const rows = outcomes.map((o) => ({ o, ...pick(o) })).filter((r) => r.hasP && r.hasA).slice(0, 12);
+  const accuracy = rows.length ? Math.round(100 - (rows.reduce((s, r) => s + Math.abs(r.p - r.a) / Math.max(1, r.p), 0) / rows.length) * 100) : null;
+  const avgVar = rows.length ? Math.round((rows.reduce((s, r) => s + (r.a - r.p) / Math.max(1, r.p), 0) / rows.length) * 100) : 0;
+  const maxV = Math.max(1, ...rows.flatMap((r) => [r.p, r.a]));
+  const label = (o: Outcome) => (o.name ?? (o.handle ? `@${o.handle}` : 'creator'));
+
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-card p-5 mb-6">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div>
+          <div className="text-[14px] font-bold text-ink-900">Predicted vs. real performance</div>
+          <div className="text-[12px] text-ink-400">How forecasts held up against actual {metric} per post</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-0.5 p-0.5 rounded-lg bg-[#f1f0f7] border border-border">
+            {(['likes', 'views'] as const).map((m) => (
+              <button key={m} onClick={() => setMetric(m)} className={`px-3 py-1 rounded-md text-[12px] font-medium capitalize transition-colors ${metric === m ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-800'}`}>{m}</button>
+            ))}
+          </div>
+          <button onClick={() => setLogging((v) => !v)} className="px-3.5 py-2 text-[13px] font-semibold text-white rounded-lg shrink-0" style={{ background: ACCENT }}>{logging ? 'Close' : '+ Log result'}</button>
+        </div>
+      </div>
+
+      {logging && <LogOutcome onLogged={() => { setLogging(false); onReload(); }} />}
+
+      {rows.length === 0 ? (
+        <div className="text-sm text-ink-400 py-12 text-center rounded-xl border border-dashed border-border">
+          No {metric} results recorded yet. Hit <span className="font-medium text-ink-600">+ Log result</span> to track a post’s forecast vs. reality.
+        </div>
+      ) : (
+        <>
+          {/* summary tiles */}
+          <div className="grid grid-cols-3 gap-3 mb-5">
+            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3">
+              <div className="text-2xl font-bold tabular-nums" style={{ color: ACCENT }}>{accuracy}%</div>
+              <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">Forecast accuracy</div>
+            </div>
+            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3">
+              <div className="text-2xl font-bold tabular-nums text-ink-900">{rows.length}</div>
+              <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">Posts tracked</div>
+            </div>
+            <div className="rounded-xl bg-[#fafafc] border border-border px-4 py-3">
+              <div className="text-2xl font-bold tabular-nums" style={{ color: avgVar >= 0 ? '#10b981' : '#f43f5e' }}>{avgVar >= 0 ? '+' : ''}{avgVar}%</div>
+              <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">Avg vs forecast</div>
+            </div>
+          </div>
+
+          {/* chart */}
+          <div className="flex items-end gap-3 h-40 px-1 border-b border-border-soft pb-0">
+            {rows.map((r) => (
+              <div key={r.o.id} className="flex-1 flex flex-col items-center gap-1.5 min-w-0 group">
+                <div className="w-full flex items-end justify-center gap-1 h-32 relative">
+                  <div className="w-1/2 max-w-[16px] rounded-t transition-all" style={{ height: `${(r.p / maxV) * 100}%`, background: '#cdbcff' }} title={`predicted ${k(r.p)}`} />
+                  <div className="w-1/2 max-w-[16px] rounded-t transition-all" style={{ height: `${(r.a / maxV) * 100}%`, background: ACCENT }} title={`actual ${k(r.a)}`} />
+                </div>
+                <div className="text-[10px] text-ink-400 truncate w-full text-center">{label(r.o).replace('@', '').slice(0, 7)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-4 text-[12px] text-ink-600"><Legend c="#cdbcff" label="Predicted" /><Legend c={ACCENT} label="Actual" /></div>
+
+          {/* per-post breakdown */}
+          <div className="mt-5 rounded-xl border border-border overflow-hidden">
+            <div className="hidden sm:grid grid-cols-[1.4fr_1fr_1fr_0.9fr] px-4 py-2.5 bg-[#f7f7fb] text-[11px] uppercase tracking-wider text-ink-400 font-semibold">
+              <span>Creator</span><span className="text-right">Predicted</span><span className="text-right">Actual</span><span className="text-right">vs forecast</span>
+            </div>
+            {rows.map((r) => {
+              const v = Math.round(((r.a - r.p) / Math.max(1, r.p)) * 100);
+              const beat = v >= 0;
+              return (
+                <div key={r.o.id} className="grid grid-cols-2 sm:grid-cols-[1.4fr_1fr_1fr_0.9fr] gap-y-1 px-4 py-2.5 border-t border-border-soft items-center text-[13px]">
+                  <span className="text-ink-900 font-medium truncate col-span-2 sm:col-span-1">{label(r.o)}</span>
+                  <span className="text-ink-500 tabular-nums sm:text-right"><span className="sm:hidden text-ink-400">Predicted </span>{k(r.p)}</span>
+                  <span className="text-ink-800 tabular-nums sm:text-right font-medium"><span className="sm:hidden text-ink-400">Actual </span>{k(r.a)}</span>
+                  <span className="sm:text-right">
+                    <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums" style={{ background: beat ? '#ecfdf5' : '#fff1f2', color: beat ? '#047857' : '#e11d48' }}>{beat ? '▲' : '▼'} {Math.abs(v)}%</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
