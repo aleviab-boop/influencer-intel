@@ -12,6 +12,8 @@ interface Creator {
   primary_category: string | null;
   quality_score: number | string | null;
   verified: boolean;
+  confidence: 'paid' | 'mention';
+  matched_brand: string | null;
 }
 interface Data {
   a: string;
@@ -118,6 +120,12 @@ export default function CompetitorsPage() {
   );
 }
 
+function ConfidenceBadge({ confidence }: { confidence: 'paid' | 'mention' }) {
+  return confidence === 'paid'
+    ? <span title="A paid-partnership tag was detected" className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0">PAID PARTNER</span>
+    : <span title="Brand detected on profile, no paid-partnership tag" className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f1f0f7] text-ink-500 shrink-0">MENTIONED</span>;
+}
+
 function BrandColumn({ title, creators, overlapIds }: { title: string; creators: Creator[]; overlapIds: Set<string> }) {
   return (
     <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
@@ -130,16 +138,19 @@ function BrandColumn({ title, creators, overlapIds }: { title: string; creators:
       ) : (
         <div className="max-h-[460px] overflow-auto scroll-thin">
           {creators.map((c) => (
-            <a key={c.id} href={c.profile_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 border-b border-border-soft last:border-0 hover:bg-[#faf9ff]">
+            <a key={c.id} href={c.profile_url} target="_blank" rel="noopener noreferrer" title={`Open @${c.handle} on Instagram`} className="flex items-center gap-3 px-4 py-2.5 border-b border-border-soft last:border-0 hover:bg-[#faf9ff] group">
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-medium text-ink-900 truncate flex items-center gap-1.5">
                   {c.display_name ?? `@${c.handle}`}
-                  {c.verified && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0">VERIFIED</span>}
+                  <ConfidenceBadge confidence={c.confidence} />
                   {overlapIds.has(c.id) && <span className="text-[9px] px-1.5 py-0.5 rounded-full text-white shrink-0" style={{ background: ACCENT }}>BOTH</span>}
                 </div>
-                <div className="text-[11px] text-ink-400 truncate">{c.primary_category ?? 'creator'}</div>
+                <div className="text-[11px] text-ink-400 truncate">{c.matched_brand ? `via “${c.matched_brand}”` : (c.primary_category ?? 'creator')}</div>
               </div>
               <span className="text-[12px] text-ink-500 tabular-nums shrink-0">{k(c.follower_count)}</span>
+              <span className="shrink-0 w-6 h-6 grid place-items-center rounded-md text-white opacity-80 group-hover:opacity-100" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+              </span>
             </a>
           ))}
         </div>

@@ -11,6 +11,8 @@
 
 import { getBolticClient } from '@influencer-intel/shared/db';
 
+export type BrandConfidence = 'paid' | 'mention';
+
 export interface BrandCreator {
   id: string;
   handle: string;
@@ -19,16 +21,23 @@ export interface BrandCreator {
   follower_count: number | string | null;
   primary_category: string | null;
   quality_score: number | string | null;
-  verified: boolean;
+  verified: boolean;            // a paid-partnership tag was detected on the profile
+  confidence: BrandConfidence;  // 'paid' (high) vs 'mention' (medium)
+  matched_brand: string | null; // which detected brand mention triggered the match
 }
+
+interface BrandCreatorRow extends Omit<BrandCreator, 'confidence'> {}
 
 async function findBrandCreators(brand: string): Promise<BrandCreator[]> {
   const db = getBolticClient();
   const name = brand.trim();
   const safe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // word-boundary regex against each brand mention
-  return db.query<BrandCreator>(
+  const rows = await db.query<BrandCreatorRow>(
     `SELECT c.id, c.handle, c.display_name, c.profile_url, c.follower_count, c.primary_category, c.quality_score,
-            COALESCE((c.raw_metadata->'vision'->>'has_paid_partnership') = 'true', false) AS verified
+            COALESCE((c.raw_metadata->'vision'->>'has_paid_partnership') = 'true', false) AS verified,
+            (SELECT string_agg(DISTINCT bm.mention, ', ')
+               FROM jsonb_array_elements_text(c.raw_metadata->'vision'->'brand_mentions') bm(mention)
+               WHERE lower(bm.mention) = lower($1) OR lower(bm.mention) ~ ('\\y' || $2 || '\\y')) AS matched_brand
      FROM creators c
      WHERE c.is_active = true
        AND jsonb_typeof(c.raw_metadata->'vision'->'brand_mentions') = 'array'
@@ -40,6 +49,7 @@ async function findBrandCreators(brand: string): Promise<BrandCreator[]> {
      LIMIT 60`,
     [name, safe],
   );
+  return rows.map((r) => ({ ...r, confidence: r.verified ? 'paid' : 'mention' }));
 }
 
 export async function getCompetitorAnalysis(
