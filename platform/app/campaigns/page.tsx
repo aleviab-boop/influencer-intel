@@ -146,32 +146,32 @@ export default function CampaignsPage() {
         ) : visible.length === 0 ? (
           <div className="text-sm text-ink-400 py-16 text-center rounded-2xl border border-dashed border-border bg-white">No campaigns match this filter.</div>
         ) : (
-          <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
-            <div className="hidden md:grid grid-cols-[2.4fr_1fr_0.9fr_0.9fr_1.6fr_0.3fr] px-5 py-3 border-b border-border text-[11px] uppercase tracking-wider text-ink-400 font-semibold">
-              <span>Campaign</span><span>Status</span><span className="text-right">Creators</span><span className="text-right">Confirmed</span><span>Budget / Spend</span><span />
-            </div>
+          <div className="space-y-2.5">
             {visible.map((p) => {
               const budget = num(p.budget);
               const spent = num(p.spent);
               const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
               const over = budget > 0 && spent > budget;
               return (
-                <Link key={p.id} href={`/campaigns/${p.id}`} className="grid grid-cols-2 md:grid-cols-[2.4fr_1fr_0.9fr_0.9fr_1.6fr_0.3fr] gap-y-2 items-center px-5 py-3.5 border-b border-border-soft last:border-0 hover:bg-[#faf9ff] transition-colors group">
-                  {/* Campaign */}
-                  <div className="col-span-2 md:col-span-1 min-w-0">
-                    <div className="font-semibold text-ink-900 truncate group-hover:text-[#6C4DF6] transition-colors">{p.name}</div>
-                    <div className="text-[12px] text-ink-400">Created {fmtDate(p.created_at)}</div>
+                <Link key={p.id} href={`/campaigns/${p.id}`} className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-white border border-border shadow-card hover:border-[#6C4DF6]/40 hover:shadow-hover transition-all group">
+                  {/* Name + meta */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-semibold text-ink-900 truncate group-hover:text-[#6C4DF6] transition-colors">{p.name}</span>
+                      <StatusBadge status={p.status} />
+                    </div>
+                    <div className="text-[12px] text-ink-400 mt-1 flex items-center gap-2 flex-wrap">
+                      <span>Created {fmtDate(p.created_at)}</span>
+                      <span className="text-ink-300">·</span>
+                      <span className="text-ink-600">{p.recruit_count} creators</span>
+                      <span className="text-ink-300">·</span>
+                      <span className="text-emerald-700">{p.recruited_count} confirmed</span>
+                    </div>
                   </div>
-                  {/* Status */}
-                  <div><StatusBadge status={p.status} /></div>
-                  {/* Creators */}
-                  <div className="text-[13px] text-ink-700 tabular-nums md:text-right"><span className="md:hidden text-ink-400">Creators: </span>{p.recruit_count}</div>
-                  {/* Confirmed */}
-                  <div className="text-[13px] text-emerald-700 tabular-nums md:text-right"><span className="md:hidden text-ink-400">Confirmed: </span>{p.recruited_count}</div>
                   {/* Budget / spend */}
-                  <div className="col-span-2 md:col-span-1">
+                  <div className="hidden sm:block w-44 shrink-0">
                     <div className="flex items-center justify-between text-[12px] mb-1">
-                      <span className={over ? 'text-rose-600 font-medium' : 'text-ink-600'}>{inr(spent)}</span>
+                      <span className={over ? 'text-rose-600 font-medium' : 'text-ink-700 font-medium'}>{inr(spent)}</span>
                       <span className="text-ink-400">{budget > 0 ? `of ${inr(budget)}` : 'no budget'}</span>
                     </div>
                     <div className="h-1.5 rounded-full bg-[#eef] overflow-hidden">
@@ -179,8 +179,8 @@ export default function CampaignsPage() {
                     </div>
                   </div>
                   {/* Chevron */}
-                  <div className="hidden md:flex justify-end text-ink-300 group-hover:text-[#6C4DF6] transition-colors">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                  <div className="shrink-0 text-ink-300 group-hover:text-[#6C4DF6] transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
                   </div>
                 </Link>
               );
