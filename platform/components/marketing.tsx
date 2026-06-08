@@ -5,6 +5,7 @@ export const ACCENT_SOFT = '#F4F2FF';
 
 export const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
+  { label: 'Instagram Search (live)', href: '/search', icon: 'instagram' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
   { label: 'Competitor Analysis', href: '/competitor-analysis', icon: 'bars' },
@@ -46,6 +47,8 @@ export function FeatureIcon({ name }: { name: string }) {
       return (<svg {...common}><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></svg>);
     case 'gauge':
       return (<svg {...common}><path d="M3.5 18a9 9 0 1 1 17 0" /><path d="M12 18l4.5-5.5" /></svg>);
+    case 'instagram':
+      return (<svg {...common}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>);
     default:
       return null;
   }

@@ -94,6 +94,7 @@ export default function DatabasePage() {
           </div>
           <div className="flex items-center gap-3">
             {total != null && <div className="text-[13px] text-ink-500">{total.toLocaleString('en-IN')} creators indexed</div>}
+            <Link href="/search" className="px-3.5 py-2 text-sm font-semibold rounded-xl border border-border hover:bg-[#faf9ff]" style={{ color: ACCENT }}>Search Instagram →</Link>
             <button onClick={() => setCreating((c) => !c)} className="px-4 py-2 text-sm font-semibold text-white bg-ink-900 rounded-xl hover:bg-ink-800">+ Add creator</button>
           </div>
         </div>
