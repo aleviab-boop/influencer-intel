@@ -12,6 +12,7 @@
   "dependencies": {
     "@influencer-intel/shared": "*",
     "exceljs": "^4.4.0",
+    "instagram-private-api": "^1.46.1",
     "next": "15.1.6",
     "openai": "^4.73.0",
     "react": "19.0.0",
