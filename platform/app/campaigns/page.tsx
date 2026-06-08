@@ -31,10 +31,11 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState('');
+  const [form, setForm] = useState({ name: '', description: '', budget: '', start_date: '', end_date: '' });
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const setF = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   useEffect(() => { void load(); }, []);
 
@@ -53,15 +54,21 @@ export default function CampaignsPage() {
   }
 
   async function create() {
-    if (newName.trim().length < 2) return;
+    if (form.name.trim().length < 2) return;
     setBusy(true);
     try {
       const r = await fetch('/api/programs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          budget: form.budget ? Number(form.budget) : undefined,
+          start_date: form.start_date || undefined,
+          end_date: form.end_date || undefined,
+        }),
       });
-      if (r.ok) { setNewName(''); setCreating(false); await load(); }
+      if (r.ok) { setForm({ name: '', description: '', budget: '', start_date: '', end_date: '' }); setCreating(false); await load(); }
     } finally {
       setBusy(false);
     }
@@ -105,17 +112,29 @@ export default function CampaignsPage() {
           <Metric label="Total committed spend" value={inr(totalSpend)} accent href="/payouts" />
         </div>
 
-        {/* Create row */}
+        {/* Create panel */}
         {creating && (
-          <div className="mb-5 flex items-center gap-2 p-3 rounded-xl bg-white border border-border shadow-card">
-            <input
-              type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && create()} autoFocus
-              placeholder="Campaign name (e.g. Summer Goa 2026)"
-              className="flex-1 px-3 py-2 border border-border bg-white text-sm text-ink-900 rounded-lg focus:outline-none focus:border-ink-900"
-            />
-            <button onClick={create} disabled={busy || newName.trim().length < 2} className="px-4 py-2 text-sm font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-50">{busy ? 'Creating…' : 'Create'}</button>
-            <button onClick={() => setCreating(false)} className="px-3 py-2 text-sm text-ink-500 hover:text-ink-900">Cancel</button>
+          <div className="mb-5 p-5 rounded-2xl bg-white border border-border shadow-card">
+            <div className="text-[13px] font-semibold text-ink-900 mb-4">New campaign</div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <Field label="Campaign name" className="md:col-span-2">
+                <input value={form.name} onChange={setF('name')} onKeyDown={(e) => e.key === 'Enter' && create()} autoFocus placeholder="e.g. Summer Goa 2026" className={cinp} />
+              </Field>
+              <Field label="Brief / goal (optional)" className="md:col-span-2">
+                <textarea value={form.description} onChange={setF('description')} rows={2} placeholder="What's this campaign about? e.g. recruit 10 Goa travel micro-creators for reels" className={`${cinp} resize-none`} />
+              </Field>
+              <Field label="Budget (₹, optional)">
+                <input type="number" value={form.budget} onChange={setF('budget')} placeholder="500000" className={cinp} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Start date"><input type="date" value={form.start_date} onChange={setF('start_date')} className={cinp} /></Field>
+                <Field label="End date"><input type="date" value={form.end_date} onChange={setF('end_date')} className={cinp} /></Field>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setCreating(false)} className="px-4 py-2 text-sm text-ink-600 hover:text-ink-900">Cancel</button>
+              <button onClick={create} disabled={busy || form.name.trim().length < 2} className="px-5 py-2 text-sm font-semibold text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-50">{busy ? 'Creating…' : 'Create campaign'}</button>
+            </div>
           </div>
         )}
 
@@ -190,6 +209,11 @@ export default function CampaignsPage() {
       </main>
     </div>
   );
+}
+
+const cinp = 'w-full px-3 py-2 border border-border bg-white text-sm text-ink-900 rounded-lg focus:outline-none focus:border-ink-900';
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return <label className={`block ${className ?? ''}`}><span className="text-[12px] text-ink-500 mb-1 block">{label}</span>{children}</label>;
 }
 
 function Metric({ label, value, sub, accent, href }: { label: string; value: string; sub?: string; accent?: boolean; href: string }) {

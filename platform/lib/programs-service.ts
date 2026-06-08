@@ -47,6 +47,9 @@ export async function createProgram(input: {
   description?: string | null;
   source_prompt?: string | null;
   brand_id?: string | null;
+  budget?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
 }): Promise<Program> {
   const db = getBolticClient();
   const slug = input.name
@@ -61,14 +64,28 @@ export async function createProgram(input: {
     description: input.description ?? null,
     source_prompt: input.source_prompt ?? null,
     status: 'active',
+    budget: input.budget ?? null,
+    start_date: input.start_date ?? null,
+    end_date: input.end_date ?? null,
   });
+}
+
+export async function deleteProgram(id: string): Promise<boolean> {
+  const db = getBolticClient();
+  // program_recruits cascade-delete via FK (migration 005).
+  const rows = await db.query<{ id: string }>(`DELETE FROM programs WHERE id = $1 RETURNING id`, [id]);
+  return rows.length > 0;
 }
 
 export async function getProgram(
   id: string,
 ): Promise<{ program: Program; recruits: ProgramRecruitView[]; spent: number } | null> {
   const db = getBolticClient();
-  const program = await db.findById<Program>('programs', id);
+  const programs = await db.query<Program>(
+    `SELECT *, start_date::text AS start_date, end_date::text AS end_date FROM programs WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  const program = programs[0];
   if (!program) return null;
   const recruits = await db.query<ProgramRecruitView>(
     `SELECT pr.*, pr.due_date::text AS due_date, c.handle, c.display_name, c.profile_url, c.profile_photo_url,
@@ -89,14 +106,20 @@ export async function getProgram(
 export async function updateProgram(input: {
   id: string;
   name?: string;
+  description?: string | null;
   status?: ProgramStatus;
   budget?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
 }): Promise<Program | null> {
   const db = getBolticClient();
   const set: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) set.name = input.name;
+  if (input.description !== undefined) set.description = input.description;
   if (input.status !== undefined) set.status = input.status;
   if (input.budget !== undefined) set.budget = input.budget;
+  if (input.start_date !== undefined) set.start_date = input.start_date;
+  if (input.end_date !== undefined) set.end_date = input.end_date;
   const rows = await db.update<Program>('programs', { id: input.id }, set);
   return rows[0] ?? null;
 }

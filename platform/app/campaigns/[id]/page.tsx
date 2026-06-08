@@ -2,7 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav } from '@/components/marketing';
+import { useRouter } from 'next/navigation';
+import { MarketingNav, ACCENT } from '@/components/marketing';
 
 type RecruitStatus = 'applied' | 'invited' | 'contacted' | 'recruited' | 'declined';
 const PIPELINE: RecruitStatus[] = ['applied', 'invited', 'contacted', 'recruited', 'declined'];
@@ -19,7 +20,10 @@ interface Program {
   name: string;
   status: string;
   source_prompt: string | null;
+  description: string | null;
   budget: number | string | null;
+  start_date: string | null;
+  end_date: string | null;
 }
 interface Recruit {
   creator_id: string;
@@ -44,11 +48,22 @@ const kfmt = (n: number): string => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [program, setProgram] = useState<Program | null>(null);
   const [recruits, setRecruits] = useState<Recruit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<RecruitStatus | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteCampaign() {
+    if (!program) return;
+    if (!confirm(`Delete “${program.name}” and all its recruits? This can't be undone.`)) return;
+    setDeleting(true);
+    const r = await fetch(`/api/programs/${id}`, { method: 'DELETE' });
+    if (r.ok) router.push('/campaigns');
+    else { setDeleting(false); alert('Failed to delete campaign.'); }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,8 +139,15 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               >
                 {['active', 'paused', 'closed'].map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
+              <button onClick={deleteCampaign} disabled={deleting} className="ml-auto text-[13px] text-ink-400 hover:text-rose-600 disabled:opacity-50 transition-colors">{deleting ? 'Deleting…' : 'Delete campaign'}</button>
             </div>
-            {program.source_prompt && <p className="text-sm text-ink-500 mt-1">Seeded from “{program.source_prompt}”</p>}
+            <input
+              defaultValue={program.description ?? ''}
+              onBlur={(e) => e.target.value !== (program.description ?? '') && patchProgram({ description: e.target.value.trim() || null })}
+              placeholder="Add a short brief / goal…"
+              className="mt-1 w-full max-w-2xl text-sm text-ink-600 bg-transparent border-b border-transparent hover:border-border focus:border-ink-900 focus:outline-none py-0.5"
+            />
+            {program.source_prompt && <p className="text-[12px] text-ink-400 mt-1">Seeded from “{program.source_prompt}”</p>}
 
             {/* summary stats */}
             <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -154,10 +176,26 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 <div className="h-2.5 rounded-full transition-all duration-500" style={{ width: `${budget > 0 ? pct : 0}%`, background: over ? 'linear-gradient(90deg,#ef4444,#f87171)' : 'linear-gradient(90deg,#6C4DF6,#9b7bff)', boxShadow: budget > 0 ? '0 0 12px rgba(108,77,246,.45)' : 'none' }} />
               </div>
               {over && <div className="mt-1.5 text-[12px] text-rose-600">Over budget by {inr(spent - budget)}</div>}
+
+              {/* schedule */}
+              <div className="mt-4 pt-4 border-t border-border-soft flex items-center gap-4 flex-wrap text-sm">
+                <span className="text-ink-600 font-medium">Schedule</span>
+                <label className="flex items-center gap-1.5 text-[13px] text-ink-500">
+                  Start
+                  <input type="date" defaultValue={program.start_date ?? ''} onBlur={(e) => e.target.value !== (program.start_date ?? '') && patchProgram({ start_date: e.target.value || null })} className="px-2 py-1 border border-border rounded-lg bg-white text-ink-900 focus:outline-none focus:border-ink-900" />
+                </label>
+                <label className="flex items-center gap-1.5 text-[13px] text-ink-500">
+                  End
+                  <input type="date" defaultValue={program.end_date ?? ''} onBlur={(e) => e.target.value !== (program.end_date ?? '') && patchProgram({ end_date: e.target.value || null })} className="px-2 py-1 border border-border rounded-lg bg-white text-ink-900 focus:outline-none focus:border-ink-900" />
+                </label>
+              </div>
             </div>
 
+            {/* invite */}
+            <InviteCreators programId={id} existing={new Set(recruits.map((r) => r.creator_id))} onAdded={load} />
+
             {/* kanban */}
-            <div className="mt-7 grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
               {PIPELINE.map((stage) => {
                 const s = STAGE[stage];
                 const inStage = recruits.filter((r) => r.status === stage);
@@ -200,6 +238,64 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+interface SearchCreator { id: string; handle: string; display_name: string | null; follower_count: number | string | null; primary_category: string | null }
+function InviteCreators({ programId, existing, onAdded }: { programId: string; existing: Set<string>; onAdded: () => void }) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState<SearchCreator[]>([]);
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setResults([]); return; }
+    const t = setTimeout(() => {
+      fetch(`/api/creators?q=${encodeURIComponent(q.trim())}&limit=6`)
+        .then((r) => r.json())
+        .then((d) => setResults(d.creators ?? []))
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  async function add(creatorId: string) {
+    setAdding(creatorId);
+    try {
+      await fetch(`/api/programs/${programId}/recruits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creator_id: creatorId }) });
+      setQ(''); setResults([]); setOpen(false);
+      onAdded();
+    } finally {
+      setAdding(null);
+    }
+  }
+
+  return (
+    <div className="mt-6 relative max-w-md" onBlur={() => setTimeout(() => setOpen(false), 150)}>
+      <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-400 mb-2">Invite creators</div>
+      <div className="relative">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+        <input value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} placeholder="Search creators by handle or name…" className="w-full pl-9 pr-3 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-xl focus:outline-none focus:border-ink-900" />
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute z-20 mt-1 w-full rounded-xl bg-white border border-border shadow-[0_12px_40px_rgba(0,0,0,0.12)] overflow-hidden">
+          {results.map((c) => {
+            const added = existing.has(c.id);
+            return (
+              <div key={c.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-border-soft last:border-0">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium text-ink-900 truncate">{c.display_name || `@${c.handle}`}</div>
+                  <div className="text-[11px] text-ink-400 truncate">@{c.handle} · {kfmt(Number(c.follower_count) || 0)}{c.primary_category ? ` · ${c.primary_category}` : ''}</div>
+                </div>
+                <button onMouseDown={(e) => e.preventDefault()} onClick={() => add(c.id)} disabled={added || adding === c.id} className="px-3 py-1.5 text-[12px] font-semibold rounded-lg disabled:opacity-60" style={{ color: added ? '#6b7280' : '#fff', background: added ? '#f3f4f6' : ACCENT }}>
+                  {added ? 'Added' : adding === c.id ? '…' : 'Invite'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
