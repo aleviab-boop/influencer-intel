@@ -601,11 +601,22 @@ function CaseStudies() {
           <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>Client success stories</span>
           <h2 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">Real results, real brands</h2>
         </div>
-        <div className="grid md:grid-cols-3 gap-5">
+        <div className="grid md:grid-cols-3 gap-5 items-start">
           {CASES.map((c) => (
             <div key={c.brand} className="rounded-2xl border border-[#eee] overflow-hidden">
               {c.feedId ? (
-                <div className="bg-white p-1 min-h-[180px]"><SociableKitFeed embedId={c.feedId} /></div>
+                <div>
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#f0f0f0] bg-white">
+                    <span className="w-6 h-6 grid place-items-center rounded-md text-white shrink-0" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+                    </span>
+                    <span className="text-[13px] font-semibold text-[#111]">{c.brand}</span>
+                    <span className="text-[11px] text-[#999]">latest on Instagram</span>
+                  </div>
+                  <div className="bg-white p-1 max-h-[460px] overflow-y-auto scroll-thin">
+                    <SociableKitFeed embedId={c.feedId} />
+                  </div>
+                </div>
               ) : (
                 <div className="h-36 grid place-items-center bg-white px-8">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
