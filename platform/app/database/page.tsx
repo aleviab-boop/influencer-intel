@@ -160,8 +160,37 @@ export default function DatabasePage() {
 function AddCreatorForm({ onAdded, onCancel }: { onAdded: () => void; onCancel: () => void }) {
   const [f, setF] = useState({ handle: '', display_name: '', primary_category: '', primary_city: '', follower_count: '', following_count: '', avg_likes: '', avg_comments: '', bio: '', profile_photo_url: '' });
   const [busy, setBusy] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  async function fetchFromIg() {
+    const h = f.handle.trim().replace(/^@/, '');
+    if (h.length < 2) return setErr('Enter a handle to fetch.');
+    setFetching(true); setErr(null); setNote(null);
+    try {
+      const r = await fetch(`/api/scrape/instagram?handle=${encodeURIComponent(h)}`);
+      const d = await r.json();
+      if (!r.ok) { setErr(d.error ?? 'Fetch failed.'); return; }
+      const p = d.profile;
+      setF((prev) => ({
+        ...prev,
+        handle: p.handle,
+        display_name: p.display_name ?? prev.display_name,
+        primary_category: p.category ?? prev.primary_category,
+        follower_count: String(p.follower_count ?? ''),
+        following_count: String(p.following_count ?? ''),
+        avg_likes: p.avg_likes != null ? String(p.avg_likes) : '',
+        avg_comments: p.avg_comments != null ? String(p.avg_comments) : '',
+        bio: p.biography ?? prev.bio,
+        profile_photo_url: p.profile_photo_url ?? prev.profile_photo_url,
+      }));
+      setNote(`Pulled @${p.handle} from Instagram — ${Number(p.follower_count).toLocaleString('en-IN')} followers, ${p.recent_posts.length} recent posts.`);
+    } catch {
+      setErr('Couldn’t reach Instagram. Try again.');
+    } finally { setFetching(false); }
+  }
 
   async function submit() {
     setErr(null);
@@ -185,9 +214,16 @@ function AddCreatorForm({ onAdded, onCancel }: { onAdded: () => void; onCancel: 
 
   return (
     <div className="mb-6 p-5 rounded-2xl bg-white border border-border shadow-card">
-      <div className="text-[13px] font-semibold text-ink-900 mb-4">Add a creator</div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-[13px] font-semibold text-ink-900">Add a creator</div>
+        <span className="text-[11px] text-ink-400">Paste a handle and fetch real data live from Instagram — free</span>
+      </div>
+      <div className="flex gap-2 mb-3">
+        <input value={f.handle} onChange={set('handle')} onKeyDown={(e) => e.key === 'Enter' && fetchFromIg()} placeholder="@handle" className={dinp} autoFocus />
+        <button onClick={fetchFromIg} disabled={fetching} className="px-4 py-2 text-sm font-semibold text-white rounded-lg disabled:opacity-50 whitespace-nowrap" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>{fetching ? 'Fetching…' : 'Fetch from Instagram'}</button>
+      </div>
+      {note && <div className="mb-3 text-[12px] text-emerald-700">{note}</div>}
       <div className="grid md:grid-cols-3 gap-3">
-        <Field label="Instagram handle *"><input value={f.handle} onChange={set('handle')} placeholder="@handle" className={dinp} autoFocus /></Field>
         <Field label="Display name"><input value={f.display_name} onChange={set('display_name')} placeholder="Full name" className={dinp} /></Field>
         <Field label="Category"><input value={f.primary_category} onChange={set('primary_category')} placeholder="fashion" className={dinp} /></Field>
         <Field label="City"><input value={f.primary_city} onChange={set('primary_city')} placeholder="Mumbai" className={dinp} /></Field>
