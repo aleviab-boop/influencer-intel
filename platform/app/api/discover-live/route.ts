@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { liveDiscover, resolveNameToSeeds, type LiveProfile } from '@/lib/live-discovery';
+import {
+  liveDiscover,
+  resolveNameToSeeds,
+  resolveTopicToSeeds,
+  type LiveProfile,
+} from '@/lib/live-discovery';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -34,6 +39,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // No handles and no names → self-seed from the prompt (city + niche).
+  const autoSeeds: Array<{ handle: string; followers: number }> = [];
+  if (seeds.length === 0 && names.length === 0) {
+    const topic = await resolveTopicToSeeds(prompt);
+    for (const m of topic) {
+      seeds.push(m.handle);
+      autoSeeds.push({ handle: m.handle, followers: m.followers });
+    }
+  }
+
   const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
   if (uniqueSeeds.length === 0) {
     return NextResponse.json(
@@ -42,7 +57,7 @@ export async function POST(req: NextRequest) {
         message:
           names.length > 0
             ? `Couldn't find Instagram accounts for that name. Try a different spelling or an @handle.`
-            : 'Add a name or @handle to start from.',
+            : `Couldn't auto-find a starting point for that prompt. Add a name or @handle to start from.`,
       },
       { status: 422 },
     );
@@ -54,7 +69,13 @@ export async function POST(req: NextRequest) {
   try {
     const run = await liveDiscover(prompt, uniqueSeeds, { depth, max });
     const persisted = await persist(run.results);
-    return NextResponse.json({ ...run, prompt, persisted, resolved_from_names: resolvedFromNames });
+    return NextResponse.json({
+      ...run,
+      prompt,
+      persisted,
+      resolved_from_names: resolvedFromNames,
+      auto_seeds: autoSeeds,
+    });
   } catch (err) {
     console.error('[discover-live] failed:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

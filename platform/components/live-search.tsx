@@ -25,6 +25,7 @@ interface RunResponse {
   results: LiveProfile[];
   persisted: number;
   resolved_from_names?: Array<{ name: string; handle: string; followers: number }>;
+  auto_seeds?: Array<{ handle: string; followers: number }>;
 }
 
 function fmt(n: number): string {
@@ -76,11 +77,11 @@ export function LiveSearch({
     setActiveIdx(-1);
   }
 
-  // Arriving from the home page with both a prompt and a seed → run once.
+  // Arriving from the home page with a prompt → run once (seed optional; the
+  // server self-seeds from the prompt when no handle/name is given).
   useEffect(() => {
     if (autoRan.current) return;
-    const { seeds, names } = parseSeedInput(initialSeed);
-    if (initialPrompt.trim().length >= 2 && seeds.length + names.length > 0) {
+    if (initialPrompt.trim().length >= 2) {
       autoRan.current = true;
       void search();
     }
@@ -91,12 +92,6 @@ export function LiveSearch({
     const p = prompt.trim();
     if (p.length < 2) return;
     const { seeds, names } = parseSeedInput(seedText);
-    if (seeds.length + names.length === 0) {
-      // No starting point yet — Instagram can't keyword-search without one.
-      setNeedSeed(true);
-      setError(null);
-      return;
-    }
 
     setLoading(true);
     setError(null);
@@ -207,7 +202,7 @@ export function LiveSearch({
             value={seedText}
             onChange={(e) => setSeedText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void search())}
-            placeholder="Start from a name or @handle — e.g. mridul sharma, or the_brand_fashion_nagpur"
+            placeholder="Optional — leave blank to auto-find, or start from a name / @handle"
             className="flex-1 px-3 py-2 rounded-lg border border-[#e3def9] text-[14px] focus:outline-none focus:border-[#6C4DF6]"
           />
           <button
@@ -221,37 +216,46 @@ export function LiveSearch({
         </div>
       </div>
 
-      {/* no-seed nudge */}
+      {/* no-seed nudge (only when auto-seeding also found nothing) */}
       {needSeed && (
         <div className="mt-3 px-4 py-3 rounded-lg border border-[#e3def9] bg-[#faf9ff] text-[14px] text-[#444]">
-          Instagram can’t keyword-search without a starting point.{' '}
+          Couldn’t auto-find a starting point for that prompt.{' '}
           <span className="font-medium text-[#222]">Do you know anyone in this space?</span> Add a
           name (e.g. <span className="font-mono">mridul sharma</span>) or an @handle above and we’ll
           start from there.
         </div>
       )}
 
-      {/* which handles a typed name resolved to */}
-      {run && !loading && run.resolved_from_names && run.resolved_from_names.length > 0 && (
-        <div className="mt-3 px-4 py-2.5 rounded-lg border border-[#e3def9] bg-[#faf9ff] text-[13px] text-[#555]">
-          Matched names to:{' '}
-          {run.resolved_from_names.map((m, i) => (
-            <span key={`${m.name}-${m.handle}`}>
-              {i > 0 && ', '}
-              <a
-                href={`https://instagram.com/${m.handle}`}
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium hover:underline"
-                style={{ color: ACCENT }}
-              >
-                @{m.handle}
-              </a>{' '}
-              <span className="text-[#999]">({fmt(m.followers)})</span>
-            </span>
-          ))}
-        </div>
-      )}
+      {/* starting points: typed-name matches and/or auto-found seeds */}
+      {run && !loading && (() => {
+        const fromNames = (run.resolved_from_names ?? []).map((m) => ({
+          handle: m.handle,
+          followers: m.followers,
+        }));
+        const starts = [...fromNames, ...(run.auto_seeds ?? [])];
+        if (starts.length === 0) return null;
+        const label = fromNames.length > 0 ? 'Matched to' : 'Auto-found starting points';
+        return (
+          <div className="mt-3 px-4 py-2.5 rounded-lg border border-[#e3def9] bg-[#faf9ff] text-[13px] text-[#555]">
+            {label}:{' '}
+            {starts.map((m, i) => (
+              <span key={m.handle}>
+                {i > 0 && ', '}
+                <a
+                  href={`https://instagram.com/${m.handle}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium hover:underline"
+                  style={{ color: ACCENT }}
+                >
+                  @{m.handle}
+                </a>{' '}
+                <span className="text-[#999]">({fmt(m.followers)})</span>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
 
       {error && (
         <div className="mt-3 px-4 py-3 rounded-lg border border-rose-300 bg-rose-50 text-[14px] text-rose-700">
@@ -262,7 +266,7 @@ export function LiveSearch({
       {loading && (
         <div className="mt-10 flex flex-col items-center justify-center">
           <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
-          <div className="mt-3 text-[13px] text-[#888]">Crawling Instagram from your seed…</div>
+          <div className="mt-3 text-[13px] text-[#888]">Finding starting points & crawling Instagram…</div>
         </div>
       )}
 

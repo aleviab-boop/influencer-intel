@@ -179,6 +179,144 @@ export async function resolveNameToSeeds(
   return matches.sort((a, b) => b.followers - a.followers);
 }
 
+// ---- prompt → auto seed handles (no seed needed) ------------------------
+//
+// For a "city + niche" prompt like "food bloggers in indore" we generate
+// plausible topic handles (indorefood, indorefoodie, indorefoodblogger, …)
+// and probe them. City-niche accounts have very predictable handles, so this
+// self-seeds the crawl with no login and no user-provided handle.
+
+const KNOWN_CITIES = new Set([
+  // metros + tier-1
+  'mumbai', 'bombay', 'delhi', 'newdelhi', 'bangalore', 'bengaluru', 'hyderabad',
+  'chennai', 'kolkata', 'calcutta', 'pune', 'ahmedabad', 'surat',
+  // tier-2 / state capitals
+  'jaipur', 'lucknow', 'kanpur', 'nagpur', 'indore', 'bhopal', 'patna',
+  'vadodara', 'baroda', 'nashik', 'goa', 'agra', 'kochi', 'cochin', 'chandigarh',
+  'amritsar', 'ludhiana', 'gurgaon', 'gurugram', 'noida', 'ghaziabad', 'faridabad',
+  'visakhapatnam', 'vizag', 'coimbatore', 'madurai', 'mysore', 'mysuru', 'udaipur',
+  'jodhpur', 'raipur', 'ranchi', 'guwahati', 'bhubaneswar', 'dehradun', 'shimla',
+  'srinagar', 'jammu', 'varanasi', 'kanpur', 'allahabad', 'prayagraj', 'meerut',
+  'jabalpur', 'gwalior', 'ujjain', 'aurangabad', 'rajkot', 'jamnagar', 'thane',
+  'navimumbai', 'trivandrum', 'thiruvananthapuram', 'kozhikode', 'calicut',
+  'mangalore', 'mangaluru', 'hubli', 'belgaum', 'vijayawada', 'guntur', 'warangal',
+  'tirupati', 'salem', 'tiruchirappalli', 'trichy', 'pondicherry', 'siliguri',
+  'jalandhar', 'patiala', 'bareilly', 'aligarh', 'moradabad', 'jhansi', 'kota',
+  'ajmer', 'bikaner', 'dhanbad', 'jamshedpur', 'cuttack', 'amravati', 'solapur',
+  'kolhapur', 'sangli', 'dombivli',
+]);
+
+const NICHE_SYNONYMS: Record<string, string[]> = {
+  food: ['food', 'foodie', 'foodies', 'eats', 'foodgram', 'foodlover', 'khana'],
+  fashion: ['fashion', 'style', 'fashionista', 'outfits', 'wardrobe', 'styling', 'ootd'],
+  travel: ['travel', 'traveller', 'traveler', 'wanderlust', 'travelgram', 'trips', 'traveldiaries'],
+  fitness: ['fitness', 'fit', 'gym', 'workout', 'fitlife', 'fitnessfreak', 'gymrat'],
+  beauty: ['beauty', 'makeup', 'mua', 'glam', 'beautyblogger'],
+  skincare: ['skincare', 'skin', 'glow', 'derma'],
+  photography: ['photography', 'photos', 'clicks', 'photographer', 'lens', 'pixels', 'shots'],
+  lifestyle: ['lifestyle', 'life', 'vibes', 'diaries', 'daily'],
+  music: ['music', 'musician', 'singer', 'beats', 'sangeet', 'songs'],
+  dance: ['dance', 'dancer', 'choreography', 'nritya', 'moves'],
+  comedy: ['comedy', 'memes', 'funny', 'laughs', 'comedian', 'jokes'],
+  art: ['art', 'artist', 'artwork', 'sketches', 'arts', 'kala', 'doodle'],
+  cafe: ['cafe', 'cafes', 'coffee', 'cafehopping'],
+  wedding: ['wedding', 'weddings', 'shaadi', 'bride', 'dulhan', 'weddingdiaries'],
+  tech: ['tech', 'technology', 'gadgets', 'techie', 'gadget'],
+  gaming: ['gaming', 'gamer', 'games', 'esports', 'gameplay'],
+  education: ['education', 'study', 'learning', 'tutor', 'coaching', 'edu'],
+  finance: ['finance', 'money', 'stocks', 'trading', 'investing', 'wealth', 'sharemarket'],
+  pets: ['pets', 'dog', 'dogs', 'cats', 'petlover', 'doggo'],
+  parenting: ['parenting', 'mom', 'mommy', 'momlife', 'kids', 'baby'],
+  automobile: ['automobile', 'cars', 'auto', 'bikes', 'motovlog', 'carlover'],
+  decor: ['decor', 'interior', 'home', 'homedecor', 'interiors'],
+  books: ['books', 'bookstagram', 'reading', 'reads', 'bookworm'],
+  realestate: ['realestate', 'property', 'realtor', 'homes'],
+  sports: ['sports', 'cricket', 'football', 'athlete', 'sportsman'],
+  beautyblogger: ['beauty', 'makeup', 'mua'],
+};
+
+// Words that act as handle suffixes rather than niche roots.
+const SUFFIX_WORDS = new Set([
+  'blogger', 'bloggers', 'blog', 'page', 'official', 'diaries', 'creator', 'creators',
+]);
+
+const HANDLE_SUFFIXES = [
+  '', 's', 'official', 'blogger', 'bloggers', 'diaries', 'gram', 'hub', 'page',
+  'life', 'vibes', 'world', 'club', 'wala', 'walla', 'guide',
+];
+
+function isNiche(token: string): boolean {
+  return Boolean(NICHE_SYNONYMS[token] ?? NICHE_SYNONYMS[token.replace(/s$/, '')]);
+}
+
+export function topicHandleCandidates(prompt: string): string[] {
+  const toks = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t));
+  if (toks.length === 0) return [];
+
+  const cityTokens = toks.filter((t) => KNOWN_CITIES.has(t));
+  const nicheTokens = toks.filter((t) => isNiche(t));
+  // Tokens that are neither a known city nor a known niche → likely an
+  // unlisted place name (so "vizag food" still works even if vizag is new).
+  const otherTokens = toks.filter((t) => !KNOWN_CITIES.has(t) && !isNiche(t));
+
+  const locations = cityTokens.length > 0 ? cityTokens : otherTokens;
+
+  const niches = new Set<string>();
+  for (const n of nicheTokens) {
+    const syns = NICHE_SYNONYMS[n] ?? NICHE_SYNONYMS[n.replace(/s$/, '')] ?? [n];
+    for (const s of syns) niches.add(s);
+  }
+  // No recognized niche → fall back to the leftover words as the niche.
+  if (niches.size === 0) for (const t of (nicheTokens.length ? nicheTokens : otherTokens)) niches.add(t);
+
+  const locList = locations.length > 0 ? locations : [''];
+  const out = new Set<string>();
+  for (const loc of locList) {
+    for (const nv of niches) {
+      if (loc === nv) continue; // avoid "food" being both location and niche
+      for (const sep of ['', '_']) {
+        const bases = loc ? [[loc, nv].join(sep), [nv, loc].join(sep)] : [nv];
+        for (const base of bases) {
+          for (const suf of HANDLE_SUFFIXES) {
+            const h = suf ? `${base}${sep}${suf}` : base;
+            if (/^[a-z0-9._]{3,30}$/.test(h)) out.add(h);
+          }
+        }
+      }
+    }
+  }
+  return Array.from(out);
+}
+
+export async function resolveTopicToSeeds(
+  prompt: string,
+  opts: { limit?: number; budgetMs?: number; delayMs?: number; maxProbes?: number } = {},
+): Promise<NameMatch[]> {
+  const limit = opts.limit ?? 8;
+  const budgetMs = opts.budgetMs ?? 16_000;
+  const delayMs = opts.delayMs ?? 220;
+  const maxProbes = opts.maxProbes ?? 60;
+  const startedAt = Date.now();
+
+  const matches: NameMatch[] = [];
+  let probed = 0;
+  for (const handle of topicHandleCandidates(prompt)) {
+    if (matches.length >= limit || probed >= maxProbes) break;
+    if (Date.now() - startedAt > budgetMs) break;
+    probed++;
+    const user = await fetchProfile(handle, budgetMs - (Date.now() - startedAt));
+    await sleep(delayMs);
+    if (user?.username) {
+      matches.push({
+        handle: user.username,
+        full_name: user.full_name ?? '',
+        followers: user.edge_followed_by?.count ?? 0,
+      });
+    }
+  }
+  return matches.sort((a, b) => b.followers - a.followers);
+}
+
 function summarize(user: RawUser, tokens: string[]): LiveProfile {
   const prof: Omit<LiveProfile, 'score'> = {
     username: user.username ?? '',
