@@ -283,11 +283,11 @@ export function LiveSearch({
               {run.tokens.length > 0 && (
                 <span className="ml-2 text-[#999]">· matching {run.tokens.join(', ')}</span>
               )}
+              {(run.from_live ?? 0) > 0 && (
+                <span className="ml-2 text-[#999]">· {run.from_live} live from Instagram</span>
+              )}
               {(run.from_db ?? 0) > 0 && (
                 <span className="ml-2 text-[#999]">· {run.from_db} from your database</span>
-              )}
-              {(run.from_live ?? 0) > 0 && (
-                <span className="ml-2 text-[#999]">· {run.from_live} live</span>
               )}
               {run.persisted > 0 && (
                 <span className="ml-2 text-[#999]">· {run.persisted} saved</span>

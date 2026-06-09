@@ -12,19 +12,15 @@ import { searchCreatorsInDb } from '@/lib/creator-db-search';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// If the DB already has at least this many matches, skip the live crawl
-// entirely (fast path). Below it, we crawl Instagram to top up.
-const ENOUGH_FROM_DB = 20;
-
 // POST /api/discover-live
 //   { prompt, seeds?: string[], names?: string[], depth?, max? }
 //   → { prompt, tokens, results, from_db, from_live, persisted, ... }
 //
-// DB-first, live-fill discovery. We first check the connected creators table
-// for matches (instant). If that's enough — or the caller gave no explicit
-// seed — we may skip the crawl. Otherwise we crawl Instagram live (seeded by
-// handles, names, or auto-derived from the prompt), merge, rank, and persist
-// the new profiles so the next identical search is faster.
+// Live-first discovery. Instagram is the primary search: we always crawl live
+// (seeded by explicit handles, names, or handles auto-derived from the prompt)
+// and lead with those results. The creators database is supplementary — it
+// tops up the live results and surfaces curated profiles below them. New live
+// profiles are persisted so the database keeps growing.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
@@ -39,42 +35,38 @@ export async function POST(req: NextRequest) {
   const max = clampInt(body?.max, 5, 80, 40);
   const tokens = tokenize(prompt);
 
-  // 1. DB-first: what do we already have?
-  const dbMatches = await searchCreatorsInDb(tokens, max);
-
-  const explicit = seeds.length > 0 || names.length > 0;
-  const needLive = explicit || dbMatches.length < ENOUGH_FROM_DB;
-
-  // 2. Live-fill (only when needed).
+  // 1. Live-first: Instagram is the primary search. Resolve seeds (explicit
+  //    handles, names, or auto-derived from the prompt) and crawl live.
   const resolvedFromNames: Array<{ name: string; handle: string; followers: number }> = [];
   const autoSeeds: Array<{ handle: string; followers: number }> = [];
   let liveProfiles: LiveProfile[] = [];
 
-  if (needLive) {
-    for (const name of names) {
-      const matches = await resolveNameToSeeds(name);
-      for (const m of matches) {
-        seeds.push(m.handle);
-        resolvedFromNames.push({ name, handle: m.handle, followers: m.followers });
-      }
-    }
-    if (seeds.length === 0 && names.length === 0) {
-      for (const m of await resolveTopicToSeeds(prompt)) {
-        seeds.push(m.handle);
-        autoSeeds.push({ handle: m.handle, followers: m.followers });
-      }
-    }
-
-    const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
-    if (uniqueSeeds.length > 0) {
-      try {
-        const run = await liveDiscover(prompt, uniqueSeeds, { depth, max });
-        liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
-      } catch (err) {
-        console.error('[discover-live] crawl failed:', err);
-      }
+  for (const name of names) {
+    const matches = await resolveNameToSeeds(name);
+    for (const m of matches) {
+      seeds.push(m.handle);
+      resolvedFromNames.push({ name, handle: m.handle, followers: m.followers });
     }
   }
+  if (seeds.length === 0 && names.length === 0) {
+    for (const m of await resolveTopicToSeeds(prompt)) {
+      seeds.push(m.handle);
+      autoSeeds.push({ handle: m.handle, followers: m.followers });
+    }
+  }
+
+  const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
+  if (uniqueSeeds.length > 0) {
+    try {
+      const run = await liveDiscover(prompt, uniqueSeeds, { depth, max });
+      liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
+    } catch (err) {
+      console.error('[discover-live] crawl failed:', err);
+    }
+  }
+
+  // 2. Database is supplementary — used to top up the live results.
+  const dbMatches = await searchCreatorsInDb(tokens, max);
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0) {
@@ -84,18 +76,22 @@ export async function POST(req: NextRequest) {
         message:
           names.length > 0
             ? `Couldn't find Instagram accounts for that name. Try a different spelling or an @handle.`
-            : `Nothing in your database yet and couldn't auto-find a starting point. Add a name or @handle to start from.`,
+            : `Couldn't find live results or anything in your database. Add a name or @handle to start from.`,
       },
       { status: 422 },
     );
   }
 
-  // 4. Merge DB + live, dedupe by handle (keep the higher score), rank.
+  // 4. Merge live + database and rank by genuine quality — relevance to the
+  //    prompt first, then reach (followers) — regardless of source. Dedupe by
+  //    handle, keeping the higher-scored / richer row.
   const byUser = new Map<string, LiveProfile>();
-  for (const p of [...dbMatches, ...liveProfiles]) {
+  for (const p of [...liveProfiles, ...dbMatches]) {
     const key = p.username.toLowerCase();
     const ex = byUser.get(key);
-    if (!ex || p.score > ex.score) byUser.set(key, p);
+    if (!ex || p.score > ex.score || (p.score === ex.score && p.followers > ex.followers)) {
+      byUser.set(key, p);
+    }
   }
   const results = Array.from(byUser.values())
     .sort((a, b) => b.score - a.score || b.followers - a.followers)
