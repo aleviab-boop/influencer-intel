@@ -175,21 +175,32 @@ export default function CreatorPortal() {
         ) : profile ? (
           <>
             {/* Profile header */}
-            <div className="rounded-2xl bg-white border border-border shadow-card p-5 flex items-center gap-4 mb-6">
-              <Avatar p={profile} />
-              <div className="min-w-0 flex-1">
-                <div className="text-[18px] font-bold text-ink-900 truncate flex items-center gap-1.5">
-                  {profile.display_name || `@${profile.handle}`}
-                  {profile.is_verified && <span style={{ color: ACCENT }}>✔</span>}
+            <div className="rounded-3xl bg-white border border-border shadow-card overflow-hidden mb-8">
+              <div className="h-20" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }} />
+              <div className="px-5 sm:px-6 pb-6 -mt-12">
+                <div className="flex items-end gap-4">
+                  <Avatar p={profile} />
+                  <div className="min-w-0 flex-1 pb-1">
+                    <div className="text-[19px] font-bold text-ink-900 truncate flex items-center gap-1.5">
+                      {profile.display_name || `@${profile.handle}`}
+                      {profile.is_verified && <span style={{ color: ACCENT }}>✔</span>}
+                    </div>
+                    <div className="text-[13px] text-ink-400 truncate">
+                      @{profile.handle}
+                      {profile.primary_category ? ` · ${profile.primary_category}` : ''}
+                      {profile.primary_city ? ` · ${profile.primary_city}` : ''}
+                    </div>
+                  </div>
+                  <button onClick={signOut} className="text-[12px] font-medium text-ink-400 hover:text-ink-700 shrink-0 pb-1">Sign out</button>
                 </div>
-                <div className="text-[13px] text-ink-400">@{profile.handle}{profile.primary_category ? ` · ${profile.primary_category}` : ''}{profile.primary_city ? ` · ${profile.primary_city}` : ''}</div>
+
+                {/* Stats — visible on every screen size */}
+                <div className="mt-5 grid grid-cols-3 gap-2.5 sm:gap-3">
+                  <StatCard label="Followers" value={fmt(profile.follower_count)} />
+                  <StatCard label="Engagement" value={erPct(profile.engagement_rate)} />
+                  <StatCard label="Quality" value={profile.cred_score ?? '—'} accent />
+                </div>
               </div>
-              <div className="hidden sm:flex items-center gap-6 pr-2">
-                <Stat label="Followers" value={fmt(profile.follower_count)} />
-                <Stat label="Engagement" value={erPct(profile.engagement_rate)} />
-                <Stat label="Quality" value={profile.cred_score ?? '—'} accent />
-              </div>
-              <button onClick={signOut} className="text-[12px] text-ink-400 hover:text-ink-700 shrink-0">Sign out</button>
             </div>
 
             {/* My applications */}
@@ -222,18 +233,24 @@ export default function CreatorPortal() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   {campaigns.map((c) => {
                     const applied = appliedIds.has(c.id);
+                    const hasBudget = c.budget != null && Number(c.budget) > 0;
                     return (
-                      <div key={c.id} className="rounded-2xl bg-white border border-border shadow-card p-5 flex flex-col">
+                      <div key={c.id} className="rounded-2xl bg-white border border-border shadow-card p-5 flex flex-col hover:-translate-y-0.5 hover:shadow-[0_10px_40px_rgba(108,77,246,0.12)] transition-all">
                         <div className="font-semibold text-ink-900 text-[15px]">{c.name}</div>
                         <p className="mt-1 text-[13px] text-ink-500 leading-relaxed line-clamp-3 flex-1">{c.description || 'A brand campaign looking for creators like you.'}</p>
-                        <div className="mt-3 flex items-center gap-3 text-[12px] text-ink-400">
-                          {c.budget != null && Number(c.budget) > 0 && <span>Budget ₹{Number(c.budget).toLocaleString('en-IN')}</span>}
-                          <span>{c.recruit_count} creators</span>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
+                          {hasBudget && (
+                            <span className="px-2 py-1 rounded-md font-medium" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                              ₹{Number(c.budget).toLocaleString('en-IN')}
+                            </span>
+                          )}
+                          <span className="px-2 py-1 rounded-md bg-[#f4f4f6] text-ink-500">{c.recruit_count} creators</span>
                         </div>
                         <button
                           onClick={() => apply(c.id)}
                           disabled={applied || applying === c.id}
-                          className={`mt-4 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-colors ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white bg-ink-900 hover:bg-ink-800'}`}
+                          className={`mt-4 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-all ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white hover:brightness-105'}`}
+                          style={applied ? undefined : { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                         >
                           {applied ? 'Applied ✓' : applying === c.id ? 'Applying…' : 'Apply now'}
                         </button>
@@ -250,11 +267,11 @@ export default function CreatorPortal() {
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="text-center">
-      <div className="text-[18px] font-bold tabular-nums" style={accent ? { color: ACCENT } : undefined}>{value}</div>
-      <div className="text-[11px] uppercase tracking-wider text-ink-400">{label}</div>
+    <div className="rounded-2xl border border-border bg-[#fafafc] px-3 py-3 text-center">
+      <div className="text-[20px] font-bold tabular-nums leading-none" style={accent ? { color: ACCENT } : undefined}>{value}</div>
+      <div className="mt-1.5 text-[10.5px] uppercase tracking-wider text-ink-400">{label}</div>
     </div>
   );
 }
@@ -263,12 +280,21 @@ function Avatar({ p }: { p: Profile }) {
   const [err, setErr] = useState(false);
   let h = 0;
   for (let i = 0; i < p.handle.length; i++) h = (h * 31 + p.handle.charCodeAt(i)) >>> 0;
-  if (p.profile_photo_url && !err) {
+  // IG CDN blocks hotlinking — route through our server-side proxy.
+  const src = p.profile_photo_url ? `/api/ig-image?u=${encodeURIComponent(p.profile_photo_url)}` : null;
+  if (src && !err) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={p.profile_photo_url} alt={p.handle} onError={() => setErr(true)} className="w-14 h-14 rounded-full object-cover shrink-0" />;
+    return (
+      <img
+        src={src}
+        alt={p.handle}
+        onError={() => setErr(true)}
+        className="w-20 h-20 rounded-full object-cover shrink-0 ring-4 ring-white bg-[#eee] shadow-sm"
+      />
+    );
   }
   return (
-    <div className="w-14 h-14 rounded-full shrink-0 grid place-items-center text-white text-[20px] font-semibold" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
+    <div className="w-20 h-20 rounded-full shrink-0 grid place-items-center text-white text-[26px] font-semibold ring-4 ring-white shadow-sm" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
       {(p.display_name || p.handle).charAt(0).toUpperCase()}
     </div>
   );
