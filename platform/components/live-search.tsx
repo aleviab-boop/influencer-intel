@@ -16,6 +16,7 @@ interface LiveProfile {
   is_verified: boolean;
   profile_pic_url: string | null;
   score: number;
+  engagement?: number;
   from?: 'db' | 'live';
 }
 
@@ -69,10 +70,26 @@ export function LiveSearch({
   const [exporting, setExporting] = useState(false);
   const [showSug, setShowSug] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
+  // result filters / sort
+  const [minFollowers, setMinFollowers] = useState(0);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<'relevance' | 'followers' | 'engagement'>('relevance');
   const autoRan = useRef(false);
 
   const suggestions = buildSuggestions(prompt);
   const sugOpen = showSug && suggestions.length > 0;
+
+  const shown = (() => {
+    if (!run) return [] as LiveProfile[];
+    const filtered = run.results.filter(
+      (p) => p.followers >= minFollowers && (!verifiedOnly || p.is_verified),
+    );
+    const sorted = [...filtered];
+    if (sortBy === 'followers') sorted.sort((a, b) => b.followers - a.followers);
+    else if (sortBy === 'engagement') sorted.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
+    // 'relevance' keeps the server order (score, then followers)
+    return sorted;
+  })();
 
   function pickSuggestion(s: string) {
     setPrompt(s);
@@ -278,16 +295,14 @@ export function LiveSearch({
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
             <div className="text-[14px] text-[#555]">
-              <span className="font-semibold text-[#111]">{run.results.length}</span> profiles for{' '}
+              <span className="font-semibold text-[#111]">{shown.length}</span>
+              {shown.length !== run.results.length && <span className="text-[#999]">/{run.results.length}</span>} profiles for{' '}
               <span className="font-medium text-[#111]">“{run.prompt}”</span>
-              {run.tokens.length > 0 && (
-                <span className="ml-2 text-[#999]">· matching {run.tokens.join(', ')}</span>
-              )}
               {(run.from_live ?? 0) > 0 && (
-                <span className="ml-2 text-[#999]">· {run.from_live} live from Instagram</span>
+                <span className="ml-2 text-[#999]">· {run.from_live} live</span>
               )}
               {(run.from_db ?? 0) > 0 && (
-                <span className="ml-2 text-[#999]">· {run.from_db} from your database</span>
+                <span className="ml-2 text-[#999]">· {run.from_db} from DB</span>
               )}
               {run.persisted > 0 && (
                 <span className="ml-2 text-[#999]">· {run.persisted} saved</span>
@@ -295,7 +310,7 @@ export function LiveSearch({
             </div>
             <button
               onClick={() => void downloadExcel()}
-              disabled={exporting || run.results.length === 0}
+              disabled={exporting || shown.length === 0}
               className="px-3.5 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50"
               style={{ color: ACCENT }}
             >
@@ -303,9 +318,40 @@ export function LiveSearch({
             </button>
           </div>
 
-          {run.results.length === 0 ? (
+          {/* filters + sort */}
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
+            <select
+              value={minFollowers}
+              onChange={(e) => setMinFollowers(Number(e.target.value))}
+              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
+            >
+              <option value={0}>Any followers</option>
+              <option value={1000}>1K+</option>
+              <option value={10000}>10K+</option>
+              <option value={100000}>100K+</option>
+              <option value={1000000}>1M+</option>
+            </select>
+            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white cursor-pointer select-none">
+              <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="accent-[#6C4DF6]" />
+              Verified only
+            </label>
+            <span className="ml-auto text-[#999]">Sort</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
+            >
+              <option value="relevance">Relevance</option>
+              <option value="followers">Followers</option>
+              <option value="engagement">Engagement</option>
+            </select>
+          </div>
+
+          {shown.length === 0 ? (
             <div className="px-4 py-10 text-center text-[14px] text-[#888] border border-[#eee] rounded-xl">
-              No profiles found from that seed. Try a different starting @handle.
+              {run.results.length === 0
+                ? 'No profiles found from that seed. Try a different starting @handle.'
+                : 'No profiles match these filters. Loosen them to see more.'}
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#eee]">
@@ -316,12 +362,13 @@ export function LiveSearch({
                     <th className="px-3 py-2.5 font-medium">Creator</th>
                     <th className="px-3 py-2.5 font-medium">Category</th>
                     <th className="px-3 py-2.5 font-medium text-right">Followers</th>
+                    <th className="px-3 py-2.5 font-medium text-right">Eng.</th>
                     <th className="px-3 py-2.5 font-medium text-center">Relevance</th>
                     <th className="px-3 py-2.5 font-medium"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f3f3f3]">
-                  {run.results.map((p, i) => (
+                  {shown.map((p, i) => (
                     <tr key={p.username} className="hover:bg-[#fafaff]">
                       <td className="px-3 py-3 text-[13px] text-[#aaa] tabular-nums">{i + 1}</td>
                       <td className="px-3 py-3">
@@ -350,6 +397,9 @@ export function LiveSearch({
                       <td className="px-3 py-3 text-[13px] text-[#666]">{p.category || '—'}</td>
                       <td className="px-3 py-3 text-[14px] text-[#111] text-right tabular-nums">
                         {fmt(p.followers)}
+                      </td>
+                      <td className="px-3 py-3 text-[13px] text-right tabular-nums" style={{ color: (p.engagement ?? 0) > 0 ? '#10b981' : '#bbb' }}>
+                        {(p.engagement ?? 0) > 0 ? `${p.engagement}%` : '—'}
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span

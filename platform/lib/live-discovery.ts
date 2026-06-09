@@ -52,6 +52,7 @@ export interface LiveProfile {
   is_verified: boolean;
   profile_pic_url: string | null;
   score: number;
+  engagement: number; // engagement rate %, 0 if unknown
   from?: 'db' | 'live';
 }
 
@@ -97,7 +98,11 @@ interface RawUser {
   edge_related_profiles?: { edges?: Array<{ node?: { username?: string } }> };
   edge_owner_to_timeline_media?: {
     edges?: Array<{
-      node?: { edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> } };
+      node?: {
+        edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> };
+        edge_liked_by?: { count?: number };
+        edge_media_to_comment?: { count?: number };
+      };
     }>;
   };
 }
@@ -319,17 +324,38 @@ export async function resolveTopicToSeeds(
 }
 
 function summarize(user: RawUser, tokens: string[]): LiveProfile {
+  const followers = user.edge_followed_by?.count ?? 0;
   const prof: Omit<LiveProfile, 'score'> = {
     username: user.username ?? '',
     full_name: user.full_name ?? '',
     biography: user.biography ?? '',
     category: user.category_name ?? '',
-    followers: user.edge_followed_by?.count ?? 0,
+    followers,
     is_private: Boolean(user.is_private),
     is_verified: Boolean(user.is_verified),
     profile_pic_url: user.profile_pic_url ?? null,
+    engagement: engagementRate(user, followers),
   };
   return { ...prof, score: scoreProfile(prof, tokens) };
+}
+
+// Engagement rate % from recent posts: average (likes + comments) per post,
+// divided by followers. 0 when there's no usable post/follower data.
+function engagementRate(user: RawUser, followers: number): number {
+  if (followers <= 0) return 0;
+  const edges = user.edge_owner_to_timeline_media?.edges ?? [];
+  let total = 0;
+  let counted = 0;
+  for (const e of edges) {
+    const likes = e.node?.edge_liked_by?.count ?? 0;
+    const comments = e.node?.edge_media_to_comment?.count ?? 0;
+    if (likes > 0 || comments > 0) {
+      total += likes + comments;
+      counted++;
+    }
+  }
+  if (counted === 0) return 0;
+  return Math.round((total / counted / followers) * 1000) / 10; // 1 decimal %
 }
 
 function scoreProfile(p: Omit<LiveProfile, 'score'>, tokens: string[]): number {
