@@ -10,6 +10,9 @@ interface Item {
   mock: React.ReactNode;
 }
 
+// A distinct accent colour per feature, so the list is colourful.
+const FEATURE_COLORS = ['#6C4DF6', '#ec4899', '#10b981', '#f59e0b'];
+
 export function Showcase() {
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -61,21 +64,27 @@ export function Showcase() {
             <div className="space-y-3">
               {items.map((it, i) => {
                 const on = i === active;
+                const c = FEATURE_COLORS[i % FEATURE_COLORS.length]!;
                 return (
                   <button
                     key={it.title}
                     onClick={() => jumpTo(i)}
-                    className="w-full text-left rounded-2xl p-4 flex gap-4 transition-all duration-300 border"
+                    className="w-full text-left rounded-2xl p-4 flex gap-4 transition-all duration-300 border hover:opacity-100"
                     style={{
-                      background: on ? 'white' : 'rgba(255,255,255,0.45)',
-                      borderColor: on ? ACCENT : 'transparent',
-                      boxShadow: on ? `0 12px 40px rgba(108,77,246,0.16)` : 'none',
-                      opacity: on ? 1 : 0.62,
+                      background: on ? 'white' : 'rgba(255,255,255,0.5)',
+                      borderColor: on ? c : 'transparent',
+                      boxShadow: on ? `0 14px 44px ${c}33` : 'none',
+                      opacity: on ? 1 : 0.7,
                     }}
                   >
                     <span
-                      className="w-11 h-11 rounded-xl grid place-items-center shrink-0 transition-colors"
-                      style={{ background: on ? ACCENT : '#e6e6ef', color: on ? 'white' : '#9a9ab0' }}
+                      className="w-11 h-11 rounded-xl grid place-items-center shrink-0 transition-all duration-300"
+                      style={{
+                        background: on ? `linear-gradient(135deg, ${c}, ${c}cc)` : `${c}1f`,
+                        color: on ? 'white' : c,
+                        boxShadow: on ? `0 6px 18px ${c}55` : 'none',
+                        transform: on ? 'scale(1.06)' : 'scale(1)',
+                      }}
                     >
                       {it.icon}
                     </span>
@@ -120,43 +129,46 @@ function bar(w: string, delay = 0, grad = `linear-gradient(90deg, ${ACCENT}, #9b
 
 // ---- mock 1: database ---------------------------------------------------
 
-// Pins at approximate Indian city positions (viewBox 0 0 240 300).
+// Pins at approximate Indian city positions, in the accurate map's coordinate
+// space (viewBox 0 0 612 696 — matches /public/india.svg).
 const PINS: { x: number; y: number; label?: string }[] = [
-  { x: 118, y: 78, label: 'Delhi' },
-  { x: 74, y: 168, label: 'Mumbai' },
-  { x: 112, y: 222, label: 'Bengaluru' },
-  { x: 124, y: 182 },
-  { x: 136, y: 212 },
-  { x: 168, y: 124, label: 'Kolkata' },
-  { x: 70, y: 140 },
-  { x: 94, y: 98 },
-  { x: 128, y: 96 },
-  { x: 108, y: 244 },
-  { x: 82, y: 182 },
+  { x: 250, y: 215, label: 'Delhi' },
+  { x: 178, y: 432, label: 'Mumbai' },
+  { x: 258, y: 548, label: 'Bengaluru' },
+  { x: 282, y: 472, label: 'Hyderabad' },
+  { x: 305, y: 548, label: 'Chennai' },
+  { x: 418, y: 352, label: 'Kolkata' },
+  { x: 212, y: 248 },
+  { x: 166, y: 352 },
+  { x: 198, y: 458 },
+  { x: 202, y: 512 },
+  { x: 312, y: 278 },
 ];
 
-const INDIA_PATH =
-  'M74,40 L88,28 L104,42 L128,34 L150,44 L170,36 L192,52 L206,46 L212,58 L198,64 L184,60 L186,84 L176,108 L180,126 L166,150 L156,178 L144,206 L132,234 L122,258 L116,274 L110,256 L104,226 L96,196 L86,166 L76,138 L66,116 L54,104 L46,96 L40,90 L50,82 L62,80 L58,66 L60,52 L66,44 Z';
+// Vibrant per-pin colours so the map dots pop.
+const PIN_COLORS = ['#6C4DF6', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#8b5cf6', '#14b8a6'];
 
 function IndiaMap() {
   return (
     <div className="relative w-full grid place-items-center">
-      <svg viewBox="0 0 240 300" className="w-full max-w-[230px] h-auto">
-        <defs>
-          <linearGradient id="ii-india" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#efeaff" />
-            <stop offset="1" stopColor="#e0d8ff" />
-          </linearGradient>
-        </defs>
-        <path d={INDIA_PATH} fill="url(#ii-india)" stroke={ACCENT} strokeOpacity="0.35" strokeWidth="1.5" strokeLinejoin="round" />
-        {PINS.map((p, i) => (
-          <g key={i}>
-            <circle cx={p.x} cy={p.y} r="9" fill={ACCENT} opacity="0.16" className="ii-pulse" style={{ transformBox: 'fill-box', transformOrigin: 'center', animationDelay: `${i * 0.22}s` } as CSSProperties} />
-            <circle cx={p.x} cy={p.y} r="3.4" fill={ACCENT} />
-            <circle cx={p.x - 1} cy={p.y - 1} r="1.1" fill="white" opacity="0.8" />
-          </g>
-        ))}
-      </svg>
+      <div className="relative w-full max-w-[270px]">
+        {/* accurate India map (states), recoloured to the violet theme */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/india.svg" alt="Map of India" className="w-full h-auto select-none" draggable={false} />
+        {/* animated creator pins, same viewBox so coordinates align */}
+        <svg viewBox="0 0 612 696" className="absolute inset-0 w-full h-full pointer-events-none">
+          {PINS.map((p, i) => {
+            const c = PIN_COLORS[i % PIN_COLORS.length]!;
+            return (
+              <g key={i}>
+                <circle cx={p.x} cy={p.y} r="22" fill={c} opacity="0.18" className="ii-pulse" style={{ transformBox: 'fill-box', transformOrigin: 'center', animationDelay: `${i * 0.22}s` } as CSSProperties} />
+                <circle cx={p.x} cy={p.y} r="8" fill={c} />
+                <circle cx={p.x - 2.2} cy={p.y - 2.2} r="2.6" fill="white" opacity="0.85" />
+              </g>
+            );
+          })}
+        </svg>
+      </div>
       <div className="absolute bottom-0 text-[10px] text-[#999]">Creators across India</div>
     </div>
   );
@@ -277,6 +289,17 @@ function pill(c: string): CSSProperties {
 
 function CompetitorMock() {
   const sov = [['You', '46%'], ['Comp A', '27%'], ['Comp B', '17%'], ['Comp C', '10%']] as const;
+  const grads = [
+    'linear-gradient(90deg,#6C4DF6,#9b7bff)',
+    'linear-gradient(90deg,#ec4899,#f472b6)',
+    'linear-gradient(90deg,#f59e0b,#fbbf24)',
+    'linear-gradient(90deg,#10b981,#34d399)',
+  ];
+  const stats: [string, string, string][] = [
+    ['Overlaps', '318', '#6C4DF6'],
+    ['Exclusive wins', '46', '#ec4899'],
+    ['Tracked', '4,782', '#10b981'],
+  ];
   return (
     <Glass>
       <div className="text-[13px] font-semibold mb-1">Share of voice</div>
@@ -284,17 +307,17 @@ function CompetitorMock() {
       <div className="space-y-4 mb-6">
         {sov.map(([k, v], i) => (
           <div key={k}>
-            <div className="flex justify-between text-[12px] mb-1"><span className="font-medium">{k}</span><span className="text-[#888]">{v}</span></div>
+            <div className="flex justify-between text-[12px] mb-1"><span className="font-medium">{k}</span><span className="font-semibold" style={{ color: grads[i] ? FEATURE_COLORS[i] : '#888' }}>{v}</span></div>
             <div className="h-2.5 rounded-full bg-[#e9e9f6] overflow-hidden">
-              <div {...bar(v, i * 0.12, i === 0 ? `linear-gradient(90deg, ${ACCENT}, #9b7bff)` : 'linear-gradient(90deg,#c9c9dd,#aab)')} />
+              <div {...bar(v, i * 0.12, grads[i % grads.length])} />
             </div>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-3 gap-2">
-        {[['Overlaps', '318'], ['Exclusive wins', '46'], ['Tracked', '4,782']].map(([k, v], i) => (
-          <div key={k} className="rounded-xl border border-[#eee] p-2.5 ii-countup" style={{ animationDelay: `${i * 0.1}s` }}>
-            <div className="text-lg font-bold tabular-nums">{v}</div>
+        {stats.map(([k, v, c], i) => (
+          <div key={k} className="rounded-xl border p-2.5 ii-countup" style={{ animationDelay: `${i * 0.1}s`, borderColor: `${c}33`, background: `${c}0d` }}>
+            <div className="text-lg font-bold tabular-nums" style={{ color: c }}>{v}</div>
             <div className="text-[10px] text-[#999]">{k}</div>
           </div>
         ))}
