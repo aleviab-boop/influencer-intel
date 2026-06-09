@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { DiscoverExperience } from '@/components/discover-experience';
+import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
+import { buildSuggestions } from '@/lib/suggestions';
 
 // Reelax-style influencer-marketing landing page, themed for Influencer Intel
 // with a violet accent. CTAs wire to the real app (/discover, /programs, …).
@@ -65,16 +66,27 @@ function FeatureIcon({ name }: { name: string }) {
 export default function LanderPage() {
   const params = useSearchParams();
   const [query, setQuery] = useState<string | null>(params.get('prompt'));
+  const [seed, setSeed] = useState('');
   return (
     <div className="min-h-screen flex flex-col bg-white text-[#111] font-sans">
       <MarketingNav />
       <main className="flex-1 flex flex-col">
         {query !== null ? (
           // Searching from the home page runs inline — no redirect to another page.
-          <DiscoverExperience initialPrompt={query} />
+          <section className="max-w-5xl mx-auto w-full px-6 py-10 min-h-[80vh]">
+            <div className="mb-6">
+              <button
+                onClick={() => setQuery(null)}
+                className="text-[13px] text-[#666] hover:text-[#111]"
+              >
+                ← Back
+              </button>
+            </div>
+            <LiveSearch initialPrompt={query} initialSeed={seed} />
+          </section>
         ) : (
           <>
-            <Hero onSearch={setQuery} />
+            <Hero onSearch={(q, s) => { setSeed(s); setQuery(q); }} />
             <LogoMarquee />
             <Showcase />
             <DatabaseSection />
@@ -209,14 +221,24 @@ function useTypewriter(words: string[]) {
   return text;
 }
 
-function Hero({ onSearch }: { onSearch: (q: string) => void }) {
-  const [platform, setPlatform] = useState<'instagram' | 'youtube'>('instagram');
+function Hero({ onSearch }: { onSearch: (q: string, seed: string) => void }) {
   const [value, setValue] = useState('');
+  const [seed, setSeed] = useState('');
+  const [showSug, setShowSug] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
   const typed = useTypewriter(SUGGESTIONS);
+  const suggestions = buildSuggestions(value);
+  const sugOpen = showSug && suggestions.length > 0;
 
   const go = () => {
     const q = (value.trim() || typed || SUGGESTIONS[0]!).trim();
-    onSearch(q);
+    onSearch(q, seed.trim());
+  };
+
+  const pick = (s: string) => {
+    setValue(s);
+    setShowSug(false);
+    setActiveIdx(-1);
   };
 
   return (
@@ -243,15 +265,34 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
 
         {/* Animated search box */}
         <div className="mt-9 relative max-w-3xl mx-auto text-left">
-          <div className="rounded-2xl bg-white border-2 transition-colors p-4 pb-16 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] border-[#e3def9]">
+          <div className="rounded-2xl bg-white border-2 transition-colors p-4 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] border-[#e3def9]">
             <div className="relative">
               <textarea
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
+                onChange={(e) => {
+                  setValue(e.target.value);
+                  setShowSug(true);
+                  setActiveIdx(-1);
+                }}
+                onFocus={() => setShowSug(true)}
+                onBlur={() => setTimeout(() => setShowSug(false), 120)}
                 onKeyDown={(e) => {
+                  if (sugOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                    e.preventDefault();
+                    setActiveIdx((i) => {
+                      const n = suggestions.length;
+                      return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n;
+                    });
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    setShowSug(false);
+                    return;
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    go();
+                    if (sugOpen && activeIdx >= 0) pick(suggestions[activeIdx]!);
+                    else go();
                   }
                 }}
                 rows={2}
@@ -263,35 +304,57 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
                   <span className="ii-caret" style={{ color: ACCENT }}>|</span>
                 </div>
               )}
+
+              {sugOpen && (
+                <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseEnter={() => setActiveIdx(i)}
+                      onClick={() => pick(s)}
+                      className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-[15px] transition-colors ${
+                        i === activeIdx ? 'bg-[#f6f4ff]' : 'hover:bg-[#faf9ff]'
+                      }`}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                      <span className="text-[#333]">{s}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* platform toggle bottom-left */}
-            <div className="absolute left-4 bottom-4 inline-flex items-center gap-1 p-1 rounded-xl bg-[#f4f4f6]">
-              {(['instagram', 'youtube'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPlatform(p)}
-                  className={`px-3 py-1.5 rounded-lg text-[13px] capitalize transition-colors ${
-                    platform === p ? 'bg-white shadow-sm text-[#111] font-medium' : 'text-[#888]'
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
+            {/* seed handle + search button */}
+            <div className="mt-3 flex items-center gap-2 border-t border-[#f0eefc] pt-3">
+              <span className="text-[#9b7bff] shrink-0" aria-hidden>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" /></svg>
+              </span>
+              <input
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    go();
+                  }
+                }}
+                placeholder="Know anyone in this space? add a starting @handle — e.g. the_brand_fashion_nagpur"
+                className="flex-1 min-w-0 text-[14px] text-[#222] placeholder-[#aaa] focus:outline-none bg-transparent"
+              />
+              <button
+                onClick={go}
+                aria-label="Search"
+                className="w-11 h-11 rounded-full grid place-items-center text-white shadow-md hover:brightness-95 shrink-0"
+                style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M21 21l-4.3-4.3" />
+                </svg>
+              </button>
             </div>
-
-            {/* gradient circular search button bottom-right */}
-            <button
-              onClick={go}
-              aria-label="Search"
-              className="absolute right-4 bottom-4 w-12 h-12 rounded-full grid place-items-center text-white shadow-md hover:brightness-95"
-              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M21 21l-4.3-4.3" />
-              </svg>
-            </button>
           </div>
         </div>
 
@@ -299,7 +362,7 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
           {FILTER_CHIPS.map((c) => (
             <button
               key={c}
-              onClick={() => onSearch(c)}
+              onClick={() => setValue((v) => (v.trim() ? `${v.trim()} ${c.toLowerCase()}` : c))}
               className="px-3.5 py-1.5 rounded-full border border-[#dcd6f7] text-[13px] hover:bg-white bg-white/70"
               style={{ color: ACCENT }}
             >

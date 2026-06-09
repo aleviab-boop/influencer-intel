@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { LiveSearch } from '@/components/live-search';
 
 export default function InfluencerSearchPage() {
   return (
@@ -34,36 +35,22 @@ export default function InfluencerSearchPage() {
 }
 
 function Hero() {
-  const router = useRouter();
   const params = useSearchParams();
-  const [q, setQ] = useState(params.get('prompt') ?? '');
-  const go = () => router.push(`/lander?prompt=${encodeURIComponent(q.trim() || 'fashion influencers in Mumbai')}`);
+  const initialPrompt = params.get('prompt') ?? '';
 
   return (
     <section className="grid-bg">
-      <div className="max-w-6xl mx-auto px-6 py-16 grid lg:grid-cols-2 gap-12 items-center">
-        <div>
+      <div className="max-w-5xl mx-auto px-6 py-16">
+        <div className="text-center max-w-3xl mx-auto mb-8">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.08]">
-            Search Indian Instagram and Youtube influencers
+            Search Indian Instagram influencers
           </h1>
-          <p className="mt-5 text-[17px] text-[#555] max-w-xl">
-            Search among 2.5 lakh+ creators. Apply accurate filters to discover the right
-            influencers for your brand across different social networks.
+          <p className="mt-5 text-[17px] text-[#555]">
+            Type a brief and a starting creator — we crawl Instagram live, rank the most relevant
+            profiles, and save them to your database.
           </p>
-          <div className="mt-7 flex items-center gap-2 max-w-md">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && go()}
-              placeholder="Find influencers to collaborate with"
-              className="flex-1 px-4 py-3 border border-border bg-white text-[15px] rounded-lg focus:outline-none focus:border-[#6C4DF6]"
-            />
-            <button onClick={go} className="px-5 py-3 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
-              Get Started →
-            </button>
-          </div>
         </div>
-        <SuggestedMock />
+        <LiveSearch initialPrompt={initialPrompt} />
       </div>
     </section>
   );
