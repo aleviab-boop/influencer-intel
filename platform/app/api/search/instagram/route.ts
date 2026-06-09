@@ -25,8 +25,10 @@ export async function GET(req: NextRequest) {
     const msg = (err as Error).message;
     const friendly = msg === 'checkpoint'
       ? 'Instagram flagged the scraper account (checkpoint). Log into it once in a browser to clear it, then retry.'
+      : msg === 'bad_password'
+      ? 'Instagram says the scraper account’s password is incorrect — double-check IG_SCRAPER_USER / IG_SCRAPER_PASS.'
       : msg === 'login_failed'
-      ? 'Couldn’t log in the scraper account — check the credentials.'
+      ? 'Couldn’t log in the scraper account — Instagram rejected the login.'
       : 'Search failed. Instagram may be rate-limiting — try again shortly.';
     return NextResponse.json({ configured: true, parsed, accounts: [], error: friendly }, { status: 502 });
   }

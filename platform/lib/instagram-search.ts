@@ -55,7 +55,9 @@ async function ensureLogin(): Promise<IgApiClient> {
     await ig.account.login(USER, PASS);
   } catch (err) {
     const name = (err as { name?: string }).name ?? '';
-    if (name.includes('Checkpoint')) throw new Error('checkpoint');
+    const body = (err as { response?: { body?: { error_type?: string; message?: string } } }).response?.body;
+    if (name.includes('Checkpoint') || body?.message?.includes('challenge')) throw new Error('checkpoint');
+    if (name.includes('BadPassword') || body?.error_type === 'bad_password') throw new Error('bad_password');
     throw new Error('login_failed');
   }
   try {
