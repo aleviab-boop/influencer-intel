@@ -119,6 +119,66 @@ async function fetchProfile(username: string, budgetMs: number): Promise<RawUser
   }
 }
 
+// ---- name → seed handles ------------------------------------------------
+//
+// Instagram's name search is login-walled, so we resolve a typed name (e.g.
+// "mridul sharma") to real handles by generating plausible handle variations
+// and probing each via web_profile_info. Hits become seeds for the crawl.
+
+export interface NameMatch {
+  handle: string;
+  full_name: string;
+  followers: number;
+}
+
+export function handleVariations(name: string): string[] {
+  const tokens = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const seps = ['', '_', '.'];
+  const out = new Set<string>();
+  for (const sep of seps) {
+    const b = tokens.join(sep);
+    for (const v of [
+      b, `${b}_`, `_${b}`, `_${b}_`, `${b}official`, `${b}_official`,
+      `its${b}`, `the${b}`, `real${b}`, `${b}1`, `${b}07`, `${b}s`, `${b}x`,
+    ]) {
+      if (/^[a-z0-9._]{2,30}$/.test(v)) out.add(v);
+    }
+  }
+  return Array.from(out);
+}
+
+export async function resolveNameToSeeds(
+  name: string,
+  opts: { limit?: number; budgetMs?: number; delayMs?: number } = {},
+): Promise<NameMatch[]> {
+  const limit = opts.limit ?? 6;
+  const budgetMs = opts.budgetMs ?? 14_000;
+  const delayMs = opts.delayMs ?? 250;
+  const startedAt = Date.now();
+
+  const matches: NameMatch[] = [];
+  for (const handle of handleVariations(name)) {
+    if (matches.length >= limit) break;
+    if (Date.now() - startedAt > budgetMs) break;
+    const user = await fetchProfile(handle, budgetMs - (Date.now() - startedAt));
+    await sleep(delayMs);
+    if (user?.username) {
+      matches.push({
+        handle: user.username,
+        full_name: user.full_name ?? '',
+        followers: user.edge_followed_by?.count ?? 0,
+      });
+    }
+  }
+  return matches.sort((a, b) => b.followers - a.followers);
+}
+
 function summarize(user: RawUser, tokens: string[]): LiveProfile {
   const prof: Omit<LiveProfile, 'score'> = {
     username: user.username ?? '',

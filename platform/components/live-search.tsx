@@ -24,6 +24,7 @@ interface RunResponse {
   seeds: string[];
   results: LiveProfile[];
   persisted: number;
+  resolved_from_names?: Array<{ name: string; handle: string; followers: number }>;
 }
 
 function fmt(n: number): string {
@@ -32,11 +33,20 @@ function fmt(n: number): string {
   return String(n);
 }
 
-function parseSeeds(raw: string): string[] {
-  return raw
-    .split(/[\s,]+/)
-    .map((s) => s.trim().replace(/^@/, '').toLowerCase())
-    .filter((s) => /^[a-z0-9._]+$/.test(s));
+// Split the start-from field into exact handles vs names to resolve.
+// Comma-separated; an entry with an internal space is treated as a name
+// (e.g. "mridul sharma"), otherwise as an @handle.
+function parseSeedInput(raw: string): { seeds: string[]; names: string[] } {
+  const seeds: string[] = [];
+  const names: string[] = [];
+  for (const part of raw.split(',')) {
+    const entry = part.trim().replace(/^@/, '');
+    if (!entry) continue;
+    if (/\s/.test(entry)) names.push(entry);
+    else if (/^[a-z0-9._]+$/i.test(entry)) seeds.push(entry.toLowerCase());
+    else names.push(entry);
+  }
+  return { seeds, names };
 }
 
 export function LiveSearch({
@@ -69,7 +79,8 @@ export function LiveSearch({
   // Arriving from the home page with both a prompt and a seed → run once.
   useEffect(() => {
     if (autoRan.current) return;
-    if (initialPrompt.trim().length >= 2 && parseSeeds(initialSeed).length > 0) {
+    const { seeds, names } = parseSeedInput(initialSeed);
+    if (initialPrompt.trim().length >= 2 && seeds.length + names.length > 0) {
       autoRan.current = true;
       void search();
     }
@@ -79,9 +90,9 @@ export function LiveSearch({
   async function search() {
     const p = prompt.trim();
     if (p.length < 2) return;
-    const seeds = parseSeeds(seedText);
-    if (seeds.length === 0) {
-      // No seed yet — Instagram can't keyword-search without a starting point.
+    const { seeds, names } = parseSeedInput(seedText);
+    if (seeds.length + names.length === 0) {
+      // No starting point yet — Instagram can't keyword-search without one.
       setNeedSeed(true);
       setError(null);
       return;
@@ -94,7 +105,7 @@ export function LiveSearch({
       const r = await fetch('/api/discover-live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p, seeds }),
+        body: JSON.stringify({ prompt: p, seeds, names }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -196,7 +207,7 @@ export function LiveSearch({
             value={seedText}
             onChange={(e) => setSeedText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void search())}
-            placeholder="Know anyone? add a starting @handle (e.g. the_brand_fashion_nagpur)"
+            placeholder="Start from a name or @handle — e.g. mridul sharma, or the_brand_fashion_nagpur"
             className="flex-1 px-3 py-2 rounded-lg border border-[#e3def9] text-[14px] focus:outline-none focus:border-[#6C4DF6]"
           />
           <button
@@ -214,8 +225,31 @@ export function LiveSearch({
       {needSeed && (
         <div className="mt-3 px-4 py-3 rounded-lg border border-[#e3def9] bg-[#faf9ff] text-[14px] text-[#444]">
           Instagram can’t keyword-search without a starting point.{' '}
-          <span className="font-medium text-[#222]">Do you know anyone in this space?</span> Add their
-          @handle above and we’ll find similar creators from there.
+          <span className="font-medium text-[#222]">Do you know anyone in this space?</span> Add a
+          name (e.g. <span className="font-mono">mridul sharma</span>) or an @handle above and we’ll
+          start from there.
+        </div>
+      )}
+
+      {/* which handles a typed name resolved to */}
+      {run && !loading && run.resolved_from_names && run.resolved_from_names.length > 0 && (
+        <div className="mt-3 px-4 py-2.5 rounded-lg border border-[#e3def9] bg-[#faf9ff] text-[13px] text-[#555]">
+          Matched names to:{' '}
+          {run.resolved_from_names.map((m, i) => (
+            <span key={`${m.name}-${m.handle}`}>
+              {i > 0 && ', '}
+              <a
+                href={`https://instagram.com/${m.handle}`}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium hover:underline"
+                style={{ color: ACCENT }}
+              >
+                @{m.handle}
+              </a>{' '}
+              <span className="text-[#999]">({fmt(m.followers)})</span>
+            </span>
+          ))}
         </div>
       )}
 
