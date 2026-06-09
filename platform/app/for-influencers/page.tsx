@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { CreatorToolkit } from '@/components/creator-toolkit';
 
 export default function ForInfluencersPage() {
   const [open, setOpen] = useState<number | null>(0);
@@ -77,6 +78,9 @@ export default function ForInfluencersPage() {
             </div>
           </div>
         </section>
+
+        {/* Creator toolkit — workload-reducing features */}
+        <CreatorToolkit />
 
         {/* FAQ */}
         <section className="max-w-3xl mx-auto px-6 py-16">
