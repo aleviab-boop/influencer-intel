@@ -16,6 +16,9 @@ export default function InstagramSearchPage() {
   const [parsed, setParsed] = useState<Parsed | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [saved, setSaved] = useState<Record<string, 'saving' | 'done'>>({});
+  const [twoFA, setTwoFA] = useState(false);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   async function run() {
     if (q.trim().length < 2) return;
@@ -25,10 +28,26 @@ export default function InstagramSearchPage() {
       setConfigured(d.configured);
       setParsed(d.parsed ?? null);
       setAccounts(d.accounts ?? []);
+      setTwoFA(!!d.twoFactorRequired);
       if (d.error) setError(d.error);
     } catch {
       setError('Search failed. Try again.');
     } finally { setLoading(false); }
+  }
+
+  async function verify() {
+    if (!/^\d{6}$/.test(code.trim())) { setError('Enter the 6-digit code.'); return; }
+    setVerifying(true); setError(null);
+    try {
+      const d = await fetch('/api/search/instagram/2fa', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim() }),
+      }).then((r) => r.json());
+      if (d.ok) { setTwoFA(false); setCode(''); await run(); }
+      else setError(d.error || 'Verification failed.');
+    } catch {
+      setError('Verification failed. Try again.');
+    } finally { setVerifying(false); }
   }
 
   async function save(handle: string) {
@@ -68,6 +87,16 @@ export default function InstagramSearchPage() {
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-800 text-[14px]">
               <div className="font-semibold mb-1">Live Instagram search isn’t set up yet</div>
               Add a throwaway Instagram account’s credentials as <code className="text-[12px]">IG_SCRAPER_USER</code> / <code className="text-[12px]">IG_SCRAPER_PASS</code> in <code className="text-[12px]">.env</code> and restart — then this searches Instagram live, for free.
+            </div>
+          )}
+          {twoFA && (
+            <div className="mb-4 rounded-2xl border border-[#e3def9] bg-[#faf9ff] p-5">
+              <div className="font-semibold text-ink-900 mb-1 text-[14px]">Enter the 2FA code</div>
+              <p className="text-[13px] text-ink-500 mb-3">Instagram sent a code to the scraper account (SMS or authenticator app). Paste it to finish signing in.</p>
+              <div className="flex gap-2 max-w-xs">
+                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={(e) => e.key === 'Enter' && verify()} inputMode="numeric" placeholder="123456" className="flex-1 px-3 py-2.5 rounded-xl border border-border text-[15px] tracking-[0.3em] text-center focus:outline-none focus:border-[#6C4DF6]" />
+                <button onClick={verify} disabled={verifying} className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl disabled:opacity-50" style={{ background: ACCENT }}>{verifying ? 'Verifying…' : 'Verify'}</button>
+              </div>
             </div>
           )}
           {error && <div className="mb-4 text-sm text-rose-700">{error}</div>}

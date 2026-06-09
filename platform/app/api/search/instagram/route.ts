@@ -23,6 +23,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ configured: true, parsed, accounts });
   } catch (err) {
     const msg = (err as Error).message;
+    if (msg === 'two_factor_required') {
+      return NextResponse.json({
+        configured: true,
+        parsed,
+        accounts: [],
+        twoFactorRequired: true,
+        error: 'The scraper account needs a 2FA code. Enter the SMS/authenticator code to finish signing in. (Push “approve on another device” 2FA won’t work — disable it or switch to a code.)',
+      }, { status: 401 });
+    }
     const friendly = msg === 'checkpoint'
       ? 'Instagram flagged the scraper account (checkpoint). Log into it once in a browser to clear it, then retry.'
       : msg === 'bad_password'

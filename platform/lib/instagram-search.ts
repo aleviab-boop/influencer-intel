@@ -34,7 +34,25 @@ export interface FoundAccount {
 let ig: IgApiClient | null = null;
 let loggedIn = false;
 
+// Set when IG asks for a 2FA code (SMS / authenticator). Holds what
+// twoFactorLogin() needs so a later code submission can finish the login.
+// NOTE: "approve on another device" push 2FA cannot be satisfied here — only
+// numeric SMS/TOTP codes work. For a burner, disabling 2FA is simpler.
+let pendingTwoFactor: { identifier: string; method: string } | null = null;
+
+export function isTwoFactorPending(): boolean {
+  return Boolean(pendingTwoFactor);
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function saveSession(client: IgApiClient): Promise<void> {
+  try {
+    const serialized = await client.state.serialize();
+    delete (serialized as Record<string, unknown>).constants;
+    await fs.writeFile(SESSION_FILE, JSON.stringify(serialized));
+  } catch { /* session caching is best-effort */ }
+}
 
 async function ensureLogin(): Promise<IgApiClient> {
   if (ig && loggedIn) return ig;
@@ -55,18 +73,50 @@ async function ensureLogin(): Promise<IgApiClient> {
     await ig.account.login(USER, PASS);
   } catch (err) {
     const name = (err as { name?: string }).name ?? '';
-    const body = (err as { response?: { body?: { error_type?: string; message?: string } } }).response?.body;
+    const body = (err as { response?: { body?: {
+      error_type?: string;
+      message?: string;
+      two_factor_required?: boolean;
+      two_factor_info?: { two_factor_identifier?: string; totp_two_factor_on?: boolean };
+    } } }).response?.body;
+    if (name.includes('TwoFactorRequired') || body?.two_factor_required) {
+      const info = body?.two_factor_info;
+      pendingTwoFactor = {
+        identifier: info?.two_factor_identifier ?? '',
+        method: info?.totp_two_factor_on ? '0' : '1', // 0 = authenticator app, 1 = SMS
+      };
+      throw new Error('two_factor_required');
+    }
     if (name.includes('Checkpoint') || body?.message?.includes('challenge')) throw new Error('checkpoint');
     if (name.includes('BadPassword') || body?.error_type === 'bad_password') throw new Error('bad_password');
     throw new Error('login_failed');
   }
-  try {
-    const serialized = await ig.state.serialize();
-    delete (serialized as Record<string, unknown>).constants;
-    await fs.writeFile(SESSION_FILE, JSON.stringify(serialized));
-  } catch { /* session caching is best-effort */ }
+  await saveSession(ig);
   loggedIn = true;
   return ig;
+}
+
+// Finish a 2FA-gated login by submitting the 6-digit SMS/authenticator code.
+// Only works after ensureLogin() has thrown 'two_factor_required' (which seeds
+// pendingTwoFactor). Push "approve on another device" 2FA can't use this.
+export async function submitTwoFactorCode(code: string): Promise<void> {
+  if (!ig || !pendingTwoFactor) throw new Error('no_pending_2fa');
+  try {
+    await ig.account.twoFactorLogin({
+      username: USER,
+      verificationCode: code.trim(),
+      twoFactorIdentifier: pendingTwoFactor.identifier,
+      verificationMethod: pendingTwoFactor.method as '0' | '1',
+      trustThisDevice: '1',
+    });
+  } catch (err) {
+    const body = (err as { response?: { body?: { message?: string } } }).response?.body;
+    if (body?.message?.toLowerCase().includes('invalid')) throw new Error('bad_code');
+    throw new Error('two_factor_failed');
+  }
+  await saveSession(ig);
+  loggedIn = true;
+  pendingTwoFactor = null;
 }
 
 // Run the blended top-search for a few query strings and collect the accounts.
