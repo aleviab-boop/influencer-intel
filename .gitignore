@@ -27,3 +27,7 @@ Thumbs.db
 .idea/
 *.swp
 .ig-session.json
+
+# Scraper prototype data artifacts / sessions
+nagpur_fashion.csv
+session.json
