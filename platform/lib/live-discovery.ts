@@ -52,6 +52,7 @@ export interface LiveProfile {
   is_verified: boolean;
   profile_pic_url: string | null;
   score: number;
+  from?: 'db' | 'live';
 }
 
 export interface LiveDiscoveryResult {

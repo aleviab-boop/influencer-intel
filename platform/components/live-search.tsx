@@ -16,6 +16,7 @@ interface LiveProfile {
   is_verified: boolean;
   profile_pic_url: string | null;
   score: number;
+  from?: 'db' | 'live';
 }
 
 interface RunResponse {
@@ -26,6 +27,8 @@ interface RunResponse {
   persisted: number;
   resolved_from_names?: Array<{ name: string; handle: string; followers: number }>;
   auto_seeds?: Array<{ handle: string; followers: number }>;
+  from_db?: number;
+  from_live?: number;
 }
 
 function fmt(n: number): string {
@@ -280,8 +283,14 @@ export function LiveSearch({
               {run.tokens.length > 0 && (
                 <span className="ml-2 text-[#999]">· matching {run.tokens.join(', ')}</span>
               )}
+              {(run.from_db ?? 0) > 0 && (
+                <span className="ml-2 text-[#999]">· {run.from_db} from your database</span>
+              )}
+              {(run.from_live ?? 0) > 0 && (
+                <span className="ml-2 text-[#999]">· {run.from_live} live</span>
+              )}
               {run.persisted > 0 && (
-                <span className="ml-2 text-[#999]">· {run.persisted} saved to database</span>
+                <span className="ml-2 text-[#999]">· {run.persisted} saved</span>
               )}
             </div>
             <button
@@ -325,6 +334,11 @@ export function LiveSearch({
                               </span>
                               {p.is_verified && (
                                 <span title="verified" style={{ color: ACCENT }}>✔</span>
+                              )}
+                              {p.from === 'db' && (
+                                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#eef] text-[#6C4DF6]" title="from your database">
+                                  DB
+                                </span>
                               )}
                             </div>
                             <div className="text-[12px] text-[#999] truncate max-w-[260px]">
