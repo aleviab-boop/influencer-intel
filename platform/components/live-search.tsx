@@ -47,6 +47,19 @@ function fmt(n: number): string {
   return String(n);
 }
 
+// Rough authenticity read: engagement that's far below the healthy floor for a
+// creator's follower tier is a fake-follower warning sign. null = unknown ER.
+function expectedErFloor(followers: number): number {
+  if (followers >= 1_000_000) return 0.7;
+  if (followers >= 100_000) return 1.0;
+  if (followers >= 10_000) return 1.5;
+  return 2.0;
+}
+function authenticityFlag(followers: number, engagement?: number): 'healthy' | 'low' | null {
+  if (!engagement || engagement <= 0) return null;
+  return engagement >= expectedErFloor(followers) ? 'healthy' : 'low';
+}
+
 // Split the start-from field into exact handles vs names to resolve.
 // Comma-separated; an entry with an internal space is treated as a name
 // (e.g. "mridul sharma"), otherwise as an @handle.
@@ -82,6 +95,7 @@ export function LiveSearch({
   // result filters / sort
   const [minFollowers, setMinFollowers] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers' | 'engagement'>('relevance');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -237,7 +251,10 @@ export function LiveSearch({
   const shown = (() => {
     if (!run) return [] as LiveProfile[];
     const filtered = run.results.filter(
-      (p) => p.followers >= minFollowers && (!verifiedOnly || p.is_verified),
+      (p) =>
+        p.followers >= minFollowers &&
+        (!verifiedOnly || p.is_verified) &&
+        (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low'),
     );
     const sorted = [...filtered];
     if (sortBy === 'followers') sorted.sort((a, b) => b.followers - a.followers);
@@ -532,6 +549,10 @@ export function LiveSearch({
               <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="accent-[#6C4DF6]" />
               Verified only
             </label>
+            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white cursor-pointer select-none" title="Hide profiles whose engagement is suspiciously low for their size">
+              <input type="checkbox" checked={healthyOnly} onChange={(e) => setHealthyOnly(e.target.checked)} className="accent-[#6C4DF6]" />
+              Healthy eng. only
+            </label>
             <span className="ml-auto text-[#999]">Sort</span>
             <select
               value={sortBy}
@@ -663,8 +684,16 @@ export function LiveSearch({
                       <td className="px-3 py-3 text-[14px] text-[#111] text-right tabular-nums">
                         {fmt(p.followers)}
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-right tabular-nums" style={{ color: (p.engagement ?? 0) > 0 ? '#10b981' : '#bbb' }}>
-                        {(p.engagement ?? 0) > 0 ? `${p.engagement}%` : '—'}
+                      <td className="px-3 py-3 text-[13px] text-right tabular-nums whitespace-nowrap">
+                        {(() => {
+                          const flag = authenticityFlag(p.followers, p.engagement);
+                          return (
+                            <span className="inline-flex items-center gap-1 justify-end" style={{ color: flag === 'low' ? '#f59e0b' : (p.engagement ?? 0) > 0 ? '#10b981' : '#bbb' }}>
+                              {flag === 'low' && <span title="Low engagement for follower count — possible fake followers">⚠</span>}
+                              {(p.engagement ?? 0) > 0 ? `${p.engagement}%` : '—'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-3 text-center">
                         <span
