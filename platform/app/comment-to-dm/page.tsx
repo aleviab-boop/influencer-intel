@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 export default function CommentToDmPage() {
   return (
@@ -76,7 +76,7 @@ function FeatureRow({ title, bullets, mock, flip }: { title: string; bullets: st
   return (
     <section className="border-t border-[#f0f0f0]">
       <div className="max-w-6xl mx-auto px-6 py-20 grid lg:grid-cols-2 gap-12 items-center">
-        <div className={flip ? 'lg:order-2' : ''}>
+        <Reveal className={flip ? 'lg:order-2' : ''}>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-tight">{title}</h2>
           <ul className="mt-5 space-y-3">
             {bullets.map((b) => (
@@ -89,8 +89,8 @@ function FeatureRow({ title, bullets, mock, flip }: { title: string; bullets: st
           <Link href="/automations" className="mt-6 inline-flex items-center gap-1 text-[15px] font-medium" style={{ color: ACCENT }}>
             Get Started →
           </Link>
-        </div>
-        <div className={flip ? 'lg:order-1' : ''}>{mock}</div>
+        </Reveal>
+        <Reveal delay={0.12} className={flip ? 'lg:order-1' : ''}>{mock}</Reveal>
       </div>
     </section>
   );
