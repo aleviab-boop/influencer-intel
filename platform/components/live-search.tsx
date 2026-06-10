@@ -97,7 +97,35 @@ export function LiveSearch({
   // bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // saved searches (localStorage)
+  const [saved, setSaved] = useState<{ prompt: string; seed: string }[]>([]);
   const autoRan = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ii_saved_searches');
+      if (raw) setSaved(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  function persistSaved(next: { prompt: string; seed: string }[]) {
+    setSaved(next);
+    try { localStorage.setItem('ii_saved_searches', JSON.stringify(next)); } catch { /* ignore */ }
+  }
+
+  function saveCurrentSearch() {
+    const entry = { prompt: (run?.prompt ?? prompt).trim(), seed: seedText.trim() };
+    if (!entry.prompt) return;
+    if (saved.some((s) => s.prompt === entry.prompt && s.seed === entry.seed)) return;
+    persistSaved([entry, ...saved].slice(0, 12));
+  }
+
+  function runSaved(s: { prompt: string; seed: string }) {
+    setPrompt(s.prompt);
+    setSeedText(s.seed);
+    setSelected(new Set());
+    void search({ promptOverride: s.prompt, seedOverride: s.seed });
+  }
 
   function toggleSelect(username: string) {
     setSelected((s) => {
@@ -374,6 +402,27 @@ export function LiveSearch({
         </div>
       </div>
 
+      {/* saved searches */}
+      {saved.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-[12px] text-[#999]">Saved:</span>
+          {saved.map((s, i) => (
+            <span key={`${s.prompt}|${s.seed}`} className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full border border-[#e3def9] bg-white text-[12px]">
+              <button onClick={() => runSaved(s)} className="hover:underline" style={{ color: ACCENT }} title={s.seed ? `seed: ${s.seed}` : undefined}>
+                {s.prompt}
+              </button>
+              <button
+                onClick={() => persistSaved(saved.filter((_, j) => j !== i))}
+                className="w-4 h-4 grid place-items-center rounded-full text-[#bbb] hover:text-[#666] hover:bg-[#f3f3f3]"
+                title="Remove"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* no-seed nudge (only when auto-seeding also found nothing) */}
       {needSeed && (
         <div className="mt-3 px-4 py-3 rounded-lg border border-[#e3def9] bg-[#faf9ff] text-[14px] text-[#444]">
@@ -446,14 +495,24 @@ export function LiveSearch({
                 <span className="ml-2 text-[#999]">· {run.persisted} saved</span>
               )}
             </div>
-            <button
-              onClick={() => void downloadExcel()}
-              disabled={exporting || shown.length === 0}
-              className="px-3.5 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50"
-              style={{ color: ACCENT }}
-            >
-              {exporting ? 'Preparing…' : '⬇ Download Excel'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveCurrentSearch}
+                className="px-3 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff]"
+                style={{ color: ACCENT }}
+                title="Save this search"
+              >
+                ★ Save
+              </button>
+              <button
+                onClick={() => void downloadExcel()}
+                disabled={exporting || shown.length === 0}
+                className="px-3.5 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50"
+                style={{ color: ACCENT }}
+              >
+                {exporting ? 'Preparing…' : '⬇ Download Excel'}
+              </button>
+            </div>
           </div>
 
           {/* filters + sort */}
