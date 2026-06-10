@@ -520,37 +520,35 @@ export function LiveSearch({
                           {p.score}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => void openDraft(p)}
-                          className="text-[12px] font-semibold mr-3 px-2 py-1 rounded-md border border-[#e3def9] hover:bg-[#faf9ff]"
-                          style={{ color: ACCENT }}
-                          title="AI outreach draft"
-                        >
-                          ✦ Draft
-                        </button>
-                        {p.creator_id && (recruited[p.creator_id] ? (
-                          <span className="text-[12px] font-medium text-emerald-600 mr-3">Added ✓</span>
-                        ) : (
-                          <button
-                            onClick={() => void addToShortlist(p)}
-                            disabled={recruiting === p.creator_id}
-                            className="text-[12px] font-semibold mr-3 px-2 py-1 rounded-md border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50"
+                      <td className="px-3 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <IconBtn onClick={() => void openDraft(p)} title="AI outreach draft">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>
+                          </IconBtn>
+                          {p.creator_id && (recruited[p.creator_id] ? (
+                            <span className="w-8 h-8 grid place-items-center rounded-lg text-emerald-600" title="Added to campaign">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10" /></svg>
+                            </span>
+                          ) : (
+                            <IconBtn onClick={() => void addToShortlist(p)} disabled={recruiting === p.creator_id} title="Add to campaign">
+                              {recruiting === p.creator_id ? (
+                                <span className="w-3.5 h-3.5 rounded-full border-2 border-[#ddd] border-t-[#6C4DF6] animate-spin" />
+                              ) : (
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                              )}
+                            </IconBtn>
+                          ))}
+                          <a
+                            href={`https://instagram.com/${p.username}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open on Instagram"
+                            className="w-8 h-8 grid place-items-center rounded-lg border border-[#e3def9] hover:bg-[#faf9ff]"
                             style={{ color: ACCENT }}
-                            title="Add to campaign"
                           >
-                            {recruiting === p.creator_id ? '…' : '+ Add'}
-                          </button>
-                        ))}
-                        <a
-                          href={`https://instagram.com/${p.username}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[13px] font-medium hover:underline"
-                          style={{ color: ACCENT }}
-                        >
-                          View →
-                        </a>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M9 7h8v8" /></svg>
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -601,6 +599,20 @@ export function LiveSearch({
         </div>
       )}
     </div>
+  );
+}
+
+function IconBtn({ children, onClick, title, disabled }: { children: React.ReactNode; onClick: () => void; title: string; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="w-8 h-8 grid place-items-center rounded-lg border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50 transition-colors"
+      style={{ color: ACCENT }}
+    >
+      {children}
+    </button>
   );
 }
 
