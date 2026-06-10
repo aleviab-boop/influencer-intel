@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { BookDemoButton } from './book-demo';
 
 // Scroll-reveal: fades + rises its children in when they enter the viewport.
 export function Reveal({
@@ -191,9 +192,7 @@ export function MarketingNav() {
               <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
             </>
           )}
-          <Link href="/book-demo" className="px-4 py-2 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
-            Book a demo
-          </Link>
+          <BookDemoButton />
         </div>
       </div>
     </header>

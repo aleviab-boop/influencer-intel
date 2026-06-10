@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
 import { useLoggedIn } from '@/components/marketing';
+import { BookDemoButton } from '@/components/book-demo';
 import { buildSuggestions } from '@/lib/suggestions';
 
 // Reelax-style influencer-marketing landing page, themed for Influencer Intel
@@ -180,13 +181,7 @@ function MarketingNav() {
               <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
             </>
           )}
-          <Link
-            href="/book-demo"
-            className="px-4 py-2 rounded-lg text-white text-[14px] font-medium"
-            style={{ background: ACCENT }}
-          >
-            Book a demo
-          </Link>
+          <BookDemoButton />
         </div>
       </div>
     </header>
