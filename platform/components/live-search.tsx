@@ -94,7 +94,19 @@ export function LiveSearch({
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftChannel, setDraftChannel] = useState<'dm' | 'email'>('dm');
   const [copied, setCopied] = useState(false);
+  // bulk selection
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const autoRan = useRef(false);
+
+  function toggleSelect(username: string) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(username)) n.delete(username);
+      else n.add(username);
+      return n;
+    });
+  }
 
   async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm') {
     setDraftFor(p);
@@ -128,36 +140,66 @@ export function LiveSearch({
       .catch(() => {});
   }, []);
 
-  async function addToShortlist(p: LiveProfile) {
-    if (!p.creator_id || recruiting) return;
+  // Resolve the campaign to recruit into — creating one inline if needed.
+  async function ensureProgram(): Promise<string | null> {
     let pid = programId;
     if (pid === '__new__' || !pid) {
       const name = window.prompt('New campaign name');
-      if (!name?.trim()) return;
+      if (!name?.trim()) return null;
       try {
         const d = await fetch('/api/programs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: name.trim(), source_prompt: run?.prompt }),
         }).then((r) => r.json());
-        if (!d.program?.id) return;
+        if (!d.program?.id) return null;
         setPrograms((ps) => [d.program, ...ps]);
         pid = d.program.id;
         setProgramId(pid);
       } catch {
-        return;
+        return null;
       }
     }
+    return pid;
+  }
+
+  async function recruitOne(pid: string, p: LiveProfile) {
+    if (!p.creator_id) return;
+    await fetch(`/api/programs/${pid}/recruits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator_id: p.creator_id, source_prompt: run?.prompt, relevance_score: p.score }),
+    });
+    setRecruited((m) => ({ ...m, [p.creator_id!]: pid }));
+  }
+
+  async function addToShortlist(p: LiveProfile) {
+    if (!p.creator_id || recruiting) return;
+    const pid = await ensureProgram();
+    if (!pid) return;
     setRecruiting(p.creator_id);
     try {
-      await fetch(`/api/programs/${pid}/recruits`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creator_id: p.creator_id, source_prompt: run?.prompt, relevance_score: p.score }),
-      });
-      setRecruited((m) => ({ ...m, [p.creator_id!]: pid }));
+      await recruitOne(pid, p);
     } finally {
       setRecruiting(null);
+    }
+  }
+
+  async function bulkAdd() {
+    const targets = shown.filter(
+      (p) => selected.has(p.username) && p.creator_id && !recruited[p.creator_id],
+    );
+    if (targets.length === 0) return;
+    const pid = await ensureProgram();
+    if (!pid) return;
+    setBulkBusy(true);
+    try {
+      for (const p of targets) {
+        try { await recruitOne(pid, p); } catch { /* skip one, keep going */ }
+      }
+      setSelected(new Set());
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -445,6 +487,22 @@ export function LiveSearch({
             </select>
           </div>
 
+          {/* bulk action bar */}
+          {selected.size > 0 && (
+            <div className="mb-3 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-[#f6f4ff] border border-[#e3def9] text-[13px]">
+              <span className="font-medium text-[#111]">{selected.size} selected</span>
+              <button
+                onClick={() => void bulkAdd()}
+                disabled={bulkBusy}
+                className="px-3 py-1.5 rounded-lg text-white font-semibold disabled:opacity-50"
+                style={{ background: ACCENT }}
+              >
+                {bulkBusy ? 'Adding…' : `Add ${selected.size} to campaign`}
+              </button>
+              <button onClick={() => setSelected(new Set())} className="text-[#666] hover:text-[#111]">Clear</button>
+            </div>
+          )}
+
           {shown.length === 0 ? (
             <div className="px-4 py-10 text-center text-[14px] text-[#888] border border-[#eee] rounded-xl">
               {run.results.length === 0
@@ -456,6 +514,16 @@ export function LiveSearch({
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#faf9ff] text-[12px] uppercase tracking-wider text-[#888]">
+                    <th className="px-3 py-2.5 w-8">
+                      <input
+                        type="checkbox"
+                        className="accent-[#6C4DF6]"
+                        checked={shown.length > 0 && shown.every((p) => selected.has(p.username))}
+                        onChange={(e) =>
+                          setSelected(e.target.checked ? new Set(shown.map((p) => p.username)) : new Set())
+                        }
+                      />
+                    </th>
                     <th className="px-3 py-2.5 font-medium w-10">#</th>
                     <th className="px-3 py-2.5 font-medium">Creator</th>
                     <th className="px-3 py-2.5 font-medium">Category</th>
@@ -467,7 +535,15 @@ export function LiveSearch({
                 </thead>
                 <tbody className="divide-y divide-[#f3f3f3]">
                   {shown.map((p, i) => (
-                    <tr key={p.username} className="hover:bg-[#fafaff]">
+                    <tr key={p.username} className={`hover:bg-[#fafaff] ${selected.has(p.username) ? 'bg-[#faf9ff]' : ''}`}>
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          className="accent-[#6C4DF6]"
+                          checked={selected.has(p.username)}
+                          onChange={() => toggleSelect(p.username)}
+                        />
+                      </td>
                       <td className="px-3 py-3 text-[13px] text-[#aaa] tabular-nums">{i + 1}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-3 min-w-0">
