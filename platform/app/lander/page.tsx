@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
@@ -65,9 +65,16 @@ function FeatureIcon({ name }: { name: string }) {
 
 export default function LanderPage() {
   const params = useSearchParams();
-  const [query, setQuery] = useState<string | null>(params.get('prompt'));
-  const [seed, setSeed] = useState('');
-  const [mode, setMode] = useState<'db' | 'live'>('db');
+  const router = useRouter();
+  // View is driven by the URL so "Home" (→ /lander) always resets to the hero.
+  const query = params.get('prompt');
+  const seed = params.get('seed') ?? '';
+  const mode: 'db' | 'live' = params.get('mode') === 'live' ? 'live' : 'db';
+  const runSearch = (q: string, s: string, m: 'db' | 'live') => {
+    const qs = new URLSearchParams({ prompt: q, mode: m });
+    if (s) qs.set('seed', s);
+    router.push(`/lander?${qs.toString()}`);
+  };
   return (
     <div className="min-h-screen flex flex-col bg-white text-[#111] font-sans">
       <MarketingNav />
@@ -77,7 +84,7 @@ export default function LanderPage() {
           <section className="max-w-5xl mx-auto w-full px-6 py-10 min-h-[80vh]">
             <div className="mb-6">
               <button
-                onClick={() => setQuery(null)}
+                onClick={() => router.push('/lander')}
                 className="text-[13px] text-[#666] hover:text-[#111]"
               >
                 ← Back
@@ -87,7 +94,7 @@ export default function LanderPage() {
           </section>
         ) : (
           <>
-            <Hero onSearch={(q, s, m) => { setSeed(s); setMode(m); setQuery(q); }} />
+            <Hero onSearch={runSearch} />
             <LogoMarquee />
             <Showcase />
             <DatabaseSection />
