@@ -651,8 +651,8 @@ function StatsBand() {
 // their live reels feed in the card. Empty → falls back to the brand logo.
 const CASES = [
   { brand: 'Bajaj', slug: 'bajaj', metric: '3.2x', label: 'engagement uplift', tag: 'Auto', feedId: '25687815' },
-  { brand: 'Wellfa', slug: 'welfa', metric: '120+', label: 'creators activated', tag: 'Wellness', feedId: '' },
-  { brand: 'Triumph', slug: 'triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion', feedId: '' },
+  { brand: 'Wellfa', slug: 'welfa', metric: '120+', label: 'creators activated', tag: 'Wellness', feedId: '25688406' },
+  { brand: 'Triumph', slug: 'triumph', metric: '48hrs', label: 'campaign turnaround', tag: 'Fashion', feedId: '25688415' },
 ];
 
 function SociableKitFeed({ embedId }: { embedId: string }) {
@@ -680,7 +680,7 @@ function CaseStudies() {
           {CASES.map((c) => (
             <div key={c.brand} className="rounded-2xl border border-[#eee] overflow-hidden">
               {c.feedId ? (
-                <div className="bg-white p-1 min-h-[180px]"><SociableKitFeed embedId={c.feedId} /></div>
+                <div className="bg-white p-1 h-[300px] overflow-y-auto overflow-x-hidden"><SociableKitFeed embedId={c.feedId} /></div>
               ) : (
                 <div className="h-36 grid place-items-center bg-white px-8">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
