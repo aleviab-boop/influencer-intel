@@ -224,6 +224,16 @@ export function LiveSearch({
     setActiveIdx(-1);
   }
 
+  // "More like this" — re-seed the search from one creator's network.
+  function findSimilar(p: LiveProfile) {
+    const pr = prompt.trim() || p.category || p.username;
+    setPrompt(pr);
+    setSeedText(p.username);
+    setSelected(new Set());
+    void search({ promptOverride: pr, seedOverride: p.username });
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   // Arriving from the home page with a prompt → run once (seed optional; the
   // server self-seeds from the prompt when no handle/name is given).
   useEffect(() => {
@@ -235,10 +245,10 @@ export function LiveSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search() {
-    const p = prompt.trim();
+  async function search(opts?: { promptOverride?: string; seedOverride?: string }) {
+    const p = (opts?.promptOverride ?? prompt).trim();
     if (p.length < 2) return;
-    const { seeds, names } = parseSeedInput(seedText);
+    const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
 
     setLoading(true);
     setError(null);
@@ -607,6 +617,9 @@ export function LiveSearch({
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <IconBtn onClick={() => findSimilar(p)} title="Find similar creators">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9.5" r="2" /><path d="M16 19a4 4 0 0 1 6-3" /></svg>
+                          </IconBtn>
                           <IconBtn onClick={() => void openDraft(p)} title="AI outreach draft">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>
                           </IconBtn>
