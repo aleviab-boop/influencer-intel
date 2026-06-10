@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 const tierTarget = (f: number): number => (f >= 1e6 ? 1 : f >= 5e5 ? 1.3 : f >= 1e5 ? 1.8 : f >= 5e4 ? 2.5 : f >= 2e4 ? 3.5 : f >= 1e4 ? 4.5 : 6);
@@ -101,9 +101,9 @@ export default function ERCalculator() {
                     <div className="inline-block px-3 py-1 rounded-full text-[13px] font-semibold text-white mb-3" style={{ background: verdict!.c }}>{verdict!.t} for this tier</div>
                     <div className="text-[13px] text-ink-600">Tier benchmark ≈ <span className="font-semibold">{target.toFixed(1)}%</span> — this creator sits at <span className="font-semibold text-ink-900">{(ratio * 100).toFixed(0)}%</span> of it.</div>
                     <div className="mt-4 grid grid-cols-3 gap-2">
-                      <Stat label="Followers" value={kfmt(data.followers)} />
-                      <Stat label="Avg likes" value={data.avg_likes != null ? kfmt(data.avg_likes) : '—'} />
-                      <Stat label="Avg comments" value={data.avg_comments != null ? kfmt(data.avg_comments) : '—'} />
+                      <Stat label="Followers" value={kfmt(data.followers)} delay={0.15} />
+                      <Stat label="Avg likes" value={data.avg_likes != null ? kfmt(data.avg_likes) : '—'} delay={0.25} />
+                      <Stat label="Avg comments" value={data.avg_comments != null ? kfmt(data.avg_comments) : '—'} delay={0.35} />
                     </div>
                   </div>
                 </div>
@@ -162,20 +162,67 @@ export default function ERCalculator() {
   );
 }
 
+function lighten(hex: string, amt = 0.4): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  let r = (n >> 16) & 255;
+  let g = (n >> 8) & 255;
+  let b = n & 255;
+  r = Math.round(r + (255 - r) * amt);
+  g = Math.round(g + (255 - g) * amt);
+  b = Math.round(b + (255 - b) * amt);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+
 function Ring({ value, ratio, color }: { value: number; ratio: number; color: string }) {
-  const r = 52;
+  const r = 54;
   const circ = 2 * Math.PI * r;
-  const off = circ * (1 - clamp(ratio, 0, 1));
+  const target = clamp(ratio, 0, 1);
+  // Animate the fill + number from 0 on mount (easeOutCubic).
+  const [fill, setFill] = useState(0);
+  const [num, setNum] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const start = performance.now();
+    const dur = 1000;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - start) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      setFill(target * e);
+      setNum(value * e);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, value]);
+  const off = circ * (1 - fill);
+  const gid = `ring-${color.replace('#', '')}`;
   return (
-    <div className="relative w-[150px] h-[150px]">
+    <div className="relative w-[164px] h-[164px] shrink-0">
       <svg viewBox="0 0 140 140" className="w-full h-full -rotate-90">
-        <circle cx="70" cy="70" r={r} fill="none" stroke="#eef0f6" strokeWidth="12" />
-        <circle cx="70" cy="70" r={r} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(.22,.61,.36,1)' }} />
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor={color} />
+            <stop offset="1" stopColor={lighten(color)} />
+          </linearGradient>
+        </defs>
+        <circle cx="70" cy="70" r={r} fill="none" stroke="#eef0f6" strokeWidth="13" />
+        <circle
+          cx="70"
+          cy="70"
+          r={r}
+          fill="none"
+          stroke={`url(#${gid})`}
+          strokeWidth="13"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={off}
+          style={{ filter: `drop-shadow(0 0 7px ${color}66)` }}
+        />
       </svg>
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center">
-          <div className="text-4xl font-bold tabular-nums leading-none" style={{ color }}>{value.toFixed(2)}%</div>
-          <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-1">engagement</div>
+          <div className="text-[38px] font-bold tabular-nums leading-none" style={{ color }}>{num.toFixed(2)}%</div>
+          <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-1.5">engagement</div>
         </div>
       </div>
     </div>
@@ -186,9 +233,12 @@ function Gauge14() {
   return (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 18a9 9 0 1 1 17 0" /><path d="M12 18l4.5-5.5" /></svg>);
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, delay = 0 }: { label: string; value: string; delay?: number }) {
   return (
-    <div className="rounded-lg border border-border bg-[#fafafc] px-2 py-2 text-center">
+    <div
+      className="rounded-lg border border-border bg-[#fafafc] px-2 py-2 text-center transition-colors hover:border-[#d9d2f7]"
+      style={{ animation: `ii-countup .5s ${delay}s both` }}
+    >
       <div className="text-[15px] font-bold tabular-nums text-ink-900">{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div>
     </div>
