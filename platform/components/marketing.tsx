@@ -1,7 +1,37 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 export const ACCENT = '#6C4DF6';
 export const ACCENT_SOFT = '#F4F2FF';
+
+// True once a session exists (set on login: ii_role, or creator: creator_handle).
+export function useLoggedIn(): [boolean, () => void] {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const read = () => {
+    try {
+      setLoggedIn(Boolean(localStorage.getItem('ii_role') || localStorage.getItem('creator_handle')));
+    } catch {
+      /* ignore */
+    }
+  };
+  useEffect(() => {
+    read();
+    window.addEventListener('storage', read);
+    return () => window.removeEventListener('storage', read);
+  }, []);
+  const logout = () => {
+    try {
+      localStorage.removeItem('ii_role');
+      localStorage.removeItem('creator_handle');
+    } catch {
+      /* ignore */
+    }
+    setLoggedIn(false);
+  };
+  return [loggedIn, logout];
+}
 
 export const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
@@ -54,6 +84,7 @@ export function FeatureIcon({ name }: { name: string }) {
 }
 
 export function MarketingNav() {
+  const [loggedIn, logout] = useLoggedIn();
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
@@ -105,8 +136,14 @@ export function MarketingNav() {
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
-          <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
-          <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
+          {loggedIn ? (
+            <button onClick={logout} className="text-[14px] text-[#444] hover:text-[#111]">Log out</button>
+          ) : (
+            <>
+              <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
+              <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
+            </>
+          )}
           <Link href="/book-demo" className="px-4 py-2 rounded-lg text-white text-[14px] font-medium" style={{ background: ACCENT }}>
             Book a demo
           </Link>

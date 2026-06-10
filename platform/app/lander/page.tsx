@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
+import { useLoggedIn } from '@/components/marketing';
 import { buildSuggestions } from '@/lib/suggestions';
 
 // Reelax-style influencer-marketing landing page, themed for Influencer Intel
@@ -104,6 +105,7 @@ export default function LanderPage() {
 }
 
 function MarketingNav() {
+  const [loggedIn, logout] = useLoggedIn();
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
@@ -163,8 +165,14 @@ function MarketingNav() {
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
-          <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
-          <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
+          {loggedIn ? (
+            <button onClick={logout} className="text-[14px] text-[#444] hover:text-[#111]">Log out</button>
+          ) : (
+            <>
+              <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
+              <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
+            </>
+          )}
           <Link
             href="/book-demo"
             className="px-4 py-2 rounded-lg text-white text-[14px] font-medium"
