@@ -264,14 +264,15 @@ export function LiveSearch({
     }
   }
 
-  async function downloadExcel() {
+  async function downloadExcel(rows?: LiveProfile[]) {
     if (!run) return;
+    const results = rows && rows.length > 0 ? rows : shown;
     setExporting(true);
     try {
       const r = await fetch('/api/discover-live/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: run.prompt, results: run.results }),
+        body: JSON.stringify({ prompt: run.prompt, results }),
       });
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -498,6 +499,14 @@ export function LiveSearch({
                 style={{ background: ACCENT }}
               >
                 {bulkBusy ? 'Adding…' : `Add ${selected.size} to campaign`}
+              </button>
+              <button
+                onClick={() => void downloadExcel(shown.filter((p) => selected.has(p.username)))}
+                disabled={exporting}
+                className="px-3 py-1.5 rounded-lg font-semibold border border-[#e3def9] hover:bg-white disabled:opacity-50"
+                style={{ color: ACCENT }}
+              >
+                {exporting ? 'Preparing…' : '⬇ Export selected'}
               </button>
               <button onClick={() => setSelected(new Set())} className="text-[#666] hover:text-[#111]">Clear</button>
             </div>
