@@ -688,14 +688,6 @@ function CaseStudies() {
                 </div>
               )}
               <div className="p-5">
-                {c.feedId && (
-                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[#111] mb-2.5">
-                    <span className="w-4 h-4 grid place-items-center rounded text-white shrink-0" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /></svg>
-                    </span>
-                    {c.brand} on Instagram
-                  </div>
-                )}
                 <span className="text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-md" style={{ background: ACCENT_SOFT, color: ACCENT }}>{c.tag}</span>
                 <div className="mt-3 text-3xl font-bold">{c.metric}</div>
                 <div className="text-[13px] text-[#777]">{c.label}</div>
