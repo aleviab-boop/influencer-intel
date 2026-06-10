@@ -1,7 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+
+// Scroll-reveal: fades + rises its children in when they enter the viewport.
+export function Reveal({
+  children,
+  className = '',
+  delay = 0,
+  y = 22,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+  y?: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e?.isIntersecting) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.12 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: shown ? 1 : 0,
+        transform: shown ? 'none' : `translateY(${y}px)`,
+        transition: `opacity .6s ease ${delay}s, transform .6s cubic-bezier(.22,.61,.36,1) ${delay}s`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export const ACCENT = '#6C4DF6';
 export const ACCENT_SOFT = '#F4F2FF';

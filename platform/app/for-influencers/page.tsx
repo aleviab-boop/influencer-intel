@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { CreatorToolkit } from '@/components/creator-toolkit';
 
 export default function ForInfluencersPage() {
@@ -45,17 +45,19 @@ export default function ForInfluencersPage() {
 
         {/* How it works */}
         <section id="how-it-works" className="max-w-5xl mx-auto px-6 py-16 scroll-mt-20">
-          <div className="text-center mb-12">
+          <Reveal className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-ink-900">Start earning in 3 steps</h2>
             <p className="mt-2 text-[15px] text-ink-600">No agencies, no chasing payments — just collaborations that fit you.</p>
-          </div>
+          </Reveal>
           <div className="grid md:grid-cols-3 gap-5">
             {STEPS.map((s, i) => (
-              <div key={s.t} className="relative rounded-2xl bg-white border border-border shadow-card p-6">
-                <div className="w-9 h-9 rounded-xl grid place-items-center text-white font-bold text-[15px] mb-4" style={{ background: ACCENT }}>{i + 1}</div>
-                <div className="font-semibold text-ink-900 text-[16px]">{s.t}</div>
-                <p className="mt-2 text-[13.5px] text-ink-500 leading-relaxed">{s.d}</p>
-              </div>
+              <Reveal key={s.t} delay={i * 0.1}>
+                <div className="relative rounded-2xl bg-white border border-border shadow-card p-6 h-full transition-all hover:-translate-y-1 hover:shadow-[0_14px_40px_rgba(108,77,246,0.12)]">
+                  <div className="w-9 h-9 rounded-xl grid place-items-center text-white font-bold text-[15px] mb-4" style={{ background: ACCENT }}>{i + 1}</div>
+                  <div className="font-semibold text-ink-900 text-[16px]">{s.t}</div>
+                  <p className="mt-2 text-[13.5px] text-ink-500 leading-relaxed">{s.d}</p>
+                </div>
+              </Reveal>
             ))}
           </div>
         </section>
@@ -63,17 +65,19 @@ export default function ForInfluencersPage() {
         {/* Benefits */}
         <section className="bg-[#fafafc] border-y border-border">
           <div className="max-w-6xl mx-auto px-6 py-16">
-            <div className="text-center mb-12">
+            <Reveal className="text-center mb-12">
               <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-ink-900">Why creators choose us</h2>
               <p className="mt-2 text-[15px] text-ink-600">Built to put creators first, not squeeze them.</p>
-            </div>
+            </Reveal>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {BENEFITS.map((b) => (
-                <div key={b.t} className="rounded-2xl bg-white border border-border shadow-card p-5">
-                  <div className="w-10 h-10 rounded-xl grid place-items-center mb-3" style={{ background: ACCENT_SOFT, color: ACCENT }}>{b.icon}</div>
-                  <div className="font-semibold text-ink-900 text-[15px]">{b.t}</div>
-                  <p className="mt-1 text-[13px] text-ink-500 leading-relaxed">{b.d}</p>
-                </div>
+              {BENEFITS.map((b, i) => (
+                <Reveal key={b.t} delay={i * 0.08}>
+                  <div className="rounded-2xl bg-white border border-border shadow-card p-5 h-full transition-all hover:-translate-y-1 hover:shadow-[0_14px_40px_rgba(108,77,246,0.12)]">
+                    <div className="w-10 h-10 rounded-xl grid place-items-center mb-3" style={{ background: ACCENT_SOFT, color: ACCENT }}>{b.icon}</div>
+                    <div className="font-semibold text-ink-900 text-[15px]">{b.t}</div>
+                    <p className="mt-1 text-[13px] text-ink-500 leading-relaxed">{b.d}</p>
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>

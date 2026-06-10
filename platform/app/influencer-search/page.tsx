@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { LiveSearch } from '@/components/live-search';
 
 export default function InfluencerSearchPage() {
@@ -60,14 +60,14 @@ function FeatureRow({ title, body, mock, flip }: { title: string; body: string; 
   return (
     <section className="border-t border-[#f0f0f0]">
       <div className="max-w-6xl mx-auto px-6 py-20 grid lg:grid-cols-2 gap-12 items-center">
-        <div className={flip ? 'lg:order-2' : ''}>
+        <Reveal className={flip ? 'lg:order-2' : ''}>
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-tight">{title}</h2>
           <p className="mt-4 text-[16px] text-[#555] leading-relaxed">{body}</p>
           <Link href="/lander" className="mt-6 inline-flex items-center gap-1 text-[15px] font-medium" style={{ color: ACCENT }}>
             Get Started →
           </Link>
-        </div>
-        <div className={flip ? 'lg:order-1' : ''}>{mock}</div>
+        </Reveal>
+        <Reveal delay={0.12} className={flip ? 'lg:order-1' : ''}>{mock}</Reveal>
       </div>
     </section>
   );

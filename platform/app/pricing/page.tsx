@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 type Billing = 'monthly' | 'annual';
 
@@ -215,18 +215,20 @@ export default function PricingPage() {
         {/* Plan cards */}
         <section className="max-w-6xl mx-auto px-6 pb-8 pt-4">
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5 items-stretch" style={{ perspective: '1200px' }}>
-            {PLANS.map((p) => (
-              <PlanCard key={p.name} plan={p} billing={billing} />
+            {PLANS.map((p, i) => (
+              <Reveal key={p.name} delay={i * 0.08} className="h-full">
+                <PlanCard plan={p} billing={billing} />
+              </Reveal>
             ))}
           </div>
         </section>
 
         {/* Compare all features */}
         <section className="max-w-6xl mx-auto px-6 py-16">
-          <div className="text-center mb-10">
+          <Reveal className="text-center mb-10">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-ink-900">Compare all features</h2>
             <p className="mt-2 text-[15px] text-ink-600">Hover a plan to see exactly what’s included.</p>
-          </div>
+          </Reveal>
 
           <div className="rounded-2xl border border-border overflow-hidden shadow-card" onMouseLeave={() => setHoveredCol(null)}>
             {/* header */}
