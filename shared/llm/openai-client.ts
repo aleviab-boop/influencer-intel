@@ -399,6 +399,32 @@ Propose one content concept.`,
   }
 
   /**
+   * Generate a quick campaign brief from a one-line prompt.
+   */
+  async generateCampaignBrief(prompt: string): Promise<{
+    hook: string;
+    format: string;
+    cta: string;
+    best_window: string;
+  }> {
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are a short-form content strategist for Indian D2C brand campaigns. Given a one-line campaign brief, produce a concrete, production-ready Instagram brief.
+Respond ONLY with JSON:
+{ "hook": "the literal first-3-seconds hook, in quotes", "format": "e.g. 15s reel · trending audio", "cta": "the call to action", "best_window": "best posting window, e.g. Thu 7-9pm" }
+Be specific and punchy. No hype, no filler.`,
+        },
+        { role: 'user', content: `Campaign: ${prompt}\n\nWrite the brief.` },
+      ],
+    });
+    return JSON.parse(res.choices[0]?.message?.content ?? '{}');
+  }
+
+  /**
    * Generate a personalised outreach DM for a creator.
    */
   async generateOutreach(input: {

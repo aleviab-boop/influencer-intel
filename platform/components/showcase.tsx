@@ -440,7 +440,53 @@ function CompetitorMock() {
 
 // ---- mock 4: AI campaign intelligence ----------------------------------
 
+interface Brief { hook: string; format: string; cta: string; best_window: string }
+const DEFAULT_BRIEF: Brief = {
+  hook: '“3 things nobody tells you about festive skin…”',
+  format: '15s reel · trending audio',
+  cta: 'comment “GLOW” for the routine',
+  best_window: 'Thu 7–9pm',
+};
+
 function AIMock() {
+  const router = useRouter();
+  const [prompt, setPrompt] = useState('Festive Diwali reel for a ghee skincare line, metro women 25–34');
+  const [brief, setBrief] = useState<Brief>(DEFAULT_BRIEF);
+  const [loading, setLoading] = useState(false);
+  const [secs, setSecs] = useState('1.2');
+
+  async function generate() {
+    const p = prompt.trim();
+    if (p.length < 4 || loading) return;
+    setLoading(true);
+    const t0 = performance.now();
+    try {
+      const d = await fetch('/api/brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: p }),
+      }).then((r) => r.json());
+      if (d.brief) {
+        setBrief({
+          hook: d.brief.hook || DEFAULT_BRIEF.hook,
+          format: d.brief.format || DEFAULT_BRIEF.format,
+          cta: d.brief.cta || DEFAULT_BRIEF.cta,
+          best_window: d.brief.best_window || DEFAULT_BRIEF.best_window,
+        });
+        setSecs(((performance.now() - t0) / 1000).toFixed(1));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const lines = [
+    `Hook: ${brief.hook}`,
+    `Format: ${brief.format}`,
+    `CTA: ${brief.cta}`,
+    `Best window: ${brief.best_window}`,
+  ];
+
   return (
     <Glass>
       <div className="flex items-center gap-2 mb-3">
@@ -449,19 +495,41 @@ function AIMock() {
       </div>
       <div className="rounded-2xl border border-[#eee] p-3 mb-3 bg-[#faf9ff]">
         <div className="text-[11px] text-[#999] mb-1">Prompt</div>
-        <div className="text-[13px]">Festive Diwali reel for a ghee skincare line, metro women 25–34</div>
+        <div className="flex items-center gap-2">
+          <input
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && generate()}
+            placeholder="Describe your campaign…"
+            className="flex-1 min-w-0 bg-transparent text-[13px] text-[#222] focus:outline-none"
+          />
+          <button
+            onClick={generate}
+            disabled={loading}
+            className="px-2.5 py-1 rounded-lg text-white text-[11px] font-medium shrink-0 disabled:opacity-60 hover:brightness-105"
+            style={{ background: ACCENT }}
+          >
+            {loading ? '…' : 'Generate'}
+          </button>
+        </div>
       </div>
-      <div className="space-y-2">
-        {['Hook: “3 things nobody tells you about festive skin…”', 'Format: 15s reel · trending audio', 'CTA: comment “GLOW” for the routine', 'Best window: Thu 7–9pm'].map((l, i) => (
-          <div key={l} className="flex items-center gap-2 rounded-xl border border-[#eee] bg-white px-3 py-2 text-[12px] ii-countup" style={{ animationDelay: `${0.15 + i * 0.15}s` }}>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
-            {l}
+      <div className={`space-y-2 ${loading ? 'opacity-50' : ''}`}>
+        {lines.map((l, i) => (
+          <div key={i} className="flex items-center gap-2 rounded-xl border border-[#eee] bg-white px-3 py-2 text-[12px] ii-countup" style={{ animationDelay: `${0.05 + i * 0.08}s` }}>
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />
+            <span className="truncate">{l}</span>
           </div>
         ))}
       </div>
       <div className="mt-4 flex items-center justify-between">
-        <span className="text-[11px] text-[#999]">Generated in 1.2s</span>
-        <span className="px-3 py-1.5 rounded-full text-[12px] text-white" style={{ background: ACCENT }}>Use brief →</span>
+        <span className="text-[11px] text-[#999]">{loading ? 'Generating…' : `Generated in ${secs}s`}</span>
+        <button
+          onClick={() => router.push(`/lander?prompt=${encodeURIComponent(prompt.trim())}`)}
+          className="px-3 py-1.5 rounded-full text-[12px] text-white hover:brightness-105"
+          style={{ background: ACCENT }}
+        >
+          Use brief →
+        </button>
       </div>
     </Glass>
   );
