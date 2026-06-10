@@ -17,6 +17,9 @@ interface LiveProfile {
   profile_pic_url: string | null;
   score: number;
   engagement?: number;
+  email?: string | null;
+  phone?: string | null;
+  link?: string | null;
   creator_id?: string;
   from?: 'db' | 'live';
 }
@@ -460,6 +463,19 @@ export function LiveSearch({
                             <div className="text-[12px] text-[#999] truncate max-w-[260px]">
                               {p.full_name || '—'}
                             </div>
+                            {(p.email || p.phone || p.link) && (
+                              <div className="mt-1 flex items-center gap-2 text-[11px]">
+                                {p.email && (
+                                  <a href={`mailto:${p.email}`} className="inline-flex items-center gap-1 text-[#10b981] hover:underline truncate max-w-[150px]" title={p.email}>✉ {p.email}</a>
+                                )}
+                                {p.phone && (
+                                  <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 text-[#0ea5e9] hover:underline" title={p.phone}>📞 {p.phone}</a>
+                                )}
+                                {p.link && (
+                                  <a href={p.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#888] hover:underline" title={p.link}>🔗 link</a>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>

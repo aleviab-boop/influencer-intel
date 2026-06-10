@@ -53,6 +53,9 @@ export interface LiveProfile {
   profile_pic_url: string | null;
   score: number;
   engagement: number; // engagement rate %, 0 if unknown
+  email?: string | null;
+  phone?: string | null;
+  link?: string | null;
   creator_id?: string; // creators.id, once known (DB rows + persisted live rows)
   from?: 'db' | 'live';
 }
@@ -95,6 +98,9 @@ interface RawUser {
   is_private?: boolean;
   is_verified?: boolean;
   profile_pic_url?: string;
+  external_url?: string | null;
+  business_email?: string | null;
+  public_email?: string | null;
   edge_followed_by?: { count?: number };
   edge_related_profiles?: { edges?: Array<{ node?: { username?: string } }> };
   edge_owner_to_timeline_media?: {
@@ -324,8 +330,28 @@ export async function resolveTopicToSeeds(
   return matches.sort((a, b) => b.followers - a.followers);
 }
 
+const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const PHONE_RE = /(?:\+?91[\s-]?)?[6-9]\d{9}/;
+
+// Pull contact details for outreach: an email (from the business/public email
+// field or the bio text), an Indian phone number from the bio, and the bio link.
+export function extractContact(
+  bio: string | null | undefined,
+  opts: { businessEmail?: string | null; publicEmail?: string | null; externalUrl?: string | null } = {},
+): { email: string | null; phone: string | null; link: string | null } {
+  const b = bio ?? '';
+  const email = opts.businessEmail || opts.publicEmail || b.match(EMAIL_RE)?.[0] || null;
+  const phone = b.match(PHONE_RE)?.[0]?.replace(/[\s-]/g, '') ?? null;
+  return { email, phone, link: opts.externalUrl || null };
+}
+
 function summarize(user: RawUser, tokens: string[]): LiveProfile {
   const followers = user.edge_followed_by?.count ?? 0;
+  const contact = extractContact(user.biography, {
+    businessEmail: user.business_email,
+    publicEmail: user.public_email,
+    externalUrl: user.external_url,
+  });
   const prof: Omit<LiveProfile, 'score'> = {
     username: user.username ?? '',
     full_name: user.full_name ?? '',
@@ -336,6 +362,9 @@ function summarize(user: RawUser, tokens: string[]): LiveProfile {
     is_verified: Boolean(user.is_verified),
     profile_pic_url: user.profile_pic_url ?? null,
     engagement: engagementRate(user, followers),
+    email: contact.email,
+    phone: contact.phone,
+    link: contact.link,
   };
   return { ...prof, score: scoreProfile(prof, tokens) };
 }

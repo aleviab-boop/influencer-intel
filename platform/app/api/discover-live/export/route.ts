@@ -25,7 +25,9 @@ export async function POST(req: NextRequest) {
     { header: 'Category', key: 'category', width: 20 },
     { header: 'Score', key: 'score', width: 7 },
     { header: 'Verified', key: 'is_verified', width: 9 },
-    { header: 'Private', key: 'is_private', width: 8 },
+    { header: 'Email', key: 'email', width: 26 },
+    { header: 'Phone', key: 'phone', width: 16 },
+    { header: 'Link', key: 'link', width: 30 },
     { header: 'Bio', key: 'biography', width: 40 },
     { header: 'URL', key: 'url', width: 36 },
   ];
@@ -43,7 +45,9 @@ export async function POST(req: NextRequest) {
       category: p.category,
       score: p.score,
       is_verified: p.is_verified ? 'yes' : 'no',
-      is_private: p.is_private ? 'yes' : 'no',
+      email: p.email ?? '',
+      phone: p.phone ?? '',
+      link: p.link ?? '',
       biography: p.biography,
       url: `https://instagram.com/${p.username}`,
     });

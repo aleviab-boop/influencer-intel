@@ -4,7 +4,7 @@
 // creator's searchable text fields; the score is how many tokens matched.
 
 import { getBolticClient } from '@influencer-intel/shared/db';
-import type { LiveProfile } from './live-discovery';
+import { extractContact, type LiveProfile } from './live-discovery';
 
 // Concatenated, lower-cased searchable text for a creator row.
 const SEARCH_TEXT = `lower(
@@ -57,7 +57,9 @@ export async function searchCreatorsInDb(
 
   // pg returns BIGINT/computed columns as strings — coerce before use.
   return rows
-    .map((r) => ({
+    .map((r) => {
+      const contact = extractContact(r.bio);
+      return {
       username: r.handle,
       full_name: r.display_name ?? '',
       biography: r.bio ?? '',
@@ -69,8 +71,12 @@ export async function searchCreatorsInDb(
       score: Number(r.score),
       // engagement_rate is stored as a ratio (0.04) → show as 4.0%
       engagement: r.engagement_rate != null ? Math.round(Number(r.engagement_rate) * 1000) / 10 : 0,
+      email: contact.email,
+      phone: contact.phone,
+      link: contact.link,
       creator_id: r.id,
       from: 'db' as const,
-    }))
+      };
+    })
     .filter((p) => p.username && p.score > 0);
 }
