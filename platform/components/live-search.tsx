@@ -88,7 +88,33 @@ export function LiveSearch({
   const [programId, setProgramId] = useState('');
   const [recruited, setRecruited] = useState<Record<string, string>>({});
   const [recruiting, setRecruiting] = useState<string | null>(null);
+  // outreach draft modal
+  const [draftFor, setDraftFor] = useState<LiveProfile | null>(null);
+  const [draftText, setDraftText] = useState('');
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftChannel, setDraftChannel] = useState<'dm' | 'email'>('dm');
+  const [copied, setCopied] = useState(false);
   const autoRan = useRef(false);
+
+  async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm') {
+    setDraftFor(p);
+    setDraftChannel(channel);
+    setDraftText('');
+    setCopied(false);
+    setDraftLoading(true);
+    try {
+      const d = await fetch('/api/discover-live/outreach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel }),
+      }).then((r) => r.json());
+      setDraftText(d.message ?? d.error ?? 'Could not generate a message.');
+    } catch (err) {
+      setDraftText((err as Error).message);
+    } finally {
+      setDraftLoading(false);
+    }
+  }
 
   useEffect(() => {
     fetch('/api/programs')
@@ -495,6 +521,14 @@ export function LiveSearch({
                         </span>
                       </td>
                       <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => void openDraft(p)}
+                          className="text-[12px] font-semibold mr-3 px-2 py-1 rounded-md border border-[#e3def9] hover:bg-[#faf9ff]"
+                          style={{ color: ACCENT }}
+                          title="AI outreach draft"
+                        >
+                          ✦ Draft
+                        </button>
                         {p.creator_id && (recruited[p.creator_id] ? (
                           <span className="text-[12px] font-medium text-emerald-600 mr-3">Added ✓</span>
                         ) : (
@@ -524,6 +558,46 @@ export function LiveSearch({
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI outreach draft modal */}
+      {draftFor && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 px-4" onClick={() => setDraftFor(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#eee] p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[15px] font-semibold text-[#111]">Outreach to @{draftFor.username}</div>
+              <button onClick={() => setDraftFor(null)} className="text-[#999] hover:text-[#111] text-lg leading-none">×</button>
+            </div>
+            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f4f6] mb-3 text-[13px]">
+              {(['dm', 'email'] as const).map((ch) => (
+                <button
+                  key={ch}
+                  onClick={() => void openDraft(draftFor, ch)}
+                  className={`px-3 py-1 rounded-md capitalize transition-colors ${draftChannel === ch ? 'bg-white shadow-sm font-medium text-[#111]' : 'text-[#888]'}`}
+                >
+                  {ch === 'dm' ? 'Instagram DM' : 'Email'}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={draftLoading ? 'Drafting…' : draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              readOnly={draftLoading}
+              rows={7}
+              className="w-full text-[14px] text-[#222] rounded-xl border border-[#e3def9] p-3 focus:outline-none focus:border-[#6C4DF6] resize-none"
+            />
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <button
+                onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); }}
+                disabled={draftLoading || !draftText}
+                className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50"
+                style={{ background: ACCENT }}
+              >
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
