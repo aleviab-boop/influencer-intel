@@ -17,7 +17,13 @@ interface LiveProfile {
   profile_pic_url: string | null;
   score: number;
   engagement?: number;
+  creator_id?: string;
   from?: 'db' | 'live';
+}
+
+interface Program {
+  id: string;
+  name: string;
 }
 
 interface RunResponse {
@@ -74,7 +80,57 @@ export function LiveSearch({
   const [minFollowers, setMinFollowers] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers' | 'engagement'>('relevance');
+  // shortlist / recruit
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programId, setProgramId] = useState('');
+  const [recruited, setRecruited] = useState<Record<string, string>>({});
+  const [recruiting, setRecruiting] = useState<string | null>(null);
   const autoRan = useRef(false);
+
+  useEffect(() => {
+    fetch('/api/programs')
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.programs)) {
+          setPrograms(d.programs);
+          setProgramId((cur) => cur || d.programs[0]?.id || '');
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function addToShortlist(p: LiveProfile) {
+    if (!p.creator_id || recruiting) return;
+    let pid = programId;
+    if (pid === '__new__' || !pid) {
+      const name = window.prompt('New campaign name');
+      if (!name?.trim()) return;
+      try {
+        const d = await fetch('/api/programs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), source_prompt: run?.prompt }),
+        }).then((r) => r.json());
+        if (!d.program?.id) return;
+        setPrograms((ps) => [d.program, ...ps]);
+        pid = d.program.id;
+        setProgramId(pid);
+      } catch {
+        return;
+      }
+    }
+    setRecruiting(p.creator_id);
+    try {
+      await fetch(`/api/programs/${pid}/recruits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creator_id: p.creator_id, source_prompt: run?.prompt, relevance_score: p.score }),
+      });
+      setRecruited((m) => ({ ...m, [p.creator_id!]: pid }));
+    } finally {
+      setRecruiting(null);
+    }
+  }
 
   const suggestions = buildSuggestions(prompt);
   const sugOpen = showSug && suggestions.length > 0;
@@ -345,6 +401,19 @@ export function LiveSearch({
               <option value="followers">Followers</option>
               <option value="engagement">Engagement</option>
             </select>
+            <span className="text-[#999]">·</span>
+            <span className="text-[#999]">Add to</span>
+            <select
+              value={programId}
+              onChange={(e) => setProgramId(e.target.value)}
+              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6] max-w-[160px]"
+            >
+              {programs.length === 0 && <option value="">No campaigns yet</option>}
+              {programs.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+              <option value="__new__">＋ New campaign…</option>
+            </select>
           </div>
 
           {shown.length === 0 ? (
@@ -409,7 +478,20 @@ export function LiveSearch({
                           {p.score}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
+                        {p.creator_id && (recruited[p.creator_id] ? (
+                          <span className="text-[12px] font-medium text-emerald-600 mr-3">Added ✓</span>
+                        ) : (
+                          <button
+                            onClick={() => void addToShortlist(p)}
+                            disabled={recruiting === p.creator_id}
+                            className="text-[12px] font-semibold mr-3 px-2 py-1 rounded-md border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50"
+                            style={{ color: ACCENT }}
+                            title="Add to campaign"
+                          >
+                            {recruiting === p.creator_id ? '…' : '+ Add'}
+                          </button>
+                        ))}
                         <a
                           href={`https://instagram.com/${p.username}`}
                           target="_blank"

@@ -15,6 +15,7 @@ const SEARCH_TEXT = `lower(
 )`;
 
 interface Row {
+  id: string;
   handle: string;
   display_name: string | null;
   bio: string | null;
@@ -39,7 +40,7 @@ export async function searchCreatorsInDb(
   const whereAny = tokens.map((_, i) => `${SEARCH_TEXT} like $${i + 1}`).join(' or ');
 
   const sql = `
-    select handle, display_name, bio, primary_category, follower_count,
+    select id, handle, display_name, bio, primary_category, follower_count,
            engagement_rate, is_verified, profile_photo_url, (${scoreExpr}) as score
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
@@ -68,6 +69,7 @@ export async function searchCreatorsInDb(
       score: Number(r.score),
       // engagement_rate is stored as a ratio (0.04) → show as 4.0%
       engagement: r.engagement_rate != null ? Math.round(Number(r.engagement_rate) * 1000) / 10 : 0,
+      creator_id: r.id,
       from: 'db' as const,
     }))
     .filter((p) => p.username && p.score > 0);

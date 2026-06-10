@@ -124,7 +124,7 @@ async function persist(results: LiveProfile[]): Promise<number> {
     const db = getBolticClient();
     for (const p of results) {
       try {
-        await db.upsert(
+        const row = await db.upsert<{ id: string }>(
           'creators',
           {
             platform: 'instagram',
@@ -136,6 +136,8 @@ async function persist(results: LiveProfile[]): Promise<number> {
             profile_photo_url: p.profile_pic_url,
             is_verified: p.is_verified,
             follower_count: p.followers || null,
+            // store the freshly computed engagement (as a ratio) when we have it
+            ...(p.engagement > 0 ? { engagement_rate: p.engagement / 100 } : {}),
             source: 'scrape',
             data_tier: 'tier_c',
             is_active: true,
@@ -143,6 +145,7 @@ async function persist(results: LiveProfile[]): Promise<number> {
           },
           ['platform', 'handle'],
         );
+        if (row?.id) p.creator_id = row.id; // so the client can recruit it
         ok++;
       } catch {
         /* skip a single bad row, keep going */

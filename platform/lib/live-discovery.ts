@@ -53,6 +53,7 @@ export interface LiveProfile {
   profile_pic_url: string | null;
   score: number;
   engagement: number; // engagement rate %, 0 if unknown
+  creator_id?: string; // creators.id, once known (DB rows + persisted live rows)
   from?: 'db' | 'live';
 }
 
