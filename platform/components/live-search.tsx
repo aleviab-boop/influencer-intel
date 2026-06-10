@@ -98,7 +98,7 @@ export function LiveSearch({
   const [minFollowers, setMinFollowers] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [healthyOnly, setHealthyOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'relevance' | 'followers' | 'engagement'>('relevance');
+  const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement'>('relevance');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState('');
@@ -259,7 +259,8 @@ export function LiveSearch({
         (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low'),
     );
     const sorted = [...filtered];
-    if (sortBy === 'followers') sorted.sort((a, b) => b.followers - a.followers);
+    if (sortBy === 'followers_desc') sorted.sort((a, b) => b.followers - a.followers);
+    else if (sortBy === 'followers_asc') sorted.sort((a, b) => a.followers - b.followers);
     else if (sortBy === 'engagement') sorted.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
     // 'relevance' keeps the server order (score, then followers)
     return sorted;
@@ -580,7 +581,8 @@ export function LiveSearch({
               className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
             >
               <option value="relevance">Relevance</option>
-              <option value="followers">Followers</option>
+              <option value="followers_desc">Followers: high → low</option>
+              <option value="followers_asc">Followers: low → high</option>
               <option value="engagement">Engagement</option>
             </select>
             <span className="text-[#999]">·</span>
