@@ -6,6 +6,7 @@ import {
   resolveTopicToSeeds,
   tokenize,
   classifyPrompt,
+  inferNiche,
   type LiveProfile,
 } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
@@ -98,7 +99,13 @@ export async function POST(req: NextRequest) {
     .sort((a, b) => b.score - a.score || b.followers - a.followers)
     .slice(0, max);
 
-  const persisted = await persist(liveProfiles, classifyPrompt(prompt));
+  // Tag saved creators with the search's region/niche. When the prompt has no
+  // niche (e.g. a bare seed handle), infer it from the crawled network so a
+  // search for one fashion creator still tags the whole network as "fashion".
+  const cls = classifyPrompt(prompt);
+  const niche = cls.niche ?? inferNiche(liveProfiles.length ? liveProfiles : dbMatches);
+  const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
+  const persisted = await persist(liveProfiles, { region: cls.region, niche, tags });
 
   return NextResponse.json({
     prompt,

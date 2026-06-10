@@ -271,6 +271,28 @@ export function classifyPrompt(prompt: string): { region: string | null; niche: 
   return { region, niche, tags: toks };
 }
 
+// Infer the dominant niche across a set of crawled profiles by scanning their
+// category + bio for niche keywords. Lets a seed-only search (e.g. one fashion
+// creator) tag its whole network as "fashion" even when the prompt has no niche.
+export function inferNiche(profiles: Array<{ category?: string; biography?: string }>): string | null {
+  const counts = new Map<string, number>();
+  for (const p of profiles) {
+    const text = `${p.category ?? ''} ${p.biography ?? ''}`.toLowerCase();
+    for (const [root, syns] of Object.entries(NICHE_SYNONYMS)) {
+      if (root === 'beautyblogger') continue; // alias, skip
+      if (text.includes(root) || syns.some((s) => text.includes(s))) {
+        counts.set(root, (counts.get(root) ?? 0) + 1);
+      }
+    }
+  }
+  let best: string | null = null;
+  let max = 0;
+  for (const [k, v] of counts) {
+    if (v > max) { max = v; best = k; }
+  }
+  return best;
+}
+
 export function topicHandleCandidates(prompt: string): string[] {
   const toks = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t));
   if (toks.length === 0) return [];
