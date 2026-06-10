@@ -531,15 +531,6 @@ export function LiveSearch({
               <span className="font-semibold text-[#111]">{shown.length}</span>
               {shown.length !== run.results.length && <span className="text-[#999]">/{run.results.length}</span>} profiles for{' '}
               <span className="font-medium text-[#111]">“{run.prompt}”</span>
-              {(run.from_live ?? 0) > 0 && (
-                <span className="ml-2 text-[#999]">· {run.from_live} live</span>
-              )}
-              {(run.from_db ?? 0) > 0 && (
-                <span className="ml-2 text-[#999]">· {run.from_db} from DB</span>
-              )}
-              {run.persisted > 0 && (
-                <span className="ml-2 text-[#999]">· {run.persisted} saved</span>
-              )}
             </div>
             <div className="flex items-center gap-2">
               <button
