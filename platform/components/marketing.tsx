@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 // Scroll-reveal: fades + rises its children in when they enter the viewport.
@@ -52,6 +53,7 @@ export const ACCENT_SOFT = '#F4F2FF';
 
 // True once a session exists (set on login: ii_role, or creator: creator_handle).
 export function useLoggedIn(): [boolean, () => void] {
+  const router = useRouter();
   const [loggedIn, setLoggedIn] = useState(false);
   const read = () => {
     try {
@@ -73,6 +75,7 @@ export function useLoggedIn(): [boolean, () => void] {
       /* ignore */
     }
     setLoggedIn(false);
+    router.replace('/login'); // back to the sign-in (creator / agency) page
   };
   return [loggedIn, logout];
 }
