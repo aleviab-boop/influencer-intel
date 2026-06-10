@@ -36,6 +36,34 @@ export async function POST(req: NextRequest) {
   const depth = clampInt(body?.depth, 1, 3, 2);
   const max = clampInt(body?.max, 5, 80, 40);
   const tokens = tokenize(prompt);
+  const mode = body?.mode === 'db' ? 'db' : 'live';
+
+  // mode 'db' → search only the existing creators database (no live crawl).
+  if (mode === 'db') {
+    const dbMatches = await searchCreatorsInDb(tokens, max);
+    if (dbMatches.length === 0) {
+      return NextResponse.json(
+        {
+          error: 'no_db',
+          message: 'Nothing in your database for that yet — try "Search Instagram" from a creator username below.',
+        },
+        { status: 422 },
+      );
+    }
+    const results = dbMatches
+      .sort((a, b) => b.score - a.score || b.followers - a.followers)
+      .slice(0, max);
+    return NextResponse.json({
+      prompt,
+      tokens,
+      results,
+      from_db: results.length,
+      from_live: 0,
+      persisted: 0,
+      resolved_from_names: [],
+      auto_seeds: [],
+    });
+  }
 
   // 1. Live-first: Instagram is the primary search. Resolve seeds (explicit
   //    handles, names, or auto-derived from the prompt) and crawl live.
@@ -95,8 +123,15 @@ export async function POST(req: NextRequest) {
       byUser.set(key, p);
     }
   }
+  // Live mode = "search Instagram" from a username: lead with the crawled
+  // network so the searched creator surfaces, then the database fills below.
   const results = Array.from(byUser.values())
-    .sort((a, b) => b.score - a.score || b.followers - a.followers)
+    .sort((a, b) => {
+      const al = a.from === 'live' ? 0 : 1;
+      const bl = b.from === 'live' ? 0 : 1;
+      if (al !== bl) return al - bl;
+      return b.score - a.score || b.followers - a.followers;
+    })
     .slice(0, max);
 
   // Tag saved creators with the search's region/niche. When the prompt has no

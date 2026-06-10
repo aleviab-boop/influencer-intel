@@ -79,9 +79,11 @@ function parseSeedInput(raw: string): { seeds: string[]; names: string[] } {
 export function LiveSearch({
   initialPrompt = '',
   initialSeed = '',
+  initialMode = 'live',
 }: {
   initialPrompt?: string;
   initialSeed?: string;
+  initialMode?: 'db' | 'live';
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [seedText, setSeedText] = useState(initialSeed);
@@ -269,6 +271,13 @@ export function LiveSearch({
     setActiveIdx(-1);
   }
 
+  // One search: a username crawls Instagram live; otherwise search the database.
+  function runSearch() {
+    const u = seedText.trim();
+    if (u.length >= 2) void search({ promptOverride: prompt.trim() || u, seedOverride: seedText, mode: 'live' });
+    else void search({ seedOverride: '', mode: 'db' });
+  }
+
   // "More like this" — re-seed the search from one creator's network.
   function findSimilar(p: LiveProfile) {
     const pr = prompt.trim() || p.category || p.username;
@@ -285,15 +294,16 @@ export function LiveSearch({
     if (autoRan.current) return;
     if (initialPrompt.trim().length >= 2) {
       autoRan.current = true;
-      void search();
+      void search({ mode: initialMode, seedOverride: initialMode === 'db' ? '' : undefined });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search(opts?: { promptOverride?: string; seedOverride?: string }) {
+  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' }) {
     const p = (opts?.promptOverride ?? prompt).trim();
     if (p.length < 2) return;
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
+    const mode = opts?.mode ?? 'live';
 
     setLoading(true);
     setError(null);
@@ -302,7 +312,7 @@ export function LiveSearch({
       const r = await fetch('/api/discover-live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p, seeds, names }),
+        body: JSON.stringify({ prompt: p, seeds, names, mode }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -347,74 +357,93 @@ export function LiveSearch({
     <div className="w-full">
       {/* search box */}
       <div className="rounded-2xl bg-white border-2 border-[#e3def9] p-4 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] transition-colors">
-        <div className="relative">
-          <textarea
-            value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              setShowSug(true);
-              setActiveIdx(-1);
-            }}
-            onFocus={() => setShowSug(true)}
-            onBlur={() => setTimeout(() => setShowSug(false), 120)}
-            onKeyDown={(e) => {
-              if (sugOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-                e.preventDefault();
-                setActiveIdx((i) => {
-                  const n = suggestions.length;
-                  return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n;
-                });
-                return;
-              }
-              if (e.key === 'Escape') {
-                setShowSug(false);
-                return;
-              }
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (sugOpen && activeIdx >= 0) pickSuggestion(suggestions[activeIdx]!);
-                else void search();
-              }
-            }}
-            rows={2}
-            placeholder="Describe who you're looking for — e.g. nagpur fashion creators"
-            className="w-full resize-none text-[16px] text-[#222] placeholder-[#9aa] focus:outline-none bg-transparent"
-          />
-          {sugOpen && (
-            <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-              {suggestions.map((s, i) => (
-                <button
-                  key={s}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => setActiveIdx(i)}
-                  onClick={() => pickSuggestion(s)}
-                  className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-[15px] transition-colors ${
-                    i === activeIdx ? 'bg-[#f6f4ff]' : 'hover:bg-[#faf9ff]'
-                  }`}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                  <span className="text-[#333]">{s}</span>
-                </button>
-              ))}
-            </div>
-          )}
+        {/* prompt + database-search magnifier (above the line) */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <textarea
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                setShowSug(true);
+                setActiveIdx(-1);
+              }}
+              onFocus={() => setShowSug(true)}
+              onBlur={() => setTimeout(() => setShowSug(false), 120)}
+              onKeyDown={(e) => {
+                if (sugOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                  e.preventDefault();
+                  setActiveIdx((i) => {
+                    const n = suggestions.length;
+                    return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n;
+                  });
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  setShowSug(false);
+                  return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (sugOpen && activeIdx >= 0) pickSuggestion(suggestions[activeIdx]!);
+                  else runSearch();
+                }
+              }}
+              rows={1}
+              placeholder="Describe who you're looking for — e.g. nagpur fashion creators"
+              className="w-full resize-none text-[16px] text-[#222] placeholder-[#9aa] focus:outline-none bg-transparent"
+            />
+            {sugOpen && (
+              <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActiveIdx(i)}
+                    onClick={() => pickSuggestion(s)}
+                    className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-[15px] transition-colors ${
+                      i === activeIdx ? 'bg-[#f6f4ff]' : 'hover:bg-[#faf9ff]'
+                    }`}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                    <span className="text-[#333]">{s}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+
+        {/* one search: username → Instagram crawl, else database */}
+        <div className="mt-3 flex items-center gap-2 border-t border-[#f0eefc] pt-3">
+          <span className="text-[#9b7bff] shrink-0" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" /></svg>
+          </span>
           <input
             value={seedText}
             onChange={(e) => setSeedText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), void search())}
-            placeholder="Optional — leave blank to auto-find, or start from a name / @handle"
-            className="flex-1 px-3 py-2 rounded-lg border border-[#e3def9] text-[14px] focus:outline-none focus:border-[#6C4DF6]"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                runSearch();
+              }
+            }}
+            placeholder="Optional — add a @username to crawl Instagram, or leave blank to search your database"
+            className="flex-1 min-w-0 text-[14px] text-[#222] placeholder-[#aaa] focus:outline-none bg-transparent"
           />
           <button
-            onClick={() => void search()}
+            onClick={runSearch}
             disabled={loading || prompt.trim().length < 2}
-            className="px-5 py-2.5 rounded-lg text-white text-[14px] font-medium disabled:opacity-50 shrink-0"
-            style={{ background: ACCENT }}
+            aria-label="Search"
+            title="Search"
+            className="w-12 h-12 rounded-full grid place-items-center text-white shadow-md shrink-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:brightness-105 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-md"
+            style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
           >
-            {loading ? 'Searching…' : 'Search Instagram'}
+            {loading ? (
+              <span className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            )}
           </button>
         </div>
       </div>

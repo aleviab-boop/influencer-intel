@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useRouter } from 'next/navigation';
 import { ACCENT, ACCENT_SOFT } from './marketing';
 
 interface Item {
@@ -129,58 +130,169 @@ function bar(w: string, delay = 0, grad = `linear-gradient(90deg, ${ACCENT}, #9b
 
 // ---- mock 1: database ---------------------------------------------------
 
-// Pins at approximate Indian city positions, in the accurate map's coordinate
-// space (viewBox 0 0 612 696 — matches /public/india.svg).
-const PINS: { x: number; y: number; label?: string }[] = [
-  { x: 250, y: 215, label: 'Delhi' },
-  { x: 178, y: 432, label: 'Mumbai' },
-  { x: 258, y: 548, label: 'Bengaluru' },
-  { x: 282, y: 472, label: 'Hyderabad' },
-  { x: 305, y: 548, label: 'Chennai' },
-  { x: 418, y: 352, label: 'Kolkata' },
-  { x: 212, y: 248 },
-  { x: 166, y: 352 },
-  { x: 198, y: 458 },
-  { x: 202, y: 512 },
-  { x: 312, y: 278 },
+// Each region's dominant creator genre + its top creators. Positions are in the
+// accurate map's coordinate space (viewBox 0 0 612 696 — matches india.svg).
+interface Region {
+  x: number;
+  y: number;
+  city: string;
+  genre: string;
+  color: string;
+  creators: { name: string; handle: string; followers: string }[];
+}
+const REGIONS: Region[] = [
+  { x: 250, y: 215, city: 'Delhi', genre: 'Tech', color: '#6C4DF6', creators: [
+    { name: 'Technical Guruji', handle: 'technicalguruji', followers: '24.6M' },
+    { name: 'Trakin Tech', handle: 'trakintech', followers: '8.9M' },
+    { name: 'Geekyranjit', handle: 'geekyranjit', followers: '2.1M' },
+  ] },
+  { x: 178, y: 432, city: 'Mumbai', genre: 'Fashion', color: '#ec4899', creators: [
+    { name: 'Komal Pandey', handle: 'komalpandeyofficial', followers: '2.0M' },
+    { name: 'Masoom Minawala', handle: 'masoomminawala', followers: '1.4M' },
+    { name: 'Aashna Shroff', handle: 'aashnashroff', followers: '1.1M' },
+  ] },
+  { x: 258, y: 548, city: 'Bengaluru', genre: 'Food', color: '#10b981', creators: [
+    { name: 'Bangalore Foodie', handle: 'bangalore_foodie', followers: '640K' },
+    { name: 'Namma Food Diaries', handle: 'nammafooddiaries', followers: '410K' },
+    { name: 'Eat With Me', handle: 'eatwithme.blr', followers: '280K' },
+  ] },
+  { x: 282, y: 472, city: 'Hyderabad', genre: 'Comedy', color: '#f59e0b', creators: [
+    { name: 'Viva Harsha', handle: 'viva_harsha', followers: '1.3M' },
+    { name: 'Hyderabad Diaries', handle: 'hyderabad.diaries', followers: '720K' },
+    { name: 'Chai Bisket', handle: 'chaibisket', followers: '560K' },
+  ] },
+  { x: 305, y: 548, city: 'Chennai', genre: 'Cinema', color: '#ef4444', creators: [
+    { name: 'Madras Central', handle: 'madras.central', followers: '980K' },
+    { name: 'Put Chutney', handle: 'putchutney', followers: '610K' },
+    { name: 'Smile Settai', handle: 'smilesettai', followers: '430K' },
+  ] },
+  { x: 418, y: 352, city: 'Kolkata', genre: 'Art', color: '#0ea5e9', creators: [
+    { name: 'The Bong Guy', handle: 'thebongguy', followers: '1.2M' },
+    { name: 'Kolkata Canvas', handle: 'kolkata_canvas', followers: '340K' },
+    { name: 'Bong Brushstrokes', handle: 'bong.brushstrokes', followers: '190K' },
+  ] },
+  { x: 212, y: 248, city: 'Jaipur', genre: 'Travel', color: '#8b5cf6', creators: [
+    { name: 'Jaipur Diaries', handle: 'jaipur_diaries', followers: '870K' },
+    { name: 'Rajasthan Tales', handle: 'rajasthan.tales', followers: '520K' },
+    { name: 'Pink City Walks', handle: 'pinkcitywalks', followers: '230K' },
+  ] },
+  { x: 198, y: 458, city: 'Pune', genre: 'Fitness', color: '#14b8a6', creators: [
+    { name: 'Pune Fitness', handle: 'pune.fitness', followers: '410K' },
+    { name: 'Fit With Sai', handle: 'fitwithsai', followers: '260K' },
+    { name: 'Strong Pune', handle: 'strong.pune', followers: '150K' },
+  ] },
 ];
 
-// Vibrant per-pin colours so the map dots pop.
-const PIN_COLORS = ['#6C4DF6', '#ec4899', '#f59e0b', '#10b981', '#0ea5e9', '#ef4444', '#8b5cf6', '#14b8a6'];
+function CreatorAvatar({ handle, name, color }: { handle: string; name: string; color: string }) {
+  const [err, setErr] = useState(false);
+  if (!err) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return (
+      <img
+        src={`/api/ig-avatar?handle=${encodeURIComponent(handle)}`}
+        alt={name}
+        onError={() => setErr(true)}
+        className="w-6 h-6 rounded-full object-cover shrink-0 bg-[#eee]"
+      />
+    );
+  }
+  return (
+    <span className="w-6 h-6 rounded-full grid place-items-center text-white text-[10px] font-semibold shrink-0" style={{ background: color }}>
+      {name.charAt(0)}
+    </span>
+  );
+}
 
 function IndiaMap() {
+  const [hover, setHover] = useState<number | null>(null);
   return (
     <div className="relative w-full grid place-items-center">
-      <div className="relative w-full max-w-[270px]">
+      <div className="relative w-full max-w-[300px]">
         {/* accurate India map (states), recoloured to the violet theme */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/india.svg" alt="Map of India" className="w-full h-auto select-none" draggable={false} />
         {/* animated creator pins, same viewBox so coordinates align */}
         <svg viewBox="0 0 612 696" className="absolute inset-0 w-full h-full pointer-events-none">
-          {PINS.map((p, i) => {
-            const c = PIN_COLORS[i % PIN_COLORS.length]!;
+          {REGIONS.map((r, i) => {
+            const on = hover === i;
             return (
-              <g key={i}>
-                <circle cx={p.x} cy={p.y} r="22" fill={c} opacity="0.18" className="ii-pulse" style={{ transformBox: 'fill-box', transformOrigin: 'center', animationDelay: `${i * 0.22}s` } as CSSProperties} />
-                <circle cx={p.x} cy={p.y} r="8" fill={c} />
-                <circle cx={p.x - 2.2} cy={p.y - 2.2} r="2.6" fill="white" opacity="0.85" />
+              <g
+                key={r.city}
+                className="pointer-events-auto cursor-pointer"
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+              >
+                <circle cx={r.x} cy={r.y} r="24" fill={r.color} opacity={on ? 0.28 : 0.18} className="ii-pulse" style={{ transformBox: 'fill-box', transformOrigin: 'center', animationDelay: `${i * 0.22}s` } as CSSProperties} />
+                <circle cx={r.x} cy={r.y} r={on ? 11 : 8} fill={r.color} style={{ transition: 'r .15s' }} />
+                <circle cx={r.x - 2.2} cy={r.y - 2.2} r="2.6" fill="white" opacity="0.85" />
               </g>
             );
           })}
         </svg>
+
+        {/* hover popup: top creators for the region's dominant genre */}
+        {hover !== null && (() => {
+          const r = REGIONS[hover]!;
+          return (
+            <div
+              className="absolute z-50 w-[212px] -translate-x-1/2 pointer-events-none"
+              style={{ left: `${(r.x / 612) * 100}%`, top: `${(r.y / 696) * 100}%`, transform: 'translate(-50%, calc(-100% - 16px))' }}
+            >
+              <div className="rounded-xl bg-white border border-[#eee] shadow-[0_16px_44px_rgba(0,0,0,0.16)] p-3 text-left">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[12px] font-semibold text-[#1a1a3a]">{r.city}</span>
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: `${r.color}1f`, color: r.color }}>
+                    Top {r.genre}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {r.creators.map((cr) => (
+                    <div key={cr.handle} className="flex items-center gap-2">
+                      <CreatorAvatar handle={cr.handle} name={cr.name} color={r.color} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11.5px] font-medium text-[#222] truncate leading-tight">{cr.name}</div>
+                        <div className="text-[10px] text-[#999] truncate">@{cr.handle}</div>
+                      </div>
+                      <span className="text-[10px] font-semibold tabular-nums text-[#666]">{cr.followers}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
-      <div className="absolute bottom-0 text-[10px] text-[#999]">Creators across India</div>
+      <div className="absolute bottom-0 text-[10px] text-[#999]">Hover a city — top creators by genre</div>
     </div>
   );
 }
 
 function DatabaseMock() {
+  const router = useRouter();
+  const [q, setQ] = useState('travel creators in India');
+  const go = () => {
+    const v = q.trim();
+    if (v.length >= 2) router.push(`/lander?prompt=${encodeURIComponent(v)}`);
+  };
   return (
     <Glass>
-      <div className="flex items-center gap-2 rounded-2xl border border-[#e9e9f5] bg-white px-3 py-2.5 mb-3">
-        <span className="w-8 h-8 rounded-full grid place-items-center text-white text-[13px]" style={{ background: ACCENT }}>🔍</span>
-        <span className="text-[14px] text-[#333]">travel creators · 100k+ followers · India</span>
-        <span className="ml-auto text-[11px] px-2 py-1 rounded-full text-white" style={{ background: ACCENT }}>✦ AI</span>
+      <div className="flex items-center gap-2 rounded-2xl border border-[#e9e9f5] bg-white px-3 py-2.5 mb-3 focus-within:border-[#6C4DF6] transition-colors">
+        <button
+          onClick={go}
+          aria-label="Search"
+          className="w-8 h-8 rounded-full grid place-items-center text-white text-[13px] shrink-0 transition-transform hover:scale-105"
+          style={{ background: ACCENT }}
+        >
+          🔍
+        </button>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && go()}
+          placeholder="Search creators — e.g. travel creators in India"
+          className="flex-1 min-w-0 text-[14px] text-[#333] bg-transparent focus:outline-none placeholder-[#aaa]"
+        />
+        <button onClick={go} className="ml-auto text-[11px] px-2 py-1 rounded-full text-white shrink-0" style={{ background: ACCENT }}>✦ AI</button>
       </div>
       <div className="flex items-center gap-2 mb-4 text-[12px]">
         <span className="px-2.5 py-1 rounded-full text-white" style={{ background: ACCENT }}>All</span>

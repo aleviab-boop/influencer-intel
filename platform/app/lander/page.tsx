@@ -66,6 +66,7 @@ export default function LanderPage() {
   const params = useSearchParams();
   const [query, setQuery] = useState<string | null>(params.get('prompt'));
   const [seed, setSeed] = useState('');
+  const [mode, setMode] = useState<'db' | 'live'>('db');
   return (
     <div className="min-h-screen flex flex-col bg-white text-[#111] font-sans">
       <MarketingNav />
@@ -81,11 +82,11 @@ export default function LanderPage() {
                 ← Back
               </button>
             </div>
-            <LiveSearch initialPrompt={query} initialSeed={seed} />
+            <LiveSearch initialPrompt={query} initialSeed={seed} initialMode={mode} />
           </section>
         ) : (
           <>
-            <Hero onSearch={(q, s) => { setSeed(s); setQuery(q); }} />
+            <Hero onSearch={(q, s, m) => { setSeed(s); setMode(m); setQuery(q); }} />
             <LogoMarquee />
             <Showcase />
             <DatabaseSection />
@@ -220,7 +221,7 @@ function useTypewriter(words: string[]) {
   return text;
 }
 
-function Hero({ onSearch }: { onSearch: (q: string, seed: string) => void }) {
+function Hero({ onSearch }: { onSearch: (q: string, seed: string, mode: 'db' | 'live') => void }) {
   const [value, setValue] = useState('');
   const [seed, setSeed] = useState('');
   const [showSug, setShowSug] = useState(false);
@@ -229,9 +230,12 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string) => void }) {
   const suggestions = buildSuggestions(value);
   const sugOpen = showSug && suggestions.length > 0;
 
+  // One search: a username crawls Instagram live; otherwise search the database.
   const go = () => {
     const q = (value.trim() || typed || SUGGESTIONS[0]!).trim();
-    onSearch(q, seed.trim());
+    const u = seed.trim();
+    if (u.length >= 2) onSearch(q, u, 'live');
+    else onSearch(q, '', 'db');
   };
 
   const pick = (s: string) => {
@@ -265,68 +269,68 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string) => void }) {
         {/* Animated search box */}
         <div className="mt-9 relative max-w-3xl mx-auto text-left">
           <div className="rounded-2xl bg-white border-2 transition-colors p-4 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] border-[#e3def9]">
+            {/* prompt (above the line) */}
             <div className="relative">
-              <textarea
-                value={value}
-                onChange={(e) => {
-                  setValue(e.target.value);
-                  setShowSug(true);
-                  setActiveIdx(-1);
-                }}
-                onFocus={() => setShowSug(true)}
-                onBlur={() => setTimeout(() => setShowSug(false), 120)}
-                onKeyDown={(e) => {
-                  if (sugOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-                    e.preventDefault();
-                    setActiveIdx((i) => {
-                      const n = suggestions.length;
-                      return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n;
-                    });
-                    return;
-                  }
-                  if (e.key === 'Escape') {
-                    setShowSug(false);
-                    return;
-                  }
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (sugOpen && activeIdx >= 0) pick(suggestions[activeIdx]!);
-                    else go();
-                  }
-                }}
-                rows={2}
-                className="w-full resize-none text-[17px] text-[#222] placeholder-transparent focus:outline-none bg-transparent"
-              />
-              {value.length === 0 && (
-                <div className="pointer-events-none absolute inset-0 text-[17px] text-[#9aa] select-none">
-                  {typed}
-                  <span className="ii-caret" style={{ color: ACCENT }}>|</span>
-                </div>
-              )}
+                <textarea
+                  value={value}
+                  onChange={(e) => {
+                    setValue(e.target.value);
+                    setShowSug(true);
+                    setActiveIdx(-1);
+                  }}
+                  onFocus={() => setShowSug(true)}
+                  onBlur={() => setTimeout(() => setShowSug(false), 120)}
+                  onKeyDown={(e) => {
+                    if (sugOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                      e.preventDefault();
+                      setActiveIdx((i) => {
+                        const n = suggestions.length;
+                        return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n;
+                      });
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      setShowSug(false);
+                      return;
+                    }
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (sugOpen && activeIdx >= 0) pick(suggestions[activeIdx]!);
+                      else go();
+                    }
+                  }}
+                  rows={1}
+                  className="w-full resize-none text-[17px] text-[#222] placeholder-transparent focus:outline-none bg-transparent"
+                />
+                {value.length === 0 && (
+                  <div className="pointer-events-none absolute inset-0 text-[17px] text-[#9aa] select-none">
+                    {typed}
+                    <span className="ii-caret" style={{ color: ACCENT }}>|</span>
+                  </div>
+                )}
 
-              {sugOpen && (
-                <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onMouseEnter={() => setActiveIdx(i)}
-                      onClick={() => pick(s)}
-                      className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-[15px] transition-colors ${
-                        i === activeIdx ? 'bg-[#f6f4ff]' : 'hover:bg-[#faf9ff]'
-                      }`}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-                      <span className="text-[#333]">{s}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* seed handle + search button */}
-            <div className="mt-3 flex items-center gap-2 border-t border-[#f0eefc] pt-3">
+                {sugOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setActiveIdx(i)}
+                        onClick={() => pick(s)}
+                        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-[15px] transition-colors ${
+                          i === activeIdx ? 'bg-[#f6f4ff]' : 'hover:bg-[#faf9ff]'
+                        }`}
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+                        <span className="text-[#333]">{s}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            {/* one search: username → Instagram crawl, else database */}
+            <div className="mt-2 flex items-center gap-2 border-t border-[#f0eefc] pt-3">
               <span className="text-[#9b7bff] shrink-0" aria-hidden>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" /></svg>
               </span>
@@ -339,19 +343,17 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string) => void }) {
                     go();
                   }
                 }}
-                placeholder="Know anyone in this space? add a starting @handle — e.g. the_brand_fashion_nagpur"
+                placeholder="Optional — add a @username to crawl Instagram, or leave blank to search your database"
                 className="flex-1 min-w-0 text-[14px] text-[#222] placeholder-[#aaa] focus:outline-none bg-transparent"
               />
               <button
                 onClick={go}
                 aria-label="Search"
-                className="w-11 h-11 rounded-full grid place-items-center text-white shadow-md hover:brightness-95 shrink-0"
+                title="Search"
+                className="w-12 h-12 rounded-full grid place-items-center text-white shadow-md shrink-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:brightness-105"
                 style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M21 21l-4.3-4.3" />
-                </svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
               </button>
             </div>
           </div>
