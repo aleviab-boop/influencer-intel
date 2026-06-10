@@ -5,6 +5,7 @@ import {
   resolveNameToSeeds,
   resolveTopicToSeeds,
   tokenize,
+  classifyPrompt,
   type LiveProfile,
 } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     .sort((a, b) => b.score - a.score || b.followers - a.followers)
     .slice(0, max);
 
-  const persisted = await persist(liveProfiles);
+  const persisted = await persist(liveProfiles, classifyPrompt(prompt));
 
   return NextResponse.json({
     prompt,
@@ -117,8 +118,12 @@ function toStringArray(v: unknown): string[] {
     : [];
 }
 
-async function persist(results: LiveProfile[]): Promise<number> {
+async function persist(
+  results: LiveProfile[],
+  ctx: { region: string | null; niche: string | null; tags: string[] },
+): Promise<number> {
   if (results.length === 0) return 0;
+  const hasTag = Boolean(ctx.region || ctx.niche || ctx.tags.length);
   let ok = 0;
   try {
     const db = getBolticClient();
@@ -145,7 +150,23 @@ async function persist(results: LiveProfile[]): Promise<number> {
           },
           ['platform', 'handle'],
         );
-        if (row?.id) p.creator_id = row.id; // so the client can recruit it
+        if (row?.id) {
+          p.creator_id = row.id; // so the client can recruit it
+          // Tag with the search's niche/region — fill-only, never clobbering
+          // curated data, so these creators are findable in future searches.
+          if (hasTag) {
+            await db.query(
+              `UPDATE creators SET
+                 genre  = COALESCE(genre,  $2),
+                 niche  = COALESCE(niche,  $3),
+                 region = COALESCE(region, $4),
+                 tags   = CASE WHEN tags IS NULL OR cardinality(tags) = 0
+                               THEN $5::text[] ELSE tags END
+               WHERE id = $1`,
+              [row.id, ctx.niche, ctx.niche, ctx.region, ctx.tags],
+            );
+          }
+        }
         ok++;
       } catch {
         /* skip a single bad row, keep going */

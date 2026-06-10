@@ -262,6 +262,15 @@ function isNiche(token: string): boolean {
   return Boolean(NICHE_SYNONYMS[token] ?? NICHE_SYNONYMS[token.replace(/s$/, '')]);
 }
 
+// Split a prompt into a region (known city), a niche (recognised category),
+// and the full token list — used to tag saved creators so they're findable.
+export function classifyPrompt(prompt: string): { region: string | null; niche: string | null; tags: string[] } {
+  const toks = tokenize(prompt);
+  const region = toks.find((t) => KNOWN_CITIES.has(t)) ?? null;
+  const niche = toks.find((t) => isNiche(t)) ?? toks.find((t) => t !== region) ?? null;
+  return { region, niche, tags: toks };
+}
+
 export function topicHandleCandidates(prompt: string): string[] {
   const toks = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t));
   if (toks.length === 0) return [];
