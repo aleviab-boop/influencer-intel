@@ -55,6 +55,21 @@ export async function GET(req: NextRequest) {
       externalUrl: u.external_url,
     });
 
+    // Instagram's own "related profiles" — real, login-free similar-creator seeds.
+    const relatedEdges = u.edge_related_profiles?.edges ?? [];
+    const related = relatedEdges
+      .slice(0, 12)
+      .map((e: { node?: Record<string, unknown> }) => {
+        const n = (e.node ?? {}) as Record<string, unknown>;
+        return {
+          handle: (n.username as string) ?? '',
+          full_name: (n.full_name as string) ?? '',
+          is_verified: Boolean(n.is_verified),
+          profile_pic_url: (n.profile_pic_url as string) ?? null,
+        };
+      })
+      .filter((r: { handle: string }) => r.handle);
+
     return NextResponse.json({
       handle: u.username,
       full_name: u.full_name ?? '',
@@ -70,6 +85,7 @@ export async function GET(req: NextRequest) {
       email: contact.email,
       phone: contact.phone,
       recent,
+      related,
     });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

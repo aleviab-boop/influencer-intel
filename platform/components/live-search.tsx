@@ -44,6 +44,7 @@ interface ProfileData {
   email: string | null;
   phone: string | null;
   recent: { shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; taken_at: number | null; caption: string }[];
+  related?: { handle: string; full_name: string; is_verified: boolean; profile_pic_url: string | null }[];
 }
 
 interface RunResponse {
@@ -949,7 +950,7 @@ export function LiveSearch({
                     {profileFor === p.username && (
                       <tr>
                         <td colSpan={8} className="px-4 pb-4 pt-0 bg-[#faf9ff]">
-                          <ProfileSnapshot loading={profileLoading} profile={profile} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} />
+                          <ProfileSnapshot loading={profileLoading} profile={profile} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
                         </td>
                       </tr>
                     )}
@@ -1117,7 +1118,7 @@ export function LiveSearch({
   );
 }
 
-function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void }) {
+function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
   if (loading || !profile) {
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
@@ -1225,33 +1226,59 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: bool
         </div>
       </div>
 
-      {/* right: recent posts */}
-      {profile.recent.length > 0 && (
-        <div>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Recent posts</div>
-          <div className="grid grid-cols-3 gap-2">
-            {profile.recent.map((post, i) => (
-              <a
-                key={i}
-                href={post.shortcode ? `https://instagram.com/p/${post.shortcode}` : `https://instagram.com/${profile.handle}`}
-                target="_blank"
-                rel="noreferrer"
-                className="relative block aspect-square rounded-xl overflow-hidden bg-[#eee] group ring-1 ring-black/5 hover:ring-2 hover:ring-[#6C4DF6]/40 transition-all"
-                title={post.caption}
-                style={{ animation: `ii-fadeup .4s ${0.1 + i * 0.04}s both` }}
-              >
-                {post.thumbnail && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/ig-image?u=${encodeURIComponent(post.thumbnail)}`} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                )}
-                <div className="absolute inset-0 grid place-items-center bg-gradient-to-t from-black/55 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-white text-[11px] font-semibold drop-shadow">♥ {fmt(post.likes)} · 💬 {fmt(post.comments)}</span>
-                </div>
-              </a>
-            ))}
+      {/* right: recent posts + similar creators */}
+      <div className="flex flex-col gap-5">
+        {profile.recent.length > 0 && (
+          <div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Recent posts</div>
+            <div className="grid grid-cols-3 gap-2">
+              {profile.recent.map((post, i) => (
+                <a
+                  key={i}
+                  href={post.shortcode ? `https://instagram.com/p/${post.shortcode}` : `https://instagram.com/${profile.handle}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="relative block aspect-square rounded-xl overflow-hidden bg-[#eee] group ring-1 ring-black/5 hover:ring-2 hover:ring-[#6C4DF6]/40 transition-all"
+                  title={post.caption}
+                  style={{ animation: `ii-fadeup .4s ${0.1 + i * 0.04}s both` }}
+                >
+                  {post.thumbnail && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/ig-image?u=${encodeURIComponent(post.thumbnail)}`} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                  )}
+                  <div className="absolute inset-0 grid place-items-center bg-gradient-to-t from-black/55 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-white text-[11px] font-semibold drop-shadow">♥ {fmt(post.likes)} · 💬 {fmt(post.comments)}</span>
+                  </div>
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {profile.related && profile.related.length > 0 && (
+          <div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Similar creators</div>
+            <div className="flex flex-col gap-1.5">
+              {profile.related.slice(0, 6).map((r, i) => (
+                <button
+                  key={r.handle}
+                  onClick={() => onPivot(r.handle)}
+                  className="group flex items-center gap-2.5 w-full text-left px-2 py-1.5 rounded-xl border border-transparent hover:border-[#e3def9] hover:bg-[#faf9ff] transition-all"
+                  title={`Explore @${r.handle}`}
+                  style={{ animation: `ii-fadeup .4s ${0.1 + i * 0.04}s both` }}
+                >
+                  <Avatar name={r.full_name || r.handle} url={r.profile_pic_url} />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1 text-[13px] font-semibold text-[#111] truncate">@{r.handle}{r.is_verified && <span style={{ color: ACCENT }}>✔</span>}</span>
+                    {r.full_name && <span className="block text-[11px] text-[#999] truncate">{r.full_name}</span>}
+                  </span>
+                  <span className="ml-auto text-[14px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: ACCENT }}>→</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
