@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
-import { useLoggedIn, BrandMark } from '@/components/marketing';
+import { useLoggedIn, BrandMark, AccountMenu } from '@/components/marketing';
 import { BookDemoButton } from '@/components/book-demo';
 import { buildSuggestions } from '@/lib/suggestions';
 
@@ -175,7 +175,7 @@ function MarketingNav() {
         </nav>
         <div className="flex items-center gap-3">
           {loggedIn ? (
-            <button onClick={logout} className="text-[14px] text-[#444] hover:text-[#111]">Log out</button>
+            <AccountMenu onLogout={logout} />
           ) : (
             <>
               <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>

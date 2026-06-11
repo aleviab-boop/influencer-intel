@@ -97,6 +97,57 @@ export function useLoggedIn(): [boolean, () => void] {
   return [loggedIn, logout];
 }
 
+// Top-right account avatar shown once signed in. For a creator we resolve their
+// Instagram profile photo via /api/ig-avatar (with an initials fallback); a
+// click opens a small menu with the handle/role and a log-out action.
+export function AccountMenu({ onLogout }: { onLogout: () => void }) {
+  const [handle, setHandle] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [imgErr, setImgErr] = useState(false);
+  useEffect(() => {
+    try {
+      setHandle(localStorage.getItem('creator_handle'));
+      setRole(localStorage.getItem('ii_role'));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const label = handle ? `@${handle}` : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Account';
+  const initials = (handle || role || 'U').slice(0, 2).toUpperCase();
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Account"
+        className="w-9 h-9 rounded-full overflow-hidden grid place-items-center text-white text-[12px] font-semibold ring-2 ring-[#ececec] hover:ring-[#d9d2f7] transition-shadow"
+        style={{ background: ACCENT }}
+      >
+        {handle && !imgErr ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/ig-avatar?handle=${encodeURIComponent(handle)}`} alt={label} onError={() => setImgErr(true)} className="w-full h-full object-cover" />
+        ) : (
+          initials
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 z-50 w-52 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#f3f3f3]">
+              <div className="text-[13px] font-semibold text-[#111] truncate">{label}</div>
+              <div className="text-[11px] text-[#999]">{handle ? 'Creator account' : 'Signed in'}</div>
+            </div>
+            <button onClick={() => { setOpen(false); onLogout(); }} className="w-full text-left px-4 py-2.5 text-[13px] text-[#444] hover:bg-[#f6f4ff]">
+              Log out
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
@@ -199,7 +250,7 @@ export function MarketingNav() {
         </nav>
         <div className="flex items-center gap-3">
           {loggedIn ? (
-            <button onClick={logout} className="text-[14px] text-[#444] hover:text-[#111]">Log out</button>
+            <AccountMenu onLogout={logout} />
           ) : (
             <>
               <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
