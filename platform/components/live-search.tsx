@@ -820,59 +820,74 @@ export function LiveSearch({
 
       {/* AI outreach draft modal */}
       {draftFor && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 px-4" onClick={() => setDraftFor(null)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#eee] p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-[15px] font-semibold text-[#111]">Outreach to @{draftFor.username}</div>
-              <button onClick={() => setDraftFor(null)} className="text-[#999] hover:text-[#111] text-lg leading-none">×</button>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4" onClick={() => setDraftFor(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#e3def9] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-3.5 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+              <div className="text-[15px] font-semibold">Outreach to @{draftFor.username}</div>
+              <button onClick={() => setDraftFor(null)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
             </div>
-            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f4f6] mb-3 text-[13px]">
-              {(['dm', 'email'] as const).map((ch) => (
+            <div className="p-5">
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f0ff] mb-3 text-[13px]">
+                {(['dm', 'email'] as const).map((ch) => (
+                  <button
+                    key={ch}
+                    onClick={() => void openDraft(draftFor, ch)}
+                    className={`px-3 py-1 rounded-md transition-colors ${draftChannel === ch ? 'bg-white shadow-sm font-medium' : 'text-[#888]'}`}
+                    style={draftChannel === ch ? { color: ACCENT } : undefined}
+                  >
+                    {ch === 'dm' ? 'Instagram DM' : 'Email'}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                value={draftLoading ? 'Drafting…' : draftText}
+                onChange={(e) => setDraftText(e.target.value)}
+                readOnly={draftLoading}
+                rows={7}
+                className="w-full text-[14px] text-[#222] rounded-xl border border-[#e3def9] p-3 focus:outline-none focus:border-[#6C4DF6] focus:ring-4 focus:ring-[#6C4DF6]/10 transition-all resize-none"
+              />
+              <div className="mt-3 flex items-center justify-end gap-2">
                 <button
-                  key={ch}
-                  onClick={() => void openDraft(draftFor, ch)}
-                  className={`px-3 py-1 rounded-md capitalize transition-colors ${draftChannel === ch ? 'bg-white shadow-sm font-medium text-[#111]' : 'text-[#888]'}`}
+                  onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); }}
+                  disabled={draftLoading || !draftText}
+                  className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] disabled:opacity-50"
+                  style={{ color: ACCENT }}
                 >
-                  {ch === 'dm' ? 'Instagram DM' : 'Email'}
+                  {copied ? 'Copied ✓' : 'Copy'}
                 </button>
-              ))}
-            </div>
-            <textarea
-              value={draftLoading ? 'Drafting…' : draftText}
-              onChange={(e) => setDraftText(e.target.value)}
-              readOnly={draftLoading}
-              rows={7}
-              className="w-full text-[14px] text-[#222] rounded-xl border border-[#e3def9] p-3 focus:outline-none focus:border-[#6C4DF6] resize-none"
-            />
-            <div className="mt-3 flex items-center justify-end gap-2">
-              <button
-                onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); }}
-                disabled={draftLoading || !draftText}
-                className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] disabled:opacity-50"
-                style={{ color: ACCENT }}
-              >
-                {copied ? 'Copied ✓' : 'Copy'}
-              </button>
-              {draftFor.email && (
-                <a
-                  href={mailLink(draftFor.email, draftText)}
-                  className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
-                  style={{ background: ACCENT }}
-                >
-                  ✉ Send email
-                </a>
-              )}
-              {draftFor.phone && (
-                <a
-                  href={waLink(draftFor.phone, draftText)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
-                  style={{ background: '#25D366' }}
-                >
-                  Send on WhatsApp
-                </a>
-              )}
+                {draftFor.email && (
+                  <a
+                    href={mailLink(draftFor.email, draftText)}
+                    className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                    style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                  >
+                    ✉ Send email
+                  </a>
+                )}
+                {draftFor.phone && (
+                  <a
+                    href={waLink(draftFor.phone, draftText)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                    style={{ background: '#25D366' }}
+                  >
+                    Send on WhatsApp
+                  </a>
+                )}
+                {!draftFor.email && !draftFor.phone && (
+                  <a
+                    href={`https://instagram.com/${draftFor.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); }}
+                    className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                    style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                  >
+                    Copy &amp; open Instagram →
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
