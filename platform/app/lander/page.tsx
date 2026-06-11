@@ -242,10 +242,10 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string, mode: 'db' | '
 
   // One search: a username crawls Instagram live; otherwise search the database.
   const go = () => {
-    const q = (value.trim() || typed || SUGGESTIONS[0]!).trim();
+    const q = value.trim();
     const u = seed.trim();
-    if (u.length >= 2) onSearch(q, u, 'live');
-    else onSearch(q, '', 'db');
+    if (u.length >= 2) onSearch(q || u, u, 'live');
+    else if (q.length >= 2) onSearch(q, '', 'db');
   };
 
   const pick = (s: string) => {
