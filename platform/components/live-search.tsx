@@ -119,6 +119,26 @@ function postingInsight(
   };
 }
 
+// Content themes: the hashtags a creator leans on most across recent captions —
+// a quick read on what they actually post about, for brand-fit judgement.
+function contentThemes(
+  recent: { caption: string }[],
+  limit = 6,
+): string[] {
+  const counts = new Map<string, number>();
+  for (const p of recent) {
+    const tags = p.caption?.match(/#[\p{L}\p{N}_]+/gu) ?? [];
+    for (const raw of tags) {
+      const tag = raw.toLowerCase();
+      counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([tag]) => tag);
+}
+
 // Split the start-from field into exact handles vs names to resolve.
 // Comma-separated; an entry with an internal space is treated as a name
 // (e.g. "mridul sharma"), otherwise as an @handle.
@@ -1115,6 +1135,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: bool
   const floor = expectedErFloor(profile.followers);
   const healthy = engagement != null && engagement >= floor;
   const rhythm = postingInsight(profile.recent);
+  const themes = contentThemes(profile.recent);
   return (
     <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.05fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
       <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
@@ -1180,6 +1201,17 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: bool
                 <div className="mt-0.5 text-[13px] font-semibold text-[#111] leading-tight">{val}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        {themes.length > 0 && (
+          <div className="mt-3" style={{ animation: 'ii-fadeup .4s .35s both' }}>
+            <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Posts about</div>
+            <div className="flex flex-wrap gap-1.5">
+              {themes.map((t) => (
+                <span key={t} className="px-2.5 py-1 rounded-full text-[12px] font-medium border border-[#e3def9] bg-[#f6f4ff]" style={{ color: ACCENT }}>{t}</span>
+              ))}
+            </div>
           </div>
         )}
 
