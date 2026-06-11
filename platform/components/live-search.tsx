@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { buildSuggestions } from '@/lib/suggestions';
 
 const ACCENT = '#6C4DF6';
@@ -27,6 +27,23 @@ interface LiveProfile {
 interface Program {
   id: string;
   name: string;
+}
+
+interface ProfileData {
+  handle: string;
+  full_name: string;
+  biography: string;
+  category: string;
+  followers: number;
+  following: number;
+  posts: number;
+  is_verified: boolean;
+  is_private: boolean;
+  profile_pic_url: string | null;
+  external_url: string | null;
+  email: string | null;
+  phone: string | null;
+  recent: { shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; caption: string }[];
 }
 
 interface RunResponse {
@@ -129,6 +146,26 @@ export function LiveSearch({
   const [bulkDraftLoading, setBulkDraftLoading] = useState(false);
   const [bulkChannel, setBulkChannel] = useState<'dm' | 'email'>('dm');
   const [bulkCopied, setBulkCopied] = useState(false);
+  // creator profile drawer
+  const [profileFor, setProfileFor] = useState<string | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  async function openProfile(handle: string) {
+    if (profileFor === handle) {
+      setProfileFor(null); // toggle closed
+      return;
+    }
+    setProfileFor(handle);
+    setProfile(null);
+    setProfileLoading(true);
+    try {
+      const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}`).then((r) => r.json());
+      if (!d.error) setProfile(d as ProfileData);
+    } finally {
+      setProfileLoading(false);
+    }
+  }
   // saved searches (localStorage)
   const [saved, setSaved] = useState<{ prompt: string; seed: string }[]>([]);
   const autoRan = useRef(false);
@@ -707,7 +744,8 @@ export function LiveSearch({
                 </thead>
                 <tbody className="divide-y divide-[#f3f3f3]">
                   {shown.map((p, i) => (
-                    <tr key={p.username} className={`hover:bg-[#fafaff] ${selected.has(p.username) ? 'bg-[#faf9ff]' : ''}`}>
+                    <Fragment key={p.username}>
+                    <tr className={`hover:bg-[#fafaff] ${selected.has(p.username) || profileFor === p.username ? 'bg-[#faf9ff]' : ''}`}>
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
@@ -719,12 +757,19 @@ export function LiveSearch({
                       <td className="px-3 py-3 text-[13px] text-[#aaa] tabular-nums">{i + 1}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <Avatar name={p.full_name || p.username} url={p.profile_pic_url} />
+                          <button onClick={() => void openProfile(p.username)} className="shrink-0" title="View profile">
+                            <Avatar name={p.full_name || p.username} url={p.profile_pic_url} />
+                          </button>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[14px] font-medium text-[#111] truncate">
+                              <button
+                                onClick={() => void openProfile(p.username)}
+                                className="text-[14px] font-medium text-[#111] truncate hover:underline"
+                                style={{ textDecorationColor: ACCENT }}
+                                title="View profile"
+                              >
                                 @{p.username}
-                              </span>
+                              </button>
                               {p.is_verified && (
                                 <span title="verified" style={{ color: ACCENT }}>✔</span>
                               )}
@@ -810,6 +855,14 @@ export function LiveSearch({
                         </div>
                       </td>
                     </tr>
+                    {profileFor === p.username && (
+                      <tr>
+                        <td colSpan={8} className="px-4 pb-4 pt-0 bg-[#faf9ff]">
+                          <ProfileSnapshot loading={profileLoading} profile={profile} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -963,6 +1016,118 @@ export function LiveSearch({
                 {bulkCopied ? 'Copied all ✓' : 'Copy all'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void }) {
+  if (loading || !profile) {
+    return (
+      <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
+        <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
+        <div className="w-7 h-7 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+      </div>
+    );
+  }
+  const engagement = profile.followers > 0 && profile.recent.length > 0
+    ? Math.round(
+        (profile.recent.reduce((s, p) => s + p.likes + p.comments, 0) / profile.recent.length / profile.followers) * 1000,
+      ) / 10
+    : null;
+
+  const floor = expectedErFloor(profile.followers);
+  const healthy = engagement != null && engagement >= floor;
+  return (
+    <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.05fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
+      <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
+      {/* left: details, vertically balanced */}
+      <div className="flex flex-col">
+        <div className="flex items-center gap-3">
+          <Avatar name={profile.full_name || profile.handle} url={profile.profile_pic_url} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-[#111] truncate hover:underline">@{profile.handle}</a>
+              {profile.is_verified && <span style={{ color: ACCENT }}>✔</span>}
+            </div>
+            <div className="text-[12px] text-[#999] truncate">{profile.full_name}{profile.category ? ` · ${profile.category}` : ''}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-4 gap-2 text-center">
+          {[
+            ['Followers', fmt(profile.followers)],
+            ['Following', fmt(profile.following)],
+            ['Posts', fmt(profile.posts)],
+            ['Eng.', engagement != null ? `${engagement}%` : '—'],
+          ].map(([k, v], idx) => (
+            <div
+              key={k}
+              className="rounded-xl border border-[#eee] bg-[#fafafc] py-2.5 transition-all hover:-translate-y-0.5 hover:border-[#d9d2f7] hover:shadow-sm"
+              style={{ animation: `ii-countup .4s ${idx * 0.06}s both` }}
+            >
+              <div className="text-[15px] font-bold tabular-nums text-[#111] leading-none">{v}</div>
+              <div className="mt-1 text-[10px] uppercase tracking-wide text-[#999]">{k}</div>
+            </div>
+          ))}
+        </div>
+
+        {profile.biography && (
+          <p className="mt-4 text-[13px] text-[#444] whitespace-pre-line leading-relaxed line-clamp-5">{profile.biography}</p>
+        )}
+
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12px]">
+          {profile.email && <a href={`mailto:${profile.email}`} className="text-[#10b981] hover:underline">✉ {profile.email}</a>}
+          {profile.phone && <a href={`tel:${profile.phone}`} className="text-[#0ea5e9] hover:underline">📞 {profile.phone}</a>}
+          {profile.external_url && <a href={profile.external_url} target="_blank" rel="noreferrer" className="text-[#888] hover:underline truncate max-w-[220px]">🔗 {profile.external_url.replace(/^https?:\/\//, '')}</a>}
+        </div>
+
+        {engagement != null && (
+          <div
+            className="mt-4 inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-lg text-[12px] font-medium"
+            style={{ background: healthy ? '#ecfdf5' : '#fff7ed', color: healthy ? '#059669' : '#b45309', animation: 'ii-fadeup .4s .25s both' }}
+          >
+            {healthy ? '✓' : '⚠'} {engagement}% engagement — {healthy ? 'healthy' : 'low'} for this tier (benchmark ≈ {floor}%)
+          </div>
+        )}
+
+        <div className="mt-auto pt-5 flex gap-2">
+          <button onClick={onDraft} className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+            ✦ Draft outreach
+          </button>
+          <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
+            Open Instagram ↗
+          </a>
+        </div>
+      </div>
+
+      {/* right: recent posts */}
+      {profile.recent.length > 0 && (
+        <div>
+          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Recent posts</div>
+          <div className="grid grid-cols-3 gap-2">
+            {profile.recent.map((post, i) => (
+              <a
+                key={i}
+                href={post.shortcode ? `https://instagram.com/p/${post.shortcode}` : `https://instagram.com/${profile.handle}`}
+                target="_blank"
+                rel="noreferrer"
+                className="relative block aspect-square rounded-xl overflow-hidden bg-[#eee] group ring-1 ring-black/5 hover:ring-2 hover:ring-[#6C4DF6]/40 transition-all"
+                title={post.caption}
+                style={{ animation: `ii-fadeup .4s ${0.1 + i * 0.04}s both` }}
+              >
+                {post.thumbnail && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/api/ig-image?u=${encodeURIComponent(post.thumbnail)}`} alt="" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                )}
+                <div className="absolute inset-0 grid place-items-center bg-gradient-to-t from-black/55 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-white text-[11px] font-semibold drop-shadow">♥ {fmt(post.likes)} · 💬 {fmt(post.comments)}</span>
+                </div>
+              </a>
+            ))}
           </div>
         </div>
       )}

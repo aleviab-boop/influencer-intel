@@ -82,7 +82,7 @@ export default function LanderPage() {
       <main className="flex-1 flex flex-col">
         {query !== null ? (
           // Searching from the home page runs inline — no redirect to another page.
-          <section className="max-w-5xl mx-auto w-full px-6 py-10 min-h-[80vh]">
+          <section className="max-w-5xl mx-auto w-full px-6 py-10 min-h-screen">
             <div className="mb-6">
               <button
                 onClick={() => router.push('/lander')}
