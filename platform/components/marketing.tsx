@@ -171,6 +171,7 @@ export function AccountMenu() {
 }
 
 export const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
+  { label: 'AI Content Generator', href: '/tools/content-ideas', icon: 'spark' },
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
@@ -215,6 +216,8 @@ export function FeatureIcon({ name }: { name: string }) {
       return (<svg {...common}><path d="M3.5 18a9 9 0 1 1 17 0" /><path d="M12 18l4.5-5.5" /></svg>);
     case 'instagram':
       return (<svg {...common}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>);
+    case 'spark':
+      return (<svg {...common}><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>);
     default:
       return null;
   }

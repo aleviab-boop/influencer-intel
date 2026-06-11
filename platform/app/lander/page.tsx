@@ -15,6 +15,7 @@ const ACCENT = '#6C4DF6';
 const ACCENT_SOFT = '#F4F2FF';
 
 const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
+  { label: 'AI Content Generator', href: '/tools/content-ideas', icon: 'spark' },
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
@@ -59,6 +60,8 @@ function FeatureIcon({ name }: { name: string }) {
       return (<svg {...common}><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></svg>);
     case 'gauge':
       return (<svg {...common}><path d="M3.5 18a9 9 0 1 1 17 0" /><path d="M12 18l4.5-5.5" /></svg>);
+    case 'spark':
+      return (<svg {...common}><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>);
     default:
       return null;
   }
