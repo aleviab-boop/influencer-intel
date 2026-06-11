@@ -435,6 +435,10 @@ Be specific and punchy. No hype, no filler.`,
     best_window: string;
     script: { scene: string; onscreen: string; voiceover: string }[];
     ideas: { title: string; desc: string }[];
+    songs: string[];
+    setting: string[];
+    palette: { name: string; hex: string }[];
+    props: string[];
     caption: string;
     hashtags: string[];
   }> {
@@ -452,10 +456,14 @@ Respond ONLY with JSON in this exact shape:
   "best_window": "best posting window, e.g. Thu 7-9pm",
   "script": [ { "scene": "0-3s", "onscreen": "on-screen text", "voiceover": "what's said / audio cue" } ],
   "ideas": [ { "title": "alt idea title", "desc": "one-line description" } ],
+  "songs": ["background-music recommendations: trending track name - artist, or a clear style if unsure"],
+  "setting": ["background / location / scene-setting recommendations"],
+  "palette": [ { "name": "colour name", "hex": "#RRGGBB" } ],
+  "props": ["physical props to include in frame"],
   "caption": "ready-to-post caption with 1-2 emojis",
   "hashtags": ["#tag1", "#tag2"]
 }
-Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceover direction; 3-5 alternative ideas; 6-10 relevant hashtags. Be specific and punchy, no hype or filler.`,
+Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceover direction; 3-5 alternative ideas; 3-4 song recommendations; 3-4 setting ideas; a 4-5 colour palette with real hex codes that match the vibe; 4-6 props; 6-10 relevant hashtags. Be specific and punchy, no hype or filler.`,
         },
         { role: 'user', content: `Tokens: ${prompt}\n\nWrite the content pack.` },
       ],

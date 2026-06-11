@@ -9,6 +9,10 @@ interface Pack {
   best_window: string;
   script: { scene: string; onscreen: string; voiceover: string }[];
   ideas: { title: string; desc: string }[];
+  songs: string[];
+  setting: string[];
+  palette: { name: string; hex: string }[];
+  props: string[];
   caption: string;
   hashtags: string[];
 }
@@ -72,6 +76,10 @@ export default function ContentIdeas() {
       .join('');
     const ideaItems = pack.ideas.map((i) => `<li><b>${esc(i.title)}</b> — ${esc(i.desc)}</li>`).join('');
     const tags = pack.hashtags.map((t) => esc(t)).join('  ');
+    const li = (arr: string[]) => (arr ?? []).map((x) => `<li>${esc(x)}</li>`).join('');
+    const swatches = (pack.palette ?? [])
+      .map((c) => `<span class="sw"><span class="dotc" style="background:${esc(c.hex)}"></span>${esc(c.name)} <span class="hex">${esc(c.hex)}</span></span>`)
+      .join('');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Content Brief — ${esc(prompt)}</title>
 <style>
   *{box-sizing:border-box} body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a2e;margin:0;padding:40px 44px}
@@ -89,6 +97,9 @@ export default function ContentIdeas() {
   ul{margin:6px 0;padding-left:18px} li{font-size:13px;margin-bottom:5px}
   .cap{font-size:13px;background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px 12px;white-space:pre-wrap}
   .tags{color:${ACCENT};font-size:12px;margin-top:8px}
+  .sw{display:inline-flex;align-items:center;gap:6px;font-size:12px;margin:0 14px 8px 0}
+  .dotc{width:14px;height:14px;border-radius:4px;border:1px solid #ddd;display:inline-block}
+  .hex{color:#999}
   .foot{margin-top:28px;border-top:1px solid #eee;padding-top:10px;color:#aaa;font-size:11px}
 </style></head><body>
   <div class="top"><span class="dot"></span><span class="brand">Influencer Intel</span></div>
@@ -97,6 +108,14 @@ export default function ContentIdeas() {
   <div class="meta"><span class="chip">${esc(pack.format)}</span><span class="chip">Best: ${esc(pack.best_window)}</span></div>
   <h2>Script</h2>
   <table>${scriptRows}</table>
+  <h2>Background music</h2>
+  <ul>${li(pack.songs)}</ul>
+  <h2>Setting &amp; background</h2>
+  <ul>${li(pack.setting)}</ul>
+  <h2>Colour palette</h2>
+  <div>${swatches}</div>
+  <h2>Props to include</h2>
+  <ul>${li(pack.props)}</ul>
   <h2>Alternative ideas</h2>
   <ul>${ideaItems}</ul>
   <h2>Caption</h2>
@@ -179,6 +198,52 @@ export default function ContentIdeas() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4 mt-6">
+                  {(pack.songs ?? []).length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">🎵 Background music</div>
+                      <ul className="space-y-1.5">
+                        {pack.songs.map((s, i) => (
+                          <li key={i} className="flex gap-2 text-[13px]"><span className="text-[#bbb]">•</span><span>{s}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(pack.setting ?? []).length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">🎬 Setting &amp; background</div>
+                      <ul className="space-y-1.5">
+                        {pack.setting.map((s, i) => (
+                          <li key={i} className="flex gap-2 text-[13px]"><span className="text-[#bbb]">•</span><span>{s}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(pack.props ?? []).length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">🎁 Props to include</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {pack.props.map((p, i) => (
+                          <span key={i} className="px-2.5 py-1 rounded-lg text-[12px] bg-[#fafafa] border border-[#eee] text-[#444]">{p}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(pack.palette ?? []).length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">🎨 Colour palette</div>
+                      <div className="flex flex-wrap gap-2">
+                        {pack.palette.map((c, i) => (
+                          <span key={i} className="inline-flex items-center gap-1.5 text-[12px]">
+                            <span className="w-4 h-4 rounded border border-[#ddd]" style={{ background: c.hex }} />
+                            {c.name} <span className="text-[#999]">{c.hex}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2 mt-6">Alternative ideas</div>
