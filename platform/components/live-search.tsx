@@ -150,6 +150,25 @@ export function LiveSearch({
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  // outreach "contacted" tracking (localStorage)
+  const [contacted, setContacted] = useState<Set<string>>(new Set());
+  const [hideContacted, setHideContacted] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('ii_contacted');
+      if (raw) setContacted(new Set(JSON.parse(raw)));
+    } catch { /* ignore */ }
+  }, []);
+
+  function markContacted(handle: string) {
+    setContacted((s) => {
+      const n = new Set(s);
+      n.add(handle.toLowerCase());
+      try { localStorage.setItem('ii_contacted', JSON.stringify([...n])); } catch { /* ignore */ }
+      return n;
+    });
+  }
 
   async function openProfile(handle: string) {
     if (profileFor === handle) {
@@ -337,7 +356,8 @@ export function LiveSearch({
       (p) =>
         p.followers >= minFollowers &&
         (!verifiedOnly || p.is_verified) &&
-        (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low'),
+        (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low') &&
+        (!hideContacted || !contacted.has(p.username.toLowerCase())),
     );
     const sorted = [...filtered];
     if (sortBy === 'followers_desc') sorted.sort((a, b) => b.followers - a.followers);
@@ -655,6 +675,10 @@ export function LiveSearch({
               <input type="checkbox" checked={healthyOnly} onChange={(e) => setHealthyOnly(e.target.checked)} className="accent-[#6C4DF6]" />
               Healthy eng. only
             </label>
+            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white cursor-pointer select-none" title="Hide creators you've already reached out to">
+              <input type="checkbox" checked={hideContacted} onChange={(e) => setHideContacted(e.target.checked)} className="accent-[#6C4DF6]" />
+              Hide contacted
+            </label>
             <span className="ml-auto text-[#999]">Sort</span>
             <select
               value={sortBy}
@@ -776,6 +800,11 @@ export function LiveSearch({
                               {p.from === 'db' && (
                                 <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#eef] text-[#6C4DF6]" title="from your database">
                                   DB
+                                </span>
+                              )}
+                              {contacted.has(p.username.toLowerCase()) && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600" title="You've reached out">
+                                  Contacted ✓
                                 </span>
                               )}
                             </div>
@@ -911,6 +940,7 @@ export function LiveSearch({
                 {draftFor.email && (
                   <a
                     href={mailLink(draftFor.email, draftText)}
+                    onClick={() => markContacted(draftFor.username)}
                     className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
                     style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                   >
@@ -922,6 +952,7 @@ export function LiveSearch({
                     href={waLink(draftFor.phone, draftText)}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={() => markContacted(draftFor.username)}
                     className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
                     style={{ background: '#25D366' }}
                   >
@@ -933,7 +964,7 @@ export function LiveSearch({
                     href={`https://instagram.com/${draftFor.username}`}
                     target="_blank"
                     rel="noreferrer"
-                    onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); }}
+                    onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); markContacted(draftFor.username); }}
                     className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
                     style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                   >
@@ -977,10 +1008,10 @@ export function LiveSearch({
                     <span className="text-[13px] font-medium text-[#111]">@{item.username}</span>
                     <div className="flex items-center gap-2.5 text-[12px] font-medium">
                       {item.email && (
-                        <a href={mailLink(item.email, item.message)} className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: ACCENT }}>✉ Email</a>
+                        <a href={mailLink(item.email, item.message)} onClick={() => markContacted(item.username)} className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: ACCENT }}>✉ Email</a>
                       )}
                       {item.phone && (
-                        <a href={waLink(item.phone, item.message)} target="_blank" rel="noreferrer" className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: '#1ebe57' }}>WhatsApp</a>
+                        <a href={waLink(item.phone, item.message)} target="_blank" rel="noreferrer" onClick={() => markContacted(item.username)} className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: '#1ebe57' }}>WhatsApp</a>
                       )}
                       <button
                         onClick={() => { void navigator.clipboard.writeText(item.message); }}
