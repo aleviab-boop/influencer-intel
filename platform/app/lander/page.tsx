@@ -71,8 +71,11 @@ export default function LanderPage() {
   const query = params.get('prompt');
   const seed = params.get('seed') ?? '';
   const mode: 'db' | 'live' = params.get('mode') === 'live' ? 'live' : 'db';
+  // Show results when there's a prompt OR just a username seed (bare crawl).
+  const showResults = query !== null || seed.trim().length >= 2;
   const runSearch = (q: string, s: string, m: 'db' | 'live') => {
-    const qs = new URLSearchParams({ prompt: q, mode: m });
+    const qs = new URLSearchParams({ mode: m });
+    if (q) qs.set('prompt', q); // only carry a prompt the user actually typed
     if (s) qs.set('seed', s);
     router.push(`/lander?${qs.toString()}`);
   };
@@ -80,7 +83,7 @@ export default function LanderPage() {
     <div className="min-h-screen flex flex-col bg-white text-[#111] font-sans">
       <MarketingNav />
       <main className="flex-1 flex flex-col">
-        {query !== null ? (
+        {showResults ? (
           // Searching from the home page runs inline — no redirect to another page.
           <section className="max-w-5xl mx-auto w-full px-6 py-10 min-h-screen">
             <div className="mb-6">
@@ -91,7 +94,7 @@ export default function LanderPage() {
                 ← Back
               </button>
             </div>
-            <LiveSearch initialPrompt={query} initialSeed={seed} initialMode={mode} />
+            <LiveSearch initialPrompt={query ?? ''} initialSeed={seed} initialMode={mode} />
           </section>
         ) : (
           <>
@@ -244,7 +247,7 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string, mode: 'db' | '
   const go = () => {
     const q = value.trim();
     const u = seed.trim();
-    if (u.length >= 2) onSearch(q || u, u, 'live');
+    if (u.length >= 2) onSearch(q, u, 'live'); // username crawl; prompt only if typed
     else if (q.length >= 2) onSearch(q, '', 'db');
   };
 

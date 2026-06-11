@@ -510,17 +510,15 @@ export function LiveSearch({
   // One search: a username crawls Instagram live; otherwise search the database.
   function runSearch() {
     const u = seedText.trim();
-    if (u.length >= 2) void search({ promptOverride: prompt.trim() || u, seedOverride: seedText, mode: 'live' });
+    if (u.length >= 2) void search({ seedOverride: seedText, mode: 'live' });
     else void search({ seedOverride: '', mode: 'db' });
   }
 
   // "More like this" — re-seed the search from one creator's network.
   function findSimilar(p: LiveProfile) {
-    const pr = prompt.trim() || p.category || p.username;
-    setPrompt(pr);
     setSeedText(p.username);
     setSelected(new Set());
-    void search({ promptOverride: pr, seedOverride: p.username });
+    void search({ promptOverride: prompt.trim(), seedOverride: p.username, mode: 'live' });
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -528,7 +526,7 @@ export function LiveSearch({
   // server self-seeds from the prompt when no handle/name is given).
   useEffect(() => {
     if (autoRan.current) return;
-    if (initialPrompt.trim().length >= 2) {
+    if (initialPrompt.trim().length >= 2 || initialSeed.trim().length >= 2) {
       autoRan.current = true;
       void search({ mode: initialMode, seedOverride: initialMode === 'db' ? '' : undefined });
     }
@@ -536,10 +534,13 @@ export function LiveSearch({
   }, []);
 
   async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' }) {
-    const p = (opts?.promptOverride ?? prompt).trim();
-    if (p.length < 2) return;
+    const typedPrompt = (opts?.promptOverride ?? prompt).trim();
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
     const mode = opts?.mode ?? 'live';
+    // The server needs a prompt for ranking; for a bare username crawl, fall back
+    // to the handle/name so we never invent a keyword the user didn't type.
+    const p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
+    if (p.length < 2) return;
 
     setLoading(true);
     setError(null);
