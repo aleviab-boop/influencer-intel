@@ -113,6 +113,11 @@ export function LiveSearch({
   // bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // bulk outreach drafts
+  const [bulkDraft, setBulkDraft] = useState<{ username: string; message: string }[] | null>(null);
+  const [bulkDraftLoading, setBulkDraftLoading] = useState(false);
+  const [bulkChannel, setBulkChannel] = useState<'dm' | 'email'>('dm');
+  const [bulkCopied, setBulkCopied] = useState(false);
   // saved searches (localStorage)
   const [saved, setSaved] = useState<{ prompt: string; seed: string }[]>([]);
   const autoRan = useRef(false);
@@ -244,6 +249,34 @@ export function LiveSearch({
       setSelected(new Set());
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function openBulkDraft(channel: 'dm' | 'email' = 'dm') {
+    const targets = shown.filter((p) => selected.has(p.username)).slice(0, 20);
+    if (targets.length === 0) return;
+    setBulkChannel(channel);
+    setBulkCopied(false);
+    setBulkDraft(targets.map((p) => ({ username: p.username, message: '' })));
+    setBulkDraftLoading(true);
+    try {
+      const results = await Promise.all(
+        targets.map(async (p) => {
+          try {
+            const d = await fetch('/api/discover-live/outreach', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel }),
+            }).then((r) => r.json());
+            return { username: p.username, message: d.message ?? d.error ?? '' };
+          } catch {
+            return { username: p.username, message: '' };
+          }
+        }),
+      );
+      setBulkDraft(results);
+    } finally {
+      setBulkDraftLoading(false);
     }
   }
 
@@ -613,6 +646,13 @@ export function LiveSearch({
                 {bulkBusy ? 'Adding…' : `Add ${selected.size} to campaign`}
               </button>
               <button
+                onClick={() => void openBulkDraft('dm')}
+                className="px-3 py-1.5 rounded-lg font-semibold border border-[#e3def9] hover:bg-white"
+                style={{ color: ACCENT }}
+              >
+                ✦ Draft outreach
+              </button>
+              <button
                 onClick={() => void downloadExcel(shown.filter((p) => selected.has(p.username)))}
                 disabled={exporting}
                 className="px-3 py-1.5 rounded-lg font-semibold border border-[#e3def9] hover:bg-white disabled:opacity-50"
@@ -801,6 +841,72 @@ export function LiveSearch({
                 style={{ background: ACCENT }}
               >
                 {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* bulk outreach drafts modal */}
+      {bulkDraft && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 px-4" onClick={() => setBulkDraft(null)}>
+          <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-[#eee]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 pb-3 border-b border-[#f0f0f0]">
+              <div className="text-[15px] font-semibold text-[#111]">
+                Outreach drafts · {bulkDraft.length} creators
+                {bulkDraftLoading && <span className="ml-2 text-[12px] font-normal text-[#999]">generating…</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f4f6] text-[12px]">
+                  {(['dm', 'email'] as const).map((ch) => (
+                    <button
+                      key={ch}
+                      onClick={() => void openBulkDraft(ch)}
+                      className={`px-2.5 py-1 rounded-md transition-colors ${bulkChannel === ch ? 'bg-white shadow-sm font-medium text-[#111]' : 'text-[#888]'}`}
+                    >
+                      {ch === 'dm' ? 'DM' : 'Email'}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setBulkDraft(null)} className="text-[#999] hover:text-[#111] text-lg leading-none">×</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-5 space-y-3 flex-1">
+              {bulkDraft.map((item, i) => (
+                <div key={item.username} className="rounded-xl border border-[#eee] p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[13px] font-medium text-[#111]">@{item.username}</span>
+                    <button
+                      onClick={() => { void navigator.clipboard.writeText(item.message); }}
+                      disabled={!item.message}
+                      className="text-[12px] font-medium disabled:opacity-40"
+                      style={{ color: ACCENT }}
+                    >
+                      Copy
+                    </button>
+                  </div>
+                  <textarea
+                    value={item.message || (bulkDraftLoading ? 'Drafting…' : '')}
+                    onChange={(e) => setBulkDraft((cur) => cur?.map((x, j) => (j === i ? { ...x, message: e.target.value } : x)) ?? cur)}
+                    readOnly={bulkDraftLoading}
+                    rows={3}
+                    className="w-full text-[13px] text-[#222] rounded-lg border border-[#e3def9] p-2.5 focus:outline-none focus:border-[#6C4DF6] resize-none"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-[#f0f0f0] flex items-center justify-end">
+              <button
+                onClick={() => {
+                  const all = bulkDraft.map((x) => `@${x.username}\n${x.message}`).join('\n\n———\n\n');
+                  void navigator.clipboard.writeText(all);
+                  setBulkCopied(true);
+                }}
+                disabled={bulkDraftLoading}
+                className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50"
+                style={{ background: ACCENT }}
+              >
+                {bulkCopied ? 'Copied all ✓' : 'Copy all'}
               </button>
             </div>
           </div>
