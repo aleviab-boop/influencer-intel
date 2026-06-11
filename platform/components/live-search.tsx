@@ -29,6 +29,19 @@ interface Program {
   name: string;
 }
 
+// A creator the user pinned to revisit — persisted client-side so finds aren't
+// lost while pivoting through the similar-creators discovery graph. Works for
+// live-crawled creators too (which have no creator_id for campaign recruiting).
+interface SavedCreator {
+  username: string;
+  full_name: string;
+  followers: number;
+  profile_pic_url: string | null;
+  category?: string;
+  email?: string | null;
+  phone?: string | null;
+}
+
 interface ProfileData {
   handle: string;
   full_name: string;
@@ -243,13 +256,36 @@ export function LiveSearch({
   // outreach "contacted" tracking (localStorage)
   const [contacted, setContacted] = useState<Set<string>>(new Set());
   const [hideContacted, setHideContacted] = useState(false);
+  // pinned creators that persist across searches (localStorage)
+  const [savedCreators, setSavedCreators] = useState<SavedCreator[]>([]);
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem('ii_contacted');
       if (raw) setContacted(new Set(JSON.parse(raw)));
+      const rawSaved = localStorage.getItem('ii_saved_creators');
+      if (rawSaved) setSavedCreators(JSON.parse(rawSaved));
     } catch { /* ignore */ }
   }, []);
+
+  const isSaved = (u: string) => savedCreators.some((s) => s.username.toLowerCase() === u.toLowerCase());
+
+  function toggleSaved(p: LiveProfile) {
+    setSavedCreators((list) => {
+      const exists = list.some((s) => s.username.toLowerCase() === p.username.toLowerCase());
+      const next = exists
+        ? list.filter((s) => s.username.toLowerCase() !== p.username.toLowerCase())
+        : [{ username: p.username, full_name: p.full_name, followers: p.followers, profile_pic_url: p.profile_pic_url, category: p.category, email: p.email, phone: p.phone }, ...list];
+      try { localStorage.setItem('ii_saved_creators', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
+  function clearSaved() {
+    setSavedCreators([]);
+    try { localStorage.removeItem('ii_saved_creators'); } catch { /* ignore */ }
+  }
 
   function markContacted(handle: string) {
     setContacted((s) => {
@@ -409,16 +445,20 @@ export function LiveSearch({
     }
   }
 
-  async function openBulkDraft(channel: 'dm' | 'email' = 'dm') {
-    const targets = shown.filter((p) => selected.has(p.username)).slice(0, 20);
-    if (targets.length === 0) return;
+  async function runBulkDraft(
+    targets: { username: string; category?: string; phone?: string | null; email?: string | null }[],
+    channel: 'dm' | 'email',
+  ) {
+    const list = targets.slice(0, 20);
+    if (list.length === 0) return;
+    setShowSaved(false);
     setBulkChannel(channel);
     setBulkCopied(false);
-    setBulkDraft(targets.map((p) => ({ username: p.username, message: '', phone: p.phone, email: p.email })));
+    setBulkDraft(list.map((p) => ({ username: p.username, message: '', phone: p.phone, email: p.email })));
     setBulkDraftLoading(true);
     try {
       const results = await Promise.all(
-        targets.map(async (p) => {
+        list.map(async (p) => {
           try {
             const d = await fetch('/api/discover-live/outreach', {
               method: 'POST',
@@ -435,6 +475,10 @@ export function LiveSearch({
     } finally {
       setBulkDraftLoading(false);
     }
+  }
+
+  async function openBulkDraft(channel: 'dm' | 'email' = 'dm') {
+    await runBulkDraft(shown.filter((p) => selected.has(p.username)), channel);
   }
 
   const suggestions = buildSuggestions(prompt);
@@ -942,6 +986,14 @@ export function LiveSearch({
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => toggleSaved(p)}
+                            title={isSaved(p.username) ? 'Saved — click to remove' : 'Save creator'}
+                            className="w-8 h-8 grid place-items-center rounded-lg border transition-colors"
+                            style={{ color: ACCENT, borderColor: isSaved(p.username) ? ACCENT : '#e3def9', background: isSaved(p.username) ? '#f4f0ff' : undefined }}
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill={isSaved(p.username) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
+                          </button>
                           <IconBtn onClick={() => findSimilar(p)} title="Find similar creators">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9.5" r="2" /><path d="M16 19a4 4 0 0 1 6-3" /></svg>
                           </IconBtn>
@@ -1136,6 +1188,52 @@ export function LiveSearch({
               >
                 {bulkCopied ? 'Copied all ✓' : 'Copy all'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saved creators: floating button + panel */}
+      {savedCreators.length > 0 && !showSaved && (
+        <button
+          onClick={() => setShowSaved(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(108,77,246,0.4)] hover:-translate-y-0.5 transition-transform"
+          style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, animation: 'ii-fadeup .3s both' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
+          {savedCreators.length} saved
+        </button>
+      )}
+
+      {showSaved && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowSaved(false)}>
+          <div className="w-full max-w-md h-full bg-white shadow-2xl flex flex-col" style={{ animation: 'ii-slidein .25s both' }} onClick={(e) => e.stopPropagation()}>
+            <style>{`@keyframes ii-slidein{from{transform:translateX(100%)}to{transform:none}}`}</style>
+            <div className="px-5 py-4 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+              <div className="text-[15px] font-semibold">Saved creators · {savedCreators.length}</div>
+              <button onClick={() => setShowSaved(false)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-[#f3f3f3]">
+              {savedCreators.map((s) => (
+                <div key={s.username} className="flex items-center gap-3 px-5 py-3">
+                  <Avatar name={s.full_name || s.username} url={s.profile_pic_url} />
+                  <div className="min-w-0 flex-1">
+                    <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-[#111] truncate hover:underline">@{s.username}</a>
+                    <div className="text-[12px] text-[#999] truncate">{fmt(s.followers)} followers{s.category ? ` · ${s.category}` : ''}</div>
+                  </div>
+                  <button onClick={() => toggleSaved({ username: s.username } as LiveProfile)} className="text-[#bbb] hover:text-rose-500 text-lg leading-none" title="Remove">×</button>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-4 border-t border-[#eee] flex items-center gap-2">
+              <button
+                onClick={() => void runBulkDraft(savedCreators, 'dm')}
+                className="flex-1 px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold hover:brightness-105"
+                style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+              >
+                ✦ Draft outreach to all
+              </button>
+              <button onClick={clearSaved} className="px-4 py-2.5 rounded-xl text-[13px] font-medium border border-[#eee] text-[#666] hover:bg-[#faf9ff]">Clear</button>
             </div>
           </div>
         </div>
