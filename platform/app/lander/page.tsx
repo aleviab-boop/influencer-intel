@@ -568,11 +568,11 @@ function FeatureGrid() {
 }
 
 const TESTIMONIALS = [
-  { q: 'Campaign Manager automation saved us time and resources, so we focus on strategy.', n: 'Gaurav Khare', r: 'Malabar Gold' },
-  { q: 'During campaign execution we got great support from the campaign managers.', n: 'Gagan Gulati', r: 'Chatwise' },
-  { q: 'Makes collaboration easy — find the right influencers and manage campaigns efficiently.', n: 'Kajal', r: 'Wellfa' },
-  { q: 'A very good platform for both influencers and businesses. Finding the right fit is finally simple.', n: 'Vinay', r: 'Moda Veda' },
-  { q: 'Saved us the huge amount of time we used to spend on influencer marketing manually.', n: 'Alok', r: 'Educase.io' },
+  { q: 'Campaign Manager automation saved us time and resources, so we focus on strategy.', n: 'Gaurav Khare', r: 'Malabar Gold', photo: 'https://i.pravatar.cc/96?img=11' },
+  { q: 'During campaign execution we got great support from the campaign managers.', n: 'Gagan Gulati', r: 'Chatwise', photo: 'https://i.pravatar.cc/96?img=52' },
+  { q: 'Makes collaboration easy — find the right influencers and manage campaigns efficiently.', n: 'Kajal', r: 'Wellfa', photo: 'https://i.pravatar.cc/96?img=49' },
+  { q: 'A very good platform for both influencers and businesses. Finding the right fit is finally simple.', n: 'Vinay', r: 'Moda Veda', photo: 'https://i.pravatar.cc/96?img=33' },
+  { q: 'Saved us the huge amount of time we used to spend on influencer marketing manually.', n: 'Alok', r: 'Educase.io', photo: 'https://i.pravatar.cc/96?img=59' },
 ];
 
 function Testimonials() {
@@ -598,13 +598,13 @@ function Testimonials() {
   );
 }
 
-function Card({ t }: { t: { q: string; n: string; r: string } }) {
+function Card({ t }: { t: { q: string; n: string; r: string; photo?: string } }) {
   return (
     <div className="p-6 rounded-2xl bg-[#fafafa] border border-[#f0f0f0]">
       <div className="text-[22px] leading-none mb-3" style={{ color: ACCENT }}>“</div>
       <p className="text-[14px] text-[#333] leading-relaxed">{t.q}</p>
       <div className="mt-4 flex items-center gap-2.5">
-        <Avatar name={t.n} />
+        <Avatar name={t.n} photo={t.photo} />
         <div>
           <div className="text-[13px] font-semibold">{t.n}</div>
           <div className="text-[12px] text-[#999]">{t.r}</div>
