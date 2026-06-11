@@ -22,7 +22,7 @@ export function Showcase() {
     { icon: <IconDb />, title: 'Largest Influencer Database', desc: 'India’s largest verified creator network — AI-powered filters, deep insights and smart discovery across Instagram & YouTube.', mock: <DatabaseMock /> },
     { icon: <IconList />, title: 'Campaign Management', desc: 'Automate and manage high-volume creator campaigns — from outreach to approvals — in one dashboard.', mock: <CampaignMock /> },
     { icon: <IconBars />, title: 'Competitor Analysis', desc: 'Uncover competitors’ creators, share of voice and influencer overlaps — benchmarked by size, category and location.', mock: <CompetitorMock /> },
-    { icon: <IconSpark />, title: 'AI-Powered Campaign Intelligence', desc: 'Find creators faster, generate scripts instantly and craft winning briefs — let AI do the work while you focus on results.', mock: <AIMock /> },
+    { icon: <IconSpark />, title: 'AI Content Idea Generator', desc: 'Drop a few tokens and get a full scene-by-scene reel script, alternative concepts, a caption — downloadable as a PDF to hand to creators.', mock: <AIMock /> },
   ];
   const N = items.length;
 
@@ -491,7 +491,7 @@ function AIMock() {
     <Glass>
       <div className="flex items-center gap-2 mb-3">
         <span className="w-8 h-8 rounded-lg grid place-items-center text-white" style={{ background: ACCENT }}>✦</span>
-        <span className="text-[13px] font-semibold">AI brief generator</span>
+        <span className="text-[13px] font-semibold">Content idea generator</span>
       </div>
       <div className="rounded-2xl border border-[#eee] p-3 mb-3 bg-[#faf9ff]">
         <div className="text-[11px] text-[#999] mb-1">Prompt</div>
@@ -524,11 +524,11 @@ function AIMock() {
       <div className="mt-4 flex items-center justify-between">
         <span className="text-[11px] text-[#999]">{loading ? 'Generating…' : `Generated in ${secs}s`}</span>
         <button
-          onClick={() => router.push(`/lander?prompt=${encodeURIComponent(prompt.trim())}`)}
+          onClick={() => router.push(`/tools/content-ideas?prompt=${encodeURIComponent(prompt.trim())}`)}
           className="px-3 py-1.5 rounded-full text-[12px] text-white hover:brightness-105"
           style={{ background: ACCENT }}
         >
-          Use brief →
+          Full script + PDF →
         </button>
       </div>
     </Glass>

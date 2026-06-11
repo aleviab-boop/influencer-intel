@@ -425,6 +425,45 @@ Be specific and punchy. No hype, no filler.`,
   }
 
   /**
+   * Turn a few tokens (e.g. "summer pastel 15s body wash") into a full
+   * content-ideas pack: a scene-by-scene script, alternative concepts, and a
+   * ready-to-post caption + hashtags.
+   */
+  async generateContentIdeas(prompt: string): Promise<{
+    concept: string;
+    format: string;
+    best_window: string;
+    script: { scene: string; onscreen: string; voiceover: string }[];
+    ideas: { title: string; desc: string }[];
+    caption: string;
+    hashtags: string[];
+  }> {
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are a short-form content director for Indian D2C brands. Given a few tokens describing a post (vibe, duration, product), produce a concrete, production-ready content pack for an Instagram reel.
+Respond ONLY with JSON in this exact shape:
+{
+  "concept": "one-line creative concept",
+  "format": "e.g. 15s reel · trending pastel audio",
+  "best_window": "best posting window, e.g. Thu 7-9pm",
+  "script": [ { "scene": "0-3s", "onscreen": "on-screen text", "voiceover": "what's said / audio cue" } ],
+  "ideas": [ { "title": "alt idea title", "desc": "one-line description" } ],
+  "caption": "ready-to-post caption with 1-2 emojis",
+  "hashtags": ["#tag1", "#tag2"]
+}
+Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceover direction; 3-5 alternative ideas; 6-10 relevant hashtags. Be specific and punchy, no hype or filler.`,
+        },
+        { role: 'user', content: `Tokens: ${prompt}\n\nWrite the content pack.` },
+      ],
+    });
+    return JSON.parse(res.choices[0]?.message?.content ?? '{}');
+  }
+
+  /**
    * Generate a personalised outreach DM for a creator.
    */
   async generateOutreach(input: {
