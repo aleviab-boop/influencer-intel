@@ -52,6 +52,22 @@ export function Reveal({
 export const ACCENT = '#6C4DF6';
 export const ACCENT_SOFT = '#F4F2FF';
 
+// Brand mark: two figures forming a heart with three dots, in the pink/blue/
+// yellow palette. Replaces the old "i" tile. Transparent background so it sits
+// on both light (nav) and dark (footer) surfaces.
+export function BrandMark({ size = 28, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" className={className} aria-hidden role="img">
+      <path d="M11 37C9 23 23 17 32 27c9-10 23-4 21 10" stroke="#4FB3D9" strokeWidth="5" strokeLinecap="round" fill="none" />
+      <path d="M32 38C24 34 15 38 15 45c0 6 9 11 17 13z" fill="#D83E83" />
+      <path d="M32 38c8-4 17 0 17 7 0 6-9 11-17 13z" fill="#ECBF4C" />
+      <circle cx="23" cy="31" r="4" fill="#D83E83" />
+      <circle cx="32" cy="31" r="4" fill="#4FB3D9" />
+      <circle cx="41" cy="31" r="4" fill="#ECBF4C" />
+    </svg>
+  );
+}
+
 // True once a session exists (set on login: ii_role, or creator: creator_handle).
 export function useLoggedIn(): [boolean, () => void] {
   const router = useRouter();
@@ -137,9 +153,7 @@ export function MarketingNav() {
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
         <Link href="/lander" className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg grid place-items-center text-white text-sm font-bold" style={{ background: ACCENT }}>
-            i
-          </span>
+          <BrandMark size={30} />
           <span className="text-[15px] font-bold tracking-tight">Influencer Intel</span>
         </Link>
         <nav className="hidden md:flex items-center gap-7 text-[14px] text-[#444]">
@@ -224,7 +238,7 @@ export function MarketingFooter() {
       <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <span className="w-7 h-7 rounded-lg grid place-items-center text-white text-sm font-bold" style={{ background: ACCENT }}>i</span>
+            <BrandMark size={28} />
             <span className="text-[15px] font-bold text-white">Influencer Intel</span>
           </div>
           <p className="text-[13px] text-[#777] leading-relaxed">India’s AI-native InfluencerOS for brands.</p>

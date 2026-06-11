@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
 
 type Role = 'agency' | 'influencer';
 
@@ -35,7 +35,7 @@ export default function SignupPage() {
         <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
         <div className="relative w-full max-w-md">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 mx-auto rounded-2xl grid place-items-center mb-4 text-white text-lg font-bold" style={{ background: ACCENT }}>i</div>
+            <div className="mx-auto w-fit mb-4"><BrandMark size={48} /></div>
             <h1 className="text-2xl font-bold text-ink-900">Create your account</h1>
             <p className="mt-2 text-[14px] text-ink-600">Join Influencer Intel — pick how you’ll use it.</p>
           </div>

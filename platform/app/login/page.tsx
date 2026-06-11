@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
 
 type Role = 'agency' | 'influencer';
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
             <div className="absolute -bottom-20 -left-10 w-72 h-72 rounded-full bg-black/10 blur-2xl" style={{ animation: 'ii-blob 11s ease-in-out infinite reverse' }} />
 
             <div className="relative flex items-center gap-2">
-              <span className="w-8 h-8 rounded-xl grid place-items-center bg-white/20 backdrop-blur text-[15px] font-bold">i</span>
+              <span className="w-9 h-9 rounded-xl grid place-items-center bg-white/90 backdrop-blur"><BrandMark size={26} /></span>
               <span className="text-[15px] font-bold">Influencer Intel</span>
             </div>
 
@@ -129,7 +129,7 @@ export default function LoginPage() {
 
           {/* Right form panel */}
           <div className="p-7 sm:p-9">
-            <div className="md:hidden w-11 h-11 rounded-2xl grid place-items-center mb-4 text-white text-lg font-bold" style={{ background: ACCENT }}>i</div>
+            <div className="md:hidden mb-4"><BrandMark size={40} /></div>
             <h1 className="text-2xl font-bold text-ink-900">Welcome back</h1>
             <p className="mt-1.5 text-[14px] text-ink-600">
               {plan ? <>Log in to continue to the <span className="font-semibold capitalize" style={{ color: ACCENT }}>{plan}</span> plan checkout.</> : 'Log in to your account to continue.'}

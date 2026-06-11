@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
-import { useLoggedIn } from '@/components/marketing';
+import { useLoggedIn, BrandMark } from '@/components/marketing';
 import { BookDemoButton } from '@/components/book-demo';
 import { buildSuggestions } from '@/lib/suggestions';
 
@@ -760,7 +760,7 @@ function Footer() {
       <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <span className="w-7 h-7 rounded-lg grid place-items-center text-white text-sm font-bold" style={{ background: ACCENT }}>i</span>
+            <BrandMark size={28} />
             <span className="text-[15px] font-bold text-white">Influencer Intel</span>
           </div>
           <p className="text-[13px] text-[#777] leading-relaxed">India’s AI-native InfluencerOS for brands.</p>
