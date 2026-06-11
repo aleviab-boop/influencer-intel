@@ -121,9 +121,7 @@ function MarketingNav() {
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg grid place-items-center text-white text-sm font-bold" style={{ background: ACCENT }}>
-            i
-          </span>
+          <BrandMark size={30} />
           <span className="text-[15px] font-bold tracking-tight">Influencer Intel</span>
         </div>
         <nav className="hidden md:flex items-center gap-7 text-[14px] text-[#444]">
