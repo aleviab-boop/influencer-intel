@@ -58,6 +58,8 @@ interface ProfileData {
   phone: string | null;
   recent: { shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; taken_at: number | null; caption: string }[];
   related?: { handle: string; full_name: string; is_verified: boolean; profile_pic_url: string | null }[];
+  collabs?: { handle: string; count: number }[];
+  sponsored_posts?: number;
 }
 
 interface RunResponse {
@@ -1272,6 +1274,7 @@ export function LiveSearch({
 
 function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
   const [copied, setCopied] = useState(false);
+  const [rivals, setRivals] = useState('');
   if (loading || !profile) {
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
@@ -1291,6 +1294,10 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const rhythm = postingInsight(profile.recent);
   const themes = contentThemes(profile.recent);
   const rate = estimatedRate(profile.followers, engagement);
+  const collabs = profile.collabs ?? [];
+  const rivalTerms = rivals.toLowerCase().split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean);
+  const isRival = (h: string) => rivalTerms.some((t) => h.toLowerCase().includes(t));
+  const conflictCount = collabs.filter((c) => isRival(c.handle)).length;
 
   const copySummary = () => {
     const lines = [
@@ -1392,6 +1399,44 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
               {themes.map((t) => (
                 <span key={t} className="px-2.5 py-1 rounded-full text-[12px] font-medium border border-[#e3def9] bg-[#f6f4ff]" style={{ color: ACCENT }}>{t}</span>
               ))}
+            </div>
+          </div>
+        )}
+
+        {collabs.length > 0 && (
+          <div className="mt-3" style={{ animation: 'ii-fadeup .4s .38s both' }}>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[10px] uppercase tracking-wide text-[#999]">
+                Brand activity{profile.sponsored_posts ? ` · ${profile.sponsored_posts} sponsored` : ''}
+              </div>
+            </div>
+            <input
+              value={rivals}
+              onChange={(e) => setRivals(e.target.value)}
+              placeholder="Flag conflicts — your brand / competitors (comma-sep)"
+              className="w-full mb-2 px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[12px] focus:outline-none focus:border-[#6C4DF6]"
+            />
+            {conflictCount > 0 && (
+              <div className="mb-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium bg-rose-50 text-rose-600">
+                ⚠ {conflictCount} potential conflict{conflictCount > 1 ? 's' : ''} — recently tagged a competitor
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1.5">
+              {collabs.map((c) => {
+                const conflict = isRival(c.handle);
+                return (
+                  <a
+                    key={c.handle}
+                    href={`https://instagram.com/${c.handle}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={conflict ? 'Potential conflict' : `Tagged ${c.count}×`}
+                    className={`px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors ${conflict ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-[#fafafc] border-[#eee] text-[#555] hover:border-[#d9d2f7]'}`}
+                  >
+                    {conflict && '⚠ '}@{c.handle}{c.count > 1 ? ` ·${c.count}` : ''}
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}

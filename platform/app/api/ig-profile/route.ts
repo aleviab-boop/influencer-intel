@@ -34,10 +34,24 @@ export async function GET(req: NextRequest) {
     if (!u) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
     const media = u.edge_owner_to_timeline_media?.edges ?? [];
+    // Brand-conflict signals: who the creator tags/mentions in recent captions
+    // and whether posts look sponsored — so you can spot competitor collabs
+    // before reaching out. Computed from the FULL caption (before truncation).
+    const SPONSOR_RE = /#(ad|sponsored|paid|paidpartnership|collab|collaboration|partner|brandpartner|sponsoredpost)\b|paid partnership/i;
+    const MENTION_RE = /@([A-Za-z0-9_.]{2,30})/g;
+    const self = (u.username ?? '').toLowerCase();
+    const mentionCounts = new Map<string, number>();
+    let sponsoredPosts = 0;
+
     const recent = media.slice(0, 9).map((e: { node?: Record<string, unknown> }) => {
       const n = (e.node ?? {}) as Record<string, unknown>;
       const caption =
         ((n.edge_media_to_caption as { edges?: { node?: { text?: string } }[] })?.edges?.[0]?.node?.text) ?? '';
+      if (SPONSOR_RE.test(caption)) sponsoredPosts++;
+      for (const m of caption.matchAll(MENTION_RE)) {
+        const h = (m[1] ?? '').toLowerCase().replace(/\.+$/, '');
+        if (h && h !== self) mentionCounts.set(h, (mentionCounts.get(h) ?? 0) + 1);
+      }
       return {
         shortcode: n.shortcode ?? '',
         thumbnail: (n.thumbnail_src as string) ?? (n.display_url as string) ?? null,
@@ -48,6 +62,11 @@ export async function GET(req: NextRequest) {
         caption: caption.slice(0, 140),
       };
     });
+
+    const collabs = [...mentionCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([handle, count]) => ({ handle, count }));
 
     const contact = extractContact(u.biography, {
       businessEmail: u.business_email,
@@ -86,6 +105,8 @@ export async function GET(req: NextRequest) {
       phone: contact.phone,
       recent,
       related,
+      collabs,
+      sponsored_posts: sponsoredPosts,
     });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
