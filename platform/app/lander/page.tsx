@@ -456,10 +456,10 @@ function LogoItem({ name, slug }: { name: string; slug: string }) {
 }
 
 const SAMPLE_CREATORS = [
-  { name: 'Aisha Kapoor', city: 'Mumbai', followers: '248K', er: '4.8%', match: 96 },
-  { name: 'Rohan Mehta', city: 'Delhi', followers: '512K', er: '3.1%', match: 92 },
-  { name: 'Neha Sharma', city: 'Bangalore', followers: '89K', er: '6.2%', match: 90 },
-  { name: 'Arjun Rao', city: 'Hyderabad', followers: '1.2M', er: '2.4%', match: 88 },
+  { name: 'Aisha Kapoor', city: 'Mumbai', followers: '248K', er: '4.8%', match: 96, photo: 'https://i.pravatar.cc/96?img=45' },
+  { name: 'Rohan Mehta', city: 'Delhi', followers: '512K', er: '3.1%', match: 92, photo: 'https://i.pravatar.cc/96?img=13' },
+  { name: 'Neha Sharma', city: 'Bangalore', followers: '89K', er: '6.2%', match: 90, photo: 'https://i.pravatar.cc/96?img=44' },
+  { name: 'Arjun Rao', city: 'Hyderabad', followers: '1.2M', er: '2.4%', match: 88, photo: 'https://i.pravatar.cc/96?img=68' },
 ];
 const DB_LOCATIONS = ['MUM', 'DL', 'BLR', 'HYD', 'CHN', 'KOL', 'PUN', 'JAI', 'AHM', 'LKO'];
 
@@ -505,7 +505,7 @@ function DatabaseSection() {
           <div className="divide-y divide-[#f3f3f3]">
             {SAMPLE_CREATORS.map((c) => (
               <div key={c.name} className="flex items-center gap-3 px-4 py-3">
-                <Avatar name={c.name} />
+                <Avatar name={c.name} photo={c.photo} />
                 <div className="min-w-0">
                   <div className="text-[14px] font-medium truncate">{c.name}</div>
                   <div className="text-[12px] text-[#999]">{c.city} · {c.followers} · {c.er} ER</div>
@@ -774,11 +774,16 @@ function Footer() {
   );
 }
 
-function Avatar({ name }: { name: string }) {
+function Avatar({ name, photo }: { name: string; photo?: string }) {
+  const [imgErr, setImgErr] = useState(false);
   const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   const hue = h % 360;
+  if (photo && !imgErr) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={photo} alt={name} onError={() => setImgErr(true)} className="w-9 h-9 rounded-full object-cover shrink-0 bg-[#eee]" />;
+  }
   return (
     <div
       className="w-9 h-9 rounded-full grid place-items-center text-white text-[12px] font-semibold shrink-0"
