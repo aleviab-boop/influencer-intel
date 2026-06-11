@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { BrandMark } from '@/components/marketing';
 
 interface SessionState {
   authenticated: boolean;
@@ -65,12 +66,7 @@ export function AppHeader() {
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-[#e5e5e5]">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link href="/lander" className="flex items-center gap-2">
-          <span
-            className="w-6 h-6 rounded-md grid place-items-center text-white text-[13px] font-bold"
-            style={{ background: 'var(--ii-accent)' }}
-          >
-            i
-          </span>
+          <BrandMark size={26} />
           <span className="text-[15px] font-semibold tracking-[0.02em] text-[#111]">
             Influencer Intel
           </span>
