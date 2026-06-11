@@ -149,11 +149,16 @@ export default function ContentIdeas() {
                 className="flex-1 min-w-0 px-3 text-[16px] text-[#222] focus:outline-none bg-transparent"
                 autoFocus
               />
+              <style>{`@keyframes ii-glow{0%,100%{box-shadow:0 6px 18px rgba(236,30,121,.35)}50%{box-shadow:0 8px 30px rgba(247,181,0,.6)}}`}</style>
               <button
                 onClick={() => generate()}
                 disabled={loading || prompt.trim().length < 3}
-                className="px-5 py-2.5 rounded-xl text-white text-[14px] font-semibold shrink-0 disabled:opacity-50 hover:brightness-105 flex items-center gap-2"
-                style={{ background: `linear-gradient(135deg, ${ACCENT}, #F7B500)` }}
+                className="px-6 py-3 rounded-xl text-white text-[15px] font-bold shrink-0 disabled:opacity-50 hover:-translate-y-0.5 hover:brightness-105 transition-transform flex items-center gap-2"
+                style={{
+                  background: `linear-gradient(135deg, ${ACCENT}, #F7B500)`,
+                  animation: loading || pack ? undefined : 'ii-glow 1.8s ease-in-out infinite',
+                  boxShadow: '0 6px 18px rgba(236,30,121,.35)',
+                }}
               >
                 {loading && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                 {loading ? 'Generating…' : '✦ Generate'}
