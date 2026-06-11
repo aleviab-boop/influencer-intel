@@ -509,6 +509,8 @@ export function LiveSearch({
 
   // One search: a username crawls Instagram live; otherwise search the database.
   function runSearch() {
+    setShowSug(false); // close the autocomplete dropdown on every search
+    setActiveIdx(-1);
     const u = seedText.trim();
     if (u.length >= 2) void search({ seedOverride: seedText, mode: 'live' });
     else void search({ seedOverride: '', mode: 'db' });
