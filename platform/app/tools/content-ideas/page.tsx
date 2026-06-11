@@ -132,7 +132,7 @@ export default function ContentIdeas() {
     <div className="min-h-screen flex flex-col bg-white text-[#111]">
       <MarketingNav />
       <main className="flex-1">
-        <section className={`py-12 md:py-16 flex items-center ${pack ? '' : 'min-h-[80vh]'}`} style={{ background: `linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <section className={`py-12 md:py-16 flex items-center ${pack ? '' : 'min-h-screen'}`} style={{ background: `linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }}>
           <div className="max-w-3xl mx-auto px-6 text-center w-full">
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>Content Idea Generator</span>
             <h1 className="mt-2 text-3xl md:text-5xl font-bold tracking-tight">From a few words to a full reel script</h1>
