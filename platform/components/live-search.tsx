@@ -63,6 +63,17 @@ function authenticityFlag(followers: number, engagement?: number): 'healthy' | '
 // Split the start-from field into exact handles vs names to resolve.
 // Comma-separated; an entry with an internal space is treated as a name
 // (e.g. "mridul sharma"), otherwise as an @handle.
+// Click-to-send links: WhatsApp prefilled (Indian numbers default to +91) and
+// a mailto with the draft as the body.
+function waLink(phone: string, text: string): string {
+  const digits = phone.replace(/\D/g, '');
+  const withCc = digits.length === 10 ? `91${digits}` : digits;
+  return `https://wa.me/${withCc}?text=${encodeURIComponent(text)}`;
+}
+function mailLink(email: string, text: string): string {
+  return `mailto:${email}?subject=${encodeURIComponent('Collaboration with you')}&body=${encodeURIComponent(text)}`;
+}
+
 function parseSeedInput(raw: string): { seeds: string[]; names: string[] } {
   const seeds: string[] = [];
   const names: string[] = [];
@@ -114,7 +125,7 @@ export function LiveSearch({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   // bulk outreach drafts
-  const [bulkDraft, setBulkDraft] = useState<{ username: string; message: string }[] | null>(null);
+  const [bulkDraft, setBulkDraft] = useState<{ username: string; message: string; phone?: string | null; email?: string | null }[] | null>(null);
   const [bulkDraftLoading, setBulkDraftLoading] = useState(false);
   const [bulkChannel, setBulkChannel] = useState<'dm' | 'email'>('dm');
   const [bulkCopied, setBulkCopied] = useState(false);
@@ -257,7 +268,7 @@ export function LiveSearch({
     if (targets.length === 0) return;
     setBulkChannel(channel);
     setBulkCopied(false);
-    setBulkDraft(targets.map((p) => ({ username: p.username, message: '' })));
+    setBulkDraft(targets.map((p) => ({ username: p.username, message: '', phone: p.phone, email: p.email })));
     setBulkDraftLoading(true);
     try {
       const results = await Promise.all(
@@ -268,9 +279,9 @@ export function LiveSearch({
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel }),
             }).then((r) => r.json());
-            return { username: p.username, message: d.message ?? d.error ?? '' };
+            return { username: p.username, message: d.message ?? d.error ?? '', phone: p.phone, email: p.email };
           } catch {
-            return { username: p.username, message: '' };
+            return { username: p.username, message: '', phone: p.phone, email: p.email };
           }
         }),
       );
@@ -837,11 +848,31 @@ export function LiveSearch({
               <button
                 onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); }}
                 disabled={draftLoading || !draftText}
-                className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50"
-                style={{ background: ACCENT }}
+                className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] disabled:opacity-50"
+                style={{ color: ACCENT }}
               >
                 {copied ? 'Copied ✓' : 'Copy'}
               </button>
+              {draftFor.email && (
+                <a
+                  href={mailLink(draftFor.email, draftText)}
+                  className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                  style={{ background: ACCENT }}
+                >
+                  ✉ Send email
+                </a>
+              )}
+              {draftFor.phone && (
+                <a
+                  href={waLink(draftFor.phone, draftText)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                  style={{ background: '#25D366' }}
+                >
+                  Send on WhatsApp
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -876,14 +907,22 @@ export function LiveSearch({
                 <div key={item.username} className="rounded-xl border border-[#eee] p-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[13px] font-medium text-[#111]">@{item.username}</span>
-                    <button
-                      onClick={() => { void navigator.clipboard.writeText(item.message); }}
-                      disabled={!item.message}
-                      className="text-[12px] font-medium disabled:opacity-40"
-                      style={{ color: ACCENT }}
-                    >
-                      Copy
-                    </button>
+                    <div className="flex items-center gap-2.5 text-[12px] font-medium">
+                      {item.email && (
+                        <a href={mailLink(item.email, item.message)} className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: ACCENT }}>✉ Email</a>
+                      )}
+                      {item.phone && (
+                        <a href={waLink(item.phone, item.message)} target="_blank" rel="noreferrer" className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: '#1ebe57' }}>WhatsApp</a>
+                      )}
+                      <button
+                        onClick={() => { void navigator.clipboard.writeText(item.message); }}
+                        disabled={!item.message}
+                        className="disabled:opacity-40"
+                        style={{ color: ACCENT }}
+                      >
+                        Copy
+                      </button>
+                    </div>
                   </div>
                   <textarea
                     value={item.message || (bulkDraftLoading ? 'Drafting…' : '')}
