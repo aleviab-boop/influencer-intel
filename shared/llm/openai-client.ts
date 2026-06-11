@@ -481,8 +481,10 @@ Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceov
     creator_recent_topics: string[];
     campaign_summary: string;
     channel: 'ig_dm' | 'email';
+    recent_highlight?: string;
   }): Promise<string> {
     const isDM = input.channel === 'ig_dm';
+    const highlight = input.recent_highlight?.trim();
     const res = await this.client.chat.completions.create({
       model: this.outreachModel,
       messages: [
@@ -490,7 +492,9 @@ Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceov
           role: 'system',
           content: `You write first-touch outreach messages from a brand to a creator.
 ${isDM ? 'Format: Instagram DM. 2-3 sentences, casual, no formal greeting beyond "hi @handle".' : 'Format: cold email. Subject line then 4-6 sentence body.'}
-Tone: matches the brand voice samples. Never claim things not in the brief. Always reference the creator's recent content (the "topics") to show you actually looked. End with a soft CTA. No emojis unless the brand voice uses them.`,
+Tone: matches the brand voice samples. Never claim things not in the brief.
+${highlight ? 'Open with a warm, specific reference to their most recent post (provided) — mention a concrete detail so it is clearly genuine, not generic. Do NOT quote it verbatim or use quotation marks; paraphrase naturally.' : "Reference the creator's recent topics to show you actually looked."}
+End with a soft CTA. No emojis unless the brand voice uses them.`,
         },
         {
           role: 'user',
@@ -499,7 +503,7 @@ Brand voice samples:
 ${input.brand_voice_samples.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
 Creator: @${input.creator_handle}
-Recent topics they post about: ${input.creator_recent_topics.join(', ')}
+Recent topics they post about: ${input.creator_recent_topics.join(', ')}${highlight ? `\nTheir most recent post: "${highlight}"` : ''}
 
 Campaign: ${input.campaign_summary}
 
