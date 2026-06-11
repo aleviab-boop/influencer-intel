@@ -97,50 +97,72 @@ export function useLoggedIn(): [boolean, () => void] {
   return [loggedIn, logout];
 }
 
-// Top-right account avatar shown once signed in. For a creator we resolve their
-// Instagram profile photo via /api/ig-avatar (with an initials fallback); a
-// click opens a small menu with the handle/role and a log-out action.
-export function AccountMenu({ onLogout }: { onLogout: () => void }) {
+// Top-right account avatar — always shown. Signed out: a generic person icon
+// whose menu offers log in / sign up. Signed in: a creator's Instagram photo
+// (initials fallback) with a menu showing the handle/role and a log-out action.
+export function AccountMenu() {
+  const [loggedIn, logout] = useLoggedIn();
   const [handle, setHandle] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [imgErr, setImgErr] = useState(false);
   useEffect(() => {
-    try {
-      setHandle(localStorage.getItem('creator_handle'));
-      setRole(localStorage.getItem('ii_role'));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const label = handle ? `@${handle}` : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Account';
-  const initials = (handle || role || 'U').slice(0, 2).toUpperCase();
+    const read = () => {
+      try {
+        setHandle(localStorage.getItem('creator_handle'));
+        setRole(localStorage.getItem('ii_role'));
+      } catch {
+        /* ignore */
+      }
+    };
+    read();
+    window.addEventListener('storage', read);
+    return () => window.removeEventListener('storage', read);
+  }, [loggedIn]);
+
+  const label = handle ? `@${handle}` : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Guest';
+  const showPhoto = loggedIn && handle && !imgErr;
+  const initials = loggedIn ? (handle || role || 'U').slice(0, 2).toUpperCase() : null;
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Account"
-        className="w-9 h-9 rounded-full overflow-hidden grid place-items-center text-white text-[12px] font-semibold ring-2 ring-[#ececec] hover:ring-[#d9d2f7] transition-shadow"
-        style={{ background: ACCENT }}
+        className="w-9 h-9 rounded-full overflow-hidden grid place-items-center ring-2 ring-[#ececec] hover:ring-[#d9d2f7] transition-shadow"
+        style={{ background: loggedIn ? ACCENT : '#f2effc' }}
       >
-        {handle && !imgErr ? (
+        {showPhoto ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/api/ig-avatar?handle=${encodeURIComponent(handle)}`} alt={label} onError={() => setImgErr(true)} className="w-full h-full object-cover" />
+          <img src={`/api/ig-avatar?handle=${encodeURIComponent(handle!)}`} alt={label} onError={() => setImgErr(true)} className="w-full h-full object-cover" />
+        ) : initials ? (
+          <span className="text-white text-[12px] font-semibold">{initials}</span>
         ) : (
-          initials
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" />
+          </svg>
         )}
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-2 z-50 w-52 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#f3f3f3]">
-              <div className="text-[13px] font-semibold text-[#111] truncate">{label}</div>
-              <div className="text-[11px] text-[#999]">{handle ? 'Creator account' : 'Signed in'}</div>
-            </div>
-            <button onClick={() => { setOpen(false); onLogout(); }} className="w-full text-left px-4 py-2.5 text-[13px] text-[#444] hover:bg-[#f6f4ff]">
-              Log out
-            </button>
+            {loggedIn ? (
+              <>
+                <div className="px-4 py-3 border-b border-[#f3f3f3]">
+                  <div className="text-[13px] font-semibold text-[#111] truncate">{label}</div>
+                  <div className="text-[11px] text-[#999]">{handle ? 'Creator account' : 'Signed in'}</div>
+                </div>
+                <button onClick={() => { setOpen(false); logout(); }} className="w-full text-left px-4 py-2.5 text-[13px] text-[#444] hover:bg-[#f6f4ff]">
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setOpen(false)} className="block px-4 py-2.5 text-[13px] text-[#444] hover:bg-[#f6f4ff]">Log in</Link>
+                <Link href="/start" onClick={() => setOpen(false)} className="block px-4 py-2.5 text-[13px] font-medium hover:bg-[#f6f4ff]" style={{ color: ACCENT }}>Sign up</Link>
+              </>
+            )}
           </div>
         </>
       )}
@@ -199,7 +221,6 @@ export function FeatureIcon({ name }: { name: string }) {
 }
 
 export function MarketingNav() {
-  const [loggedIn, logout] = useLoggedIn();
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
@@ -249,15 +270,8 @@ export function MarketingNav() {
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
-          {loggedIn ? (
-            <AccountMenu onLogout={logout} />
-          ) : (
-            <>
-              <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
-              <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
-            </>
-          )}
           <BookDemoButton />
+          <AccountMenu />
         </div>
       </div>
     </header>

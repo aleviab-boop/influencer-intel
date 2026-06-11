@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
-import { useLoggedIn, BrandMark, AccountMenu } from '@/components/marketing';
+import { BrandMark, AccountMenu } from '@/components/marketing';
 import { BookDemoButton } from '@/components/book-demo';
 import { buildSuggestions } from '@/lib/suggestions';
 
@@ -116,7 +116,6 @@ export default function LanderPage() {
 }
 
 function MarketingNav() {
-  const [loggedIn, logout] = useLoggedIn();
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
@@ -174,15 +173,8 @@ function MarketingNav() {
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
-          {loggedIn ? (
-            <AccountMenu onLogout={logout} />
-          ) : (
-            <>
-              <Link href="/login" className="text-[14px] text-[#444] hover:text-[#111]">Log in</Link>
-              <Link href="/start" className="text-[14px] font-medium hover:opacity-80" style={{ color: ACCENT }}>Sign up</Link>
-            </>
-          )}
           <BookDemoButton />
+          <AccountMenu />
         </div>
       </div>
     </header>
