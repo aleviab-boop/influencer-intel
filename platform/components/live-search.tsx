@@ -1146,6 +1146,7 @@ export function LiveSearch({
 }
 
 function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
+  const [copied, setCopied] = useState(false);
   if (loading || !profile) {
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
@@ -1165,6 +1166,22 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const rhythm = postingInsight(profile.recent);
   const themes = contentThemes(profile.recent);
   const rate = estimatedRate(profile.followers, engagement);
+
+  const copySummary = () => {
+    const lines = [
+      `@${profile.handle}${profile.is_verified ? ' ✔' : ''}${profile.full_name ? ` — ${profile.full_name}` : ''}`,
+      `${fmt(profile.followers)} followers · ${fmt(profile.posts)} posts${engagement != null ? ` · ${engagement}% engagement (${healthy ? 'healthy' : 'low'})` : ''}`,
+      rate ? `Est. rate/post: ${inr(rate.low)}–${inr(rate.high)}` : '',
+      rhythm ? `Posting: ${rhythm.cadence} · best ${rhythm.bestDay}, ${rhythm.bestWindow}` : '',
+      themes.length ? `Themes: ${themes.join(' ')}` : '',
+      profile.email ? `Email: ${profile.email}` : '',
+      profile.phone ? `Phone: ${profile.phone}` : '',
+      `https://instagram.com/${profile.handle}`,
+    ].filter(Boolean);
+    void navigator.clipboard.writeText(lines.join('\n'));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
   return (
     <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.05fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
       <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
@@ -1261,6 +1278,9 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
           <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
             Open Instagram ↗
           </a>
+          <button onClick={copySummary} className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: copied ? '#059669' : ACCENT, borderColor: copied ? '#a7f3d0' : undefined }}>
+            {copied ? '✓ Copied' : '⧉ Copy summary'}
+          </button>
         </div>
       </div>
 
