@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
         likes: (n.edge_liked_by as { count?: number })?.count ?? 0,
         comments: (n.edge_media_to_comment as { count?: number })?.count ?? 0,
         is_video: Boolean(n.is_video),
+        taken_at: (n.taken_at_timestamp as number) ?? null,
         caption: caption.slice(0, 140),
       };
     });

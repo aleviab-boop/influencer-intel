@@ -43,7 +43,7 @@ interface ProfileData {
   external_url: string | null;
   email: string | null;
   phone: string | null;
-  recent: { shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; caption: string }[];
+  recent: { shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; taken_at: number | null; caption: string }[];
 }
 
 interface RunResponse {
@@ -75,6 +75,48 @@ function expectedErFloor(followers: number): number {
 function authenticityFlag(followers: number, engagement?: number): 'healthy' | 'low' | null {
   if (!engagement || engagement <= 0) return null;
   return engagement >= expectedErFloor(followers) ? 'healthy' : 'low';
+}
+
+// Posting rhythm from recent-post timestamps + engagement. IG timestamps are
+// UTC; we read them in IST (UTC+5:30) since the audience is India-first. Returns
+// posts/week, the highest-engagement weekday, and a 3-hour best-time window.
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function postingInsight(
+  recent: { likes: number; comments: number; taken_at: number | null }[],
+): { cadence: string; bestDay: string; bestWindow: string } | null {
+  const ts = recent.filter((p) => p.taken_at && p.taken_at > 0);
+  if (ts.length < 3) return null;
+
+  const times = ts.map((p) => p.taken_at!).sort((a, b) => b - a);
+  const spanDays = (times[0]! - times[times.length - 1]!) / 86_400;
+  const perWeek = spanDays > 0 ? (times.length - 1) / (spanDays / 7) : 0;
+  const cadence =
+    perWeek >= 6 ? 'Posts daily'
+    : perWeek >= 1 ? `~${Math.round(perWeek)}× / week`
+    : `~${Math.max(1, Math.round(perWeek * 4))}× / month`;
+
+  // IST = UTC + 5h30m → shift seconds before reading day/hour in UTC fields.
+  const dayEng = new Array(7).fill(0);
+  const hourEng = new Array(24).fill(0);
+  for (const p of ts) {
+    const d = new Date((p.taken_at! + 5.5 * 3600) * 1000);
+    const eng = p.likes + p.comments;
+    dayEng[d.getUTCDay()] += eng;
+    hourEng[d.getUTCHours()] += eng;
+  }
+  const bestDayIdx = dayEng.indexOf(Math.max(...dayEng));
+  const bestHour = hourEng.indexOf(Math.max(...hourEng));
+  const fmtHr = (h: number) => {
+    const hh = ((h + 24) % 24);
+    const ampm = hh < 12 ? 'am' : 'pm';
+    const h12 = hh % 12 === 0 ? 12 : hh % 12;
+    return `${h12}${ampm}`;
+  };
+  return {
+    cadence,
+    bestDay: DAYS[bestDayIdx]!,
+    bestWindow: `${fmtHr(bestHour - 1)}–${fmtHr(bestHour + 2)} IST`,
+  };
 }
 
 // Split the start-from field into exact handles vs names to resolve.
@@ -1072,6 +1114,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: bool
 
   const floor = expectedErFloor(profile.followers);
   const healthy = engagement != null && engagement >= floor;
+  const rhythm = postingInsight(profile.recent);
   return (
     <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.05fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
       <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
@@ -1122,6 +1165,21 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose }: { loading: bool
             style={{ background: healthy ? '#ecfdf5' : '#fff7ed', color: healthy ? '#059669' : '#b45309', animation: 'ii-fadeup .4s .25s both' }}
           >
             {healthy ? '✓' : '⚠'} {engagement}% engagement — {healthy ? 'healthy' : 'low'} for this tier (benchmark ≈ {floor}%)
+          </div>
+        )}
+
+        {rhythm && (
+          <div className="mt-3 grid grid-cols-3 gap-2" style={{ animation: 'ii-fadeup .4s .3s both' }}>
+            {[
+              ['📅', 'Cadence', rhythm.cadence],
+              ['🔥', 'Best day', rhythm.bestDay],
+              ['⏰', 'Best time', rhythm.bestWindow],
+            ].map(([icon, label, val]) => (
+              <div key={label} className="rounded-xl border border-[#eee] bg-[#fafafc] px-2.5 py-2 transition-all hover:-translate-y-0.5 hover:border-[#d9d2f7] hover:shadow-sm">
+                <div className="text-[10px] uppercase tracking-wide text-[#999]">{icon} {label}</div>
+                <div className="mt-0.5 text-[13px] font-semibold text-[#111] leading-tight">{val}</div>
+              </div>
+            ))}
           </div>
         )}
 
