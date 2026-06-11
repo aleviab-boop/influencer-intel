@@ -526,14 +526,14 @@ function DatabaseSection() {
 }
 
 const FEATURES = [
-  { t: 'Campaign Management', d: 'Automate outreach, approvals, and recruitment pipelines end-to-end.', href: '/campaign-management' },
-  { t: 'Influencer Discovery', d: 'Type a brief in plain English, get a credibility-scored shortlist in minutes.', href: '/influencer-search' },
-  { t: 'AI Campaign Intelligence', d: 'Auto-generate content briefs and reel concepts tailored to each creator.', href: '/monitor' },
-  { t: 'AI Analytics Dashboard', d: 'Predicted vs. real likes & views, with confidence and trend signals.', href: '/monitor' },
-  { t: 'Competitor Analysis', d: 'Track creator overlaps and share of voice against your competitors.', href: '#' },
-  { t: 'Comment to DM', d: 'Turn comments into personalized conversations, automatically.', href: '#' },
-  { t: 'Contracts & Payments', d: 'Streamlined agreements and creator payouts in one flow.', href: '#' },
-  { t: 'Quality & Fraud', d: 'Fake-follower detection and a 0–100 quality gate on every creator.', href: '/influencer-search' },
+  { t: 'Campaign Management', d: 'Automate outreach, approvals, and recruitment pipelines end-to-end.', href: '/campaign-management', icon: 'list', color: '#6C4DF6' },
+  { t: 'Influencer Discovery', d: 'Type a brief in plain English, get a credibility-scored shortlist in minutes.', href: '/influencer-search', icon: 'search', color: '#0EA5E9' },
+  { t: 'AI Campaign Intelligence', d: 'Auto-generate content briefs and reel concepts tailored to each creator.', href: '/monitor', icon: 'gauge', color: '#F59E0B' },
+  { t: 'AI Analytics Dashboard', d: 'Predicted vs. real likes & views, with confidence and trend signals.', href: '/monitor', icon: 'bars', color: '#10B981' },
+  { t: 'Competitor Analysis', d: 'Track creator overlaps and share of voice against your competitors.', href: '#', icon: 'database', color: '#EC4899' },
+  { t: 'Comment to DM', d: 'Turn comments into personalized conversations, automatically.', href: '#', icon: 'chat', color: '#06B6D4' },
+  { t: 'Contracts & Payments', d: 'Streamlined agreements and creator payouts in one flow.', href: '#', icon: 'payout', color: '#F97316' },
+  { t: 'Quality & Fraud', d: 'Fake-follower detection and a 0–100 quality gate on every creator.', href: '/influencer-search', icon: 'shield', color: '#EF4444' },
 ];
 
 function FeatureGrid() {
@@ -554,8 +554,8 @@ function FeatureGrid() {
               href={f.href}
               className="group p-5 rounded-2xl bg-white border border-[#ececff] hover:shadow-[0_8px_30px_rgba(108,77,246,0.12)] transition-shadow"
             >
-              <div className="w-10 h-10 rounded-xl grid place-items-center mb-4 text-white" style={{ background: ACCENT }}>
-                <span className="text-[16px] font-bold">{f.t.charAt(0)}</span>
+              <div className="w-10 h-10 rounded-xl grid place-items-center mb-4 text-white transition-transform group-hover:scale-105" style={{ background: f.color }}>
+                <FeatureIcon name={f.icon} />
               </div>
               <h3 className="text-[15px] font-semibold mb-1.5">{f.t}</h3>
               <p className="text-[13px] text-[#666] leading-relaxed">{f.d}</p>
