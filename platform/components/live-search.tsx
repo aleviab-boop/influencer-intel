@@ -65,6 +65,33 @@ function fmt(n: number): string {
   return String(n);
 }
 
+// Compact Indian-rupee format for sponsored-post rates (₹1.2L, ₹45K, ₹800).
+function inr(n: number): string {
+  if (n >= 1_00_000) return `₹${(n / 1_00_000).toFixed(n >= 10_00_000 ? 0 : 1)}L`;
+  if (n >= 1_000) return `₹${Math.round(n / 1_000)}K`;
+  return `₹${Math.round(n / 100) * 100}`;
+}
+
+// Rough sponsored-post rate range (single IG in-feed post, India market).
+// Rate-per-1k-followers tapers as audiences scale; healthy engagement commands
+// a premium, weak engagement a discount. Heuristic — a starting point, not a quote.
+function estimatedRate(
+  followers: number,
+  engagement: number | null,
+): { low: number; high: number } | null {
+  if (followers < 500) return null;
+  const per1k =
+    followers >= 500_000 ? [300, 600]
+    : followers >= 100_000 ? [400, 750]
+    : followers >= 50_000 ? [500, 900]
+    : [600, 1100];
+  const floor = expectedErFloor(followers);
+  const factor =
+    engagement == null ? 1 : engagement >= floor * 1.5 ? 1.25 : engagement >= floor ? 1.1 : 0.8;
+  const k = followers / 1000;
+  return { low: Math.round(k * per1k[0]! * factor), high: Math.round(k * per1k[1]! * factor) };
+}
+
 // Rough authenticity read: engagement that's far below the healthy floor for a
 // creator's follower tier is a fake-follower warning sign. null = unknown ER.
 function expectedErFloor(followers: number): number {
@@ -1137,6 +1164,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const healthy = engagement != null && engagement >= floor;
   const rhythm = postingInsight(profile.recent);
   const themes = contentThemes(profile.recent);
+  const rate = estimatedRate(profile.followers, engagement);
   return (
     <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.05fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
       <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
@@ -1187,6 +1215,16 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
             style={{ background: healthy ? '#ecfdf5' : '#fff7ed', color: healthy ? '#059669' : '#b45309', animation: 'ii-fadeup .4s .25s both' }}
           >
             {healthy ? '✓' : '⚠'} {engagement}% engagement — {healthy ? 'healthy' : 'low'} for this tier (benchmark ≈ {floor}%)
+          </div>
+        )}
+
+        {rate && (
+          <div className="mt-3 flex items-center justify-between rounded-xl border border-[#e3def9] bg-[#faf9ff] px-3.5 py-2.5" style={{ animation: 'ii-fadeup .4s .28s both' }}>
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[#999]">Est. rate / post</div>
+              <div className="mt-0.5 text-[15px] font-bold text-[#111] tabular-nums">{inr(rate.low)} – {inr(rate.high)}</div>
+            </div>
+            <span className="text-[11px] text-[#aaa] text-right max-w-[120px] leading-tight">Indicative — IG in-feed, India</span>
           </div>
         )}
 
