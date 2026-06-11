@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface Program { id: string; name: string; status: string; recruit_count: number; recruited_count: number; budget: number | string | null; spent: number | string | null }
 const n = (v: number | string | null): number => (v == null ? 0 : Number(v) || 0);
@@ -29,7 +29,7 @@ export default function CampaignManagementFeature() {
           <div className="grid-bg absolute inset-0 opacity-50" />
           <div className="relative max-w-5xl mx-auto px-6 pt-14 pb-10 text-center">
             <span className="inline-block px-3 py-1 rounded-full bg-white border border-border shadow-sm text-[12px] font-semibold" style={{ color: ACCENT }}>Campaign Management</span>
-            <h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">Run every campaign in one place</h1>
+            <Reveal><h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">Run every campaign in one place</h1></Reveal>
             <p className="mt-3 text-[15px] text-ink-600 max-w-xl mx-auto">Recruit creators, move them through a pipeline, set deals and track budget — live across all your campaigns.</p>
             <Link href="/campaigns" className="inline-block mt-6 px-6 py-3 rounded-xl text-white text-[15px] font-semibold bg-ink-900 hover:bg-ink-800">Open campaigns</Link>
           </div>

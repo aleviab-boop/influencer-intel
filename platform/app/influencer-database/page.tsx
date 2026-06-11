@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface Creator { id: string; handle: string; display_name: string | null; follower_count: number | string | null; primary_category: string | null; engagement_rate: number | string | null; cred_score: string | null; is_verified: boolean | null }
 
@@ -31,7 +31,7 @@ export default function InfluencerDatabaseFeature() {
           <div className="grid-bg absolute inset-0 opacity-50" />
           <div className="relative max-w-5xl mx-auto px-6 pt-14 pb-10 text-center">
             <span className="inline-block px-3 py-1 rounded-full bg-white border border-border shadow-sm text-[12px] font-semibold" style={{ color: ACCENT }}>Influencer Database</span>
-            <h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">The largest scored creator database</h1>
+            <Reveal><h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">The largest scored creator database</h1></Reveal>
             <p className="mt-3 text-[15px] text-ink-600 max-w-xl mx-auto">{total != null ? <><span className="font-semibold text-ink-900">{total.toLocaleString('en-IN')}</span> Indian creators indexed</> : 'Thousands of Indian creators indexed'} — every profile credibility-scored, searchable by category, tier and engagement.</p>
             <Link href="/database" className="inline-block mt-6 px-6 py-3 rounded-xl text-white text-[15px] font-semibold bg-ink-900 hover:bg-ink-800">Browse the database</Link>
           </div>

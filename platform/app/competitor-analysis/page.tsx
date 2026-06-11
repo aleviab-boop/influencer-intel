@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface BrandCreator { id: string; handle: string; display_name: string | null; profile_url: string; follower_count: number | string | null; primary_category: string | null; verified: boolean; confidence: 'paid' | 'mention'; matched_brand: string | null }
 const k = (v: number | string | null): string => { const x = Number(v) || 0; return x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : x >= 1e3 ? (x / 1e3).toFixed(1) + 'K' : String(x); };
@@ -34,7 +34,7 @@ export default function CompetitorAnalysisFeature() {
           <div className="grid-bg absolute inset-0 opacity-50" />
           <div className="relative max-w-5xl mx-auto px-6 pt-14 pb-10 text-center">
             <span className="inline-block px-3 py-1 rounded-full bg-white border border-border shadow-sm text-[12px] font-semibold" style={{ color: ACCENT }}>Competitor Analysis</span>
-            <h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">See who your competitors work with</h1>
+            <Reveal><h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">See who your competitors work with</h1></Reveal>
             <p className="mt-3 text-[15px] text-ink-600 max-w-xl mx-auto">Type a brand to surface creators with a detected partnership — verified from real profile data.</p>
             <div className="mt-6 max-w-md mx-auto flex gap-2">
               <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && input.trim().length >= 2 && setBrand(input.trim())} placeholder="Brand name, e.g. Nykaa" className="flex-1 px-4 py-3 rounded-xl border border-border bg-white text-[15px] text-ink-900 focus:outline-none focus:border-ink-900" />

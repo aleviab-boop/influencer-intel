@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface Totals { campaigns: number; creators: number; reach: number; spend: number; avg_quality: number }
 interface Perf { id: string; name: string; status: string; recruits: number; reach: number; spend: number }
@@ -48,7 +48,7 @@ export default function CampaignAnalyticsPage() {
           <div className="grid-bg absolute inset-0 opacity-50" />
           <div className="relative max-w-5xl mx-auto px-6 pt-14 pb-10 text-center">
             <span className="inline-block px-3 py-1 rounded-full bg-white border border-border shadow-sm text-[12px] font-semibold" style={{ color: ACCENT }}>Campaign Analytics</span>
-            <h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">Predicted vs. real campaign analytics</h1>
+            <Reveal><h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">Predicted vs. real campaign analytics</h1></Reveal>
             <p className="mt-3 text-[15px] text-ink-600 max-w-xl mx-auto">Live numbers from your campaigns — forecast a post’s likes and views, then measure the gap against real results.</p>
           </div>
         </section>
