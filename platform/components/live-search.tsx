@@ -589,6 +589,29 @@ export function LiveSearch({
     }
   }
 
+  async function exportSaved() {
+    if (savedCreators.length === 0) return;
+    setExporting(true);
+    try {
+      const r = await fetch('/api/discover-live/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'saved_creators', results: savedCreators }),
+      });
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'saved_creators.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="w-full">
       {/* search box */}
@@ -1233,6 +1256,7 @@ export function LiveSearch({
               >
                 ✦ Draft outreach to all
               </button>
+              <button onClick={() => void exportSaved()} disabled={exporting} className="px-4 py-2.5 rounded-xl text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50" style={{ color: ACCENT }} title="Export to Excel">{exporting ? '…' : '⬇'}</button>
               <button onClick={clearSaved} className="px-4 py-2.5 rounded-xl text-[13px] font-medium border border-[#eee] text-[#666] hover:bg-[#faf9ff]">Clear</button>
             </div>
           </div>
