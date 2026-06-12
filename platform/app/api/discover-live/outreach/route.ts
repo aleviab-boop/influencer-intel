@@ -19,7 +19,7 @@ const IG_HEADERS: Record<string, string> = {
 // referencing something they actually posted. Best-effort; never blocks the draft.
 async function fetchRecentContext(
   handle: string,
-): Promise<{ highlight: string; themes: string[] }> {
+): Promise<{ highlight: string; themes: string[]; langHint: string }> {
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -27,7 +27,7 @@ async function fetchRecentContext(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
       { headers: IG_HEADERS, signal: ctrl.signal },
     ).finally(() => clearTimeout(timer));
-    if (!res.ok) return { highlight: '', themes: [] };
+    if (!res.ok) return { highlight: '', themes: [], langHint: '' };
     const u = (await res.json())?.data?.user;
     const edges = u?.edge_owner_to_timeline_media?.edges ?? [];
     const captions: string[] = edges
@@ -35,6 +35,11 @@ async function fetchRecentContext(
         (e.node?.edge_media_to_caption?.edges?.[0]?.node?.text ?? '').trim(),
       )
       .filter(Boolean);
+
+    // Language hint: Devanagari anywhere in bio/captions → Hindi-speaking creator,
+    // for whom a Hinglish DM lands warmer than English.
+    const sample = `${u?.biography ?? ''} ${captions.join(' ')}`;
+    const langHint = /[\u0900-\u097F]/.test(sample) ? 'hinglish' : '';
 
     // Themes = most-used hashtags across recent captions.
     const tags = new Map<string, number>();
@@ -54,11 +59,17 @@ async function fetchRecentContext(
       .trim()
       .slice(0, 180);
 
-    return { highlight, themes };
+    return { highlight, themes, langHint };
   } catch {
-    return { highlight: '', themes: [] };
+    return { highlight: '', themes: [], langHint: '' };
   }
 }
+
+const LANG_LABEL: Record<string, string> = {
+  hinglish: 'Hinglish (a natural Romanized Hindi-English mix, written in Latin script)',
+  hindi: 'Hindi (Devanagari script)',
+  english: 'English',
+};
 
 // POST /api/discover-live/outreach
 //   { handle, prompt, category?, channel?: 'dm' | 'email', brand? }
@@ -75,10 +86,14 @@ export async function POST(req: NextRequest) {
   const brand = typeof body?.brand === 'string' && body.brand.trim() ? body.brand.trim() : 'our brand';
   const category = typeof body?.category === 'string' ? body.category.trim() : '';
 
-  const { highlight, themes } = await fetchRecentContext(handle);
+  const { highlight, themes, langHint } = await fetchRecentContext(handle);
   // Prefer real post themes; fall back to the search prompt's words.
   const promptTopics = [category, ...prompt.split(/\s+/)].map((t) => t.trim()).filter(Boolean);
   const topics = themes.length > 0 ? themes : promptTopics;
+
+  // Language: explicit client choice wins; 'auto' uses the detected hint.
+  const reqLang = typeof body?.language === 'string' ? body.language.trim().toLowerCase() : 'auto';
+  const language = reqLang === 'auto' ? (langHint ? LANG_LABEL.hinglish : '') : (LANG_LABEL[reqLang] ?? '');
 
   try {
     const message = await getOpenAIClient().generateOutreach({
@@ -89,8 +104,9 @@ export async function POST(req: NextRequest) {
       campaign_summary: prompt || `collaboration with ${handle}`,
       channel,
       recent_highlight: highlight,
+      language,
     });
-    return NextResponse.json({ message });
+    return NextResponse.json({ message, language: language ? reqLang === 'auto' ? 'hinglish' : reqLang : 'english' });
   } catch (err) {
     console.error('[outreach] failed:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

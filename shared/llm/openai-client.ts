@@ -482,9 +482,15 @@ Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceov
     campaign_summary: string;
     channel: 'ig_dm' | 'email';
     recent_highlight?: string;
+    language?: string;
   }): Promise<string> {
     const isDM = input.channel === 'ig_dm';
     const highlight = input.recent_highlight?.trim();
+    const lang = input.language?.trim();
+    const langLine =
+      lang && !/^english$/i.test(lang)
+        ? `Write the entire message in ${lang}. Keep brand names, @handles and product names as-is. Sound like a real Indian person, natural and warm — not a translation.`
+        : '';
     const res = await this.client.chat.completions.create({
       model: this.outreachModel,
       messages: [
@@ -494,6 +500,7 @@ Rules: 4-6 script scenes covering hook -> body -> CTA with concrete shot/voiceov
 ${isDM ? 'Format: Instagram DM. 2-3 sentences, casual, no formal greeting beyond "hi @handle".' : 'Format: cold email. Subject line then 4-6 sentence body.'}
 Tone: matches the brand voice samples. Never claim things not in the brief.
 ${highlight ? 'Open with a warm, specific reference to their most recent post (provided) — mention a concrete detail so it is clearly genuine, not generic. Do NOT quote it verbatim or use quotation marks; paraphrase naturally.' : "Reference the creator's recent topics to show you actually looked."}
+${langLine}
 End with a soft CTA. No emojis unless the brand voice uses them.`,
         },
         {

@@ -242,6 +242,7 @@ export function LiveSearch({
   const [draftText, setDraftText] = useState('');
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftChannel, setDraftChannel] = useState<'dm' | 'email'>('dm');
+  const [draftLang, setDraftLang] = useState<'auto' | 'english' | 'hinglish' | 'hindi'>('auto');
   const [copied, setCopied] = useState(false);
   // bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -352,9 +353,10 @@ export function LiveSearch({
     });
   }
 
-  async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm') {
+  async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm', lang: 'auto' | 'english' | 'hinglish' | 'hindi' = draftLang) {
     setDraftFor(p);
     setDraftChannel(channel);
+    setDraftLang(lang);
     setDraftText('');
     setCopied(false);
     setDraftLoading(true);
@@ -362,7 +364,7 @@ export function LiveSearch({
       const d = await fetch('/api/discover-live/outreach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel }),
+        body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel, language: lang }),
       }).then((r) => r.json());
       setDraftText(d.message ?? d.error ?? 'Could not generate a message.');
     } catch (err) {
@@ -1079,17 +1081,30 @@ export function LiveSearch({
               <button onClick={() => setDraftFor(null)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
             </div>
             <div className="p-5">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f0ff] mb-3 text-[13px]">
-                {(['dm', 'email'] as const).map((ch) => (
-                  <button
-                    key={ch}
-                    onClick={() => void openDraft(draftFor, ch)}
-                    className={`px-3 py-1 rounded-md transition-colors ${draftChannel === ch ? 'bg-white shadow-sm font-medium' : 'text-[#888]'}`}
-                    style={draftChannel === ch ? { color: ACCENT } : undefined}
-                  >
-                    {ch === 'dm' ? 'Instagram DM' : 'Email'}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f0ff] text-[13px]">
+                  {(['dm', 'email'] as const).map((ch) => (
+                    <button
+                      key={ch}
+                      onClick={() => void openDraft(draftFor, ch)}
+                      className={`px-3 py-1 rounded-md transition-colors ${draftChannel === ch ? 'bg-white shadow-sm font-medium' : 'text-[#888]'}`}
+                      style={draftChannel === ch ? { color: ACCENT } : undefined}
+                    >
+                      {ch === 'dm' ? 'Instagram DM' : 'Email'}
+                    </button>
+                  ))}
+                </div>
+                <select
+                  value={draftLang}
+                  onChange={(e) => void openDraft(draftFor, draftChannel, e.target.value as 'auto' | 'english' | 'hinglish' | 'hindi')}
+                  className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[13px] text-[#444] focus:outline-none focus:border-[#6C4DF6]"
+                  title="Language"
+                >
+                  <option value="auto">🌐 Auto-detect</option>
+                  <option value="english">English</option>
+                  <option value="hinglish">Hinglish</option>
+                  <option value="hindi">हिंदी</option>
+                </select>
               </div>
               <textarea
                 value={draftLoading ? 'Drafting…' : draftText}
