@@ -93,3 +93,30 @@ export function contentThemes(recent: RecentPost[], limit = 6): string[] {
 export function tierWord(f: number): string {
   return f >= 1_000_000 ? 'Mega' : f >= 500_000 ? 'Macro' : f >= 100_000 ? 'Mid-tier' : f >= 10_000 ? 'Micro' : 'Nano';
 }
+
+// Brand-safety scan: keyword-match recent captions + bio against categories
+// brands typically screen for. Conservative word-boundary matching to limit
+// false positives. High-risk categories escalate to a "flag", others "review".
+const RISK_TERMS: Record<string, string[]> = {
+  Profanity: ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'chutiya', 'bhenchod', 'madarchod', 'randi'],
+  'Alcohol/Drugs': ['vodka', 'whisky', 'whiskey', 'tequila', 'cocaine', 'weed', 'marijuana', 'ganja', 'stoned', 'lsd', 'mdma'],
+  Tobacco: ['cigarette', 'cigarettes', 'vape', 'vaping', 'hookah', 'tobacco', 'cigar'],
+  Gambling: ['casino', 'betting', 'gambling', 'satta', 'teenpatti', 'rummy', 'bet365', 'dream11'],
+  Politics: ['election', 'bjp', 'congress', 'protest', 'rally', 'vote for'],
+  Adult: ['nsfw', 'onlyfans', 'porn', 'xxx', 'escort'],
+};
+const HIGH_RISK = new Set(['Profanity', 'Adult', 'Alcohol/Drugs']);
+
+export function brandSafety(texts: string[]): {
+  level: 'clean' | 'review' | 'flag';
+  hits: { category: string; terms: string[] }[];
+} {
+  const hay = ` ${texts.join('  ').toLowerCase()} `;
+  const hits: { category: string; terms: string[] }[] = [];
+  for (const [category, words] of Object.entries(RISK_TERMS)) {
+    const terms = words.filter((w) => new RegExp(`(^|[^a-z])${w.replace(/ /g, '[^a-z]+')}([^a-z]|$)`, 'i').test(hay));
+    if (terms.length) hits.push({ category, terms });
+  }
+  if (hits.length === 0) return { level: 'clean', hits };
+  return { level: hits.some((h) => HIGH_RISK.has(h.category)) ? 'flag' : 'review', hits };
+}

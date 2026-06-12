@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { buildSuggestions } from '@/lib/suggestions';
+import { brandSafety } from '@/lib/creator-metrics';
 
 const ACCENT = '#6C4DF6';
 const ACCENT_SOFT = '#F4F2FF';
@@ -1633,6 +1634,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const rate = estimatedRate(profile.followers, engagement);
   const rising = isRisingStar(profile.followers, engagement);
   const persona = personaLine(profile, engagement, rate, rhythm?.cadence ?? null, themes);
+  const safety = brandSafety([profile.biography ?? '', ...profile.recent.map((p) => p.caption ?? '')]);
   const collabs = profile.collabs ?? [];
   const rivalTerms = rivals.toLowerCase().split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean);
   const isRival = (h: string) => rivalTerms.some((t) => h.toLowerCase().includes(t));
@@ -1723,6 +1725,20 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
             {healthy ? '✓' : '⚠'} {engagement}% engagement — {healthy ? 'healthy' : 'low'} for this tier (benchmark ≈ {floor}%)
           </div>
         )}
+
+        <div
+          className="mt-3 inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-lg text-[12px] font-medium"
+          title={safety.hits.map((h) => `${h.category}: ${h.terms.join(', ')}`).join(' · ') || undefined}
+          style={{
+            background: safety.level === 'clean' ? '#ecfdf5' : safety.level === 'review' ? '#fff7ed' : '#fef2f2',
+            color: safety.level === 'clean' ? '#059669' : safety.level === 'review' ? '#b45309' : '#dc2626',
+            animation: 'ii-fadeup .4s .3s both',
+          }}
+        >
+          {safety.level === 'clean'
+            ? '🛡 Brand-safe — no risk flags in recent posts'
+            : `${safety.level === 'flag' ? '⛔' : '⚠'} Brand safety: ${safety.hits.map((h) => h.category).join(', ')}`}
+        </div>
 
         {rate && (
           <div className="mt-3 flex items-center justify-between rounded-xl border border-[#e3def9] bg-[#faf9ff] px-3.5 py-2.5" style={{ animation: 'ii-fadeup .4s .28s both' }}>
