@@ -94,6 +94,36 @@ function isRisingStar(followers: number, engagement: number | null): boolean {
   return followers < 250_000 && engagement >= expectedErFloor(followers) * 1.6;
 }
 
+function tierWord(f: number): string {
+  return f >= 1_000_000 ? 'Mega' : f >= 500_000 ? 'Macro' : f >= 100_000 ? 'Mid-tier' : f >= 10_000 ? 'Micro' : 'Nano';
+}
+
+// A scannable one-line "persona pitch" assembled from the data we already have:
+// who they are, engagement health, ballpark rate, cadence and reachability.
+function personaLine(
+  p: { followers: number; category?: string; email?: string | null; phone?: string | null },
+  engagement: number | null,
+  rate: { low: number; high: number } | null,
+  cadence: string | null,
+  themes: string[],
+): string {
+  const tier = tierWord(p.followers);
+  const niche = p.category?.trim();
+  const who = niche
+    ? `${tier} ${niche.toLowerCase()}`
+    : themes[0]
+      ? `${tier} ${themes[0].replace(/^#/, '')} creator`
+      : `${tier} creator`;
+  const parts = [who];
+  if (engagement != null) parts.push(`${engagement}% ER ${engagement >= expectedErFloor(p.followers) ? '(healthy)' : '(low)'}`);
+  if (rate) parts.push(`~${inr(rate.low)}–${inr(rate.high)}/post`);
+  if (cadence) parts.push(cadence.toLowerCase());
+  if (isRisingStar(p.followers, engagement)) parts.push('on the rise');
+  if (p.email) parts.push('email on file');
+  else if (p.phone) parts.push('phone on file');
+  return parts.join(' · ');
+}
+
 // Lightweight follower-growth tracking via localStorage. We snapshot followers
 // on each profile view; on a later view we can show the delta since first seen.
 interface GrowthSnap { f: number; t: number }
@@ -1602,6 +1632,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const themes = contentThemes(profile.recent);
   const rate = estimatedRate(profile.followers, engagement);
   const rising = isRisingStar(profile.followers, engagement);
+  const persona = personaLine(profile, engagement, rate, rhythm?.cadence ?? null, themes);
   const collabs = profile.collabs ?? [];
   const rivalTerms = rivals.toLowerCase().split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean);
   const isRival = (h: string) => rivalTerms.some((t) => h.toLowerCase().includes(t));
@@ -1610,6 +1641,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const copySummary = () => {
     const lines = [
       `@${profile.handle}${profile.is_verified ? ' ✔' : ''}${profile.full_name ? ` — ${profile.full_name}` : ''}`,
+      persona,
       `${fmt(profile.followers)} followers · ${fmt(profile.posts)} posts${engagement != null ? ` · ${engagement}% engagement (${healthy ? 'healthy' : 'low'})` : ''}`,
       rate ? `Est. rate/post: ${inr(rate.low)}–${inr(rate.high)}` : '',
       rhythm ? `Posting: ${rhythm.cadence} · best ${rhythm.bestDay}, ${rhythm.bestWindow}` : '',
@@ -1648,6 +1680,11 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
               )}
             </div>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white px-3.5 py-2.5" style={{ animation: 'ii-fadeup .4s .05s both' }}>
+          <div className="text-[10px] uppercase tracking-wide text-[#999] mb-0.5">✦ Persona</div>
+          <div className="text-[13px] font-medium text-[#222] leading-snug">{persona}</div>
         </div>
 
         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
