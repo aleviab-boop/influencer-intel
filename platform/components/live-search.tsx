@@ -243,6 +243,7 @@ export function LiveSearch({
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftChannel, setDraftChannel] = useState<'dm' | 'email'>('dm');
   const [draftLang, setDraftLang] = useState<'auto' | 'english' | 'hinglish' | 'hindi'>('auto');
+  const [draftFollowup, setDraftFollowup] = useState(false);
   const [copied, setCopied] = useState(false);
   // bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -256,9 +257,14 @@ export function LiveSearch({
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  // outreach "contacted" tracking (localStorage)
-  const [contacted, setContacted] = useState<Set<string>>(new Set());
+  // outreach "contacted" tracking (localStorage) — handle -> first-contacted ms
+  const [contacted, setContacted] = useState<Record<string, number>>({});
   const [hideContacted, setHideContacted] = useState(false);
+  // follow-up nudges: handles marked as done/replied, + the queue panel
+  const [followupDone, setFollowupDone] = useState<string[]>([]);
+  const [showFollowups, setShowFollowups] = useState(false);
+  const FOLLOWUP_DAYS = 3;
+  const isContacted = (h: string) => h.toLowerCase() in contacted;
   // pinned creators that persist across searches (localStorage)
   const [savedCreators, setSavedCreators] = useState<SavedCreator[]>([]);
   const [showSaved, setShowSaved] = useState(false);
@@ -304,11 +310,41 @@ export function LiveSearch({
   useEffect(() => {
     try {
       const raw = localStorage.getItem('ii_contacted');
-      if (raw) setContacted(new Set(JSON.parse(raw)));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Migrate the old array-of-handles format to { handle: timestamp }.
+        if (Array.isArray(parsed)) {
+          const now = Date.now();
+          setContacted(Object.fromEntries(parsed.map((h: string) => [h, now])));
+        } else if (parsed && typeof parsed === 'object') {
+          setContacted(parsed);
+        }
+      }
       const rawSaved = localStorage.getItem('ii_saved_creators');
       if (rawSaved) setSavedCreators(JSON.parse(rawSaved));
+      const rawDone = localStorage.getItem('ii_followups_done');
+      if (rawDone) setFollowupDone(JSON.parse(rawDone));
     } catch { /* ignore */ }
   }, []);
+
+  function markFollowupDone(handle: string) {
+    setFollowupDone((list) => {
+      const next = list.includes(handle.toLowerCase()) ? list : [...list, handle.toLowerCase()];
+      try { localStorage.setItem('ii_followups_done', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
+  // Contacted > FOLLOWUP_DAYS ago and not yet marked done → a nudge is due.
+  const dueFollowups = Object.entries(contacted)
+    .filter(([h, ts]) => Date.now() - ts > FOLLOWUP_DAYS * 86_400_000 && !followupDone.includes(h))
+    .sort((a, b) => a[1] - b[1])
+    .map(([handle, ts]) => ({ handle, ts }));
+
+  function openFollowup(handle: string) {
+    setShowFollowups(false);
+    void openDraft({ username: handle } as LiveProfile, 'dm', draftLang, true);
+  }
 
   const isSaved = (u: string) => savedCreators.some((s) => s.username.toLowerCase() === u.toLowerCase());
 
@@ -330,9 +366,10 @@ export function LiveSearch({
 
   function markContacted(handle: string) {
     setContacted((s) => {
-      const n = new Set(s);
-      n.add(handle.toLowerCase());
-      try { localStorage.setItem('ii_contacted', JSON.stringify([...n])); } catch { /* ignore */ }
+      const key = handle.toLowerCase();
+      if (key in s) return s; // keep the first-contacted time
+      const n = { ...s, [key]: Date.now() };
+      try { localStorage.setItem('ii_contacted', JSON.stringify(n)); } catch { /* ignore */ }
       return n;
     });
   }
@@ -391,10 +428,11 @@ export function LiveSearch({
     });
   }
 
-  async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm', lang: 'auto' | 'english' | 'hinglish' | 'hindi' = draftLang) {
+  async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm', lang: 'auto' | 'english' | 'hinglish' | 'hindi' = draftLang, followup = false) {
     setDraftFor(p);
     setDraftChannel(channel);
     setDraftLang(lang);
+    setDraftFollowup(followup);
     setDraftText('');
     setCopied(false);
     setDraftLoading(true);
@@ -402,7 +440,7 @@ export function LiveSearch({
       const d = await fetch('/api/discover-live/outreach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel, language: lang }),
+        body: JSON.stringify({ handle: p.username, prompt: run?.prompt, category: p.category, channel, language: lang, followup }),
       }).then((r) => r.json());
       setDraftText(d.message ?? d.error ?? 'Could not generate a message.');
     } catch (err) {
@@ -533,7 +571,7 @@ export function LiveSearch({
         p.followers >= minFollowers &&
         (!verifiedOnly || p.is_verified) &&
         (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low') &&
-        (!hideContacted || !contacted.has(p.username.toLowerCase())),
+        (!hideContacted || !isContacted(p.username)),
     );
     const sorted = [...filtered];
     if (sortBy === 'followers_desc') sorted.sort((a, b) => b.followers - a.followers);
@@ -1004,7 +1042,7 @@ export function LiveSearch({
                                   DB
                                 </span>
                               )}
-                              {contacted.has(p.username.toLowerCase()) && (
+                              {isContacted(p.username) && (
                                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600" title="You've reached out">
                                   Contacted ✓
                                 </span>
@@ -1115,7 +1153,7 @@ export function LiveSearch({
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4" onClick={() => setDraftFor(null)}>
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#e3def9] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-3.5 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
-              <div className="text-[15px] font-semibold">Outreach to @{draftFor.username}</div>
+              <div className="text-[15px] font-semibold">{draftFollowup ? 'Follow-up to' : 'Outreach to'} @{draftFor.username}</div>
               <button onClick={() => setDraftFor(null)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
             </div>
             <div className="p-5">
@@ -1124,7 +1162,7 @@ export function LiveSearch({
                   {(['dm', 'email'] as const).map((ch) => (
                     <button
                       key={ch}
-                      onClick={() => void openDraft(draftFor, ch)}
+                      onClick={() => void openDraft(draftFor, ch, draftLang, draftFollowup)}
                       className={`px-3 py-1 rounded-md transition-colors ${draftChannel === ch ? 'bg-white shadow-sm font-medium' : 'text-[#888]'}`}
                       style={draftChannel === ch ? { color: ACCENT } : undefined}
                     >
@@ -1134,7 +1172,7 @@ export function LiveSearch({
                 </div>
                 <select
                   value={draftLang}
-                  onChange={(e) => void openDraft(draftFor, draftChannel, e.target.value as 'auto' | 'english' | 'hinglish' | 'hindi')}
+                  onChange={(e) => void openDraft(draftFor, draftChannel, e.target.value as 'auto' | 'english' | 'hinglish' | 'hindi', draftFollowup)}
                   className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[13px] text-[#444] focus:outline-none focus:border-[#6C4DF6]"
                   title="Language"
                 >
@@ -1274,16 +1312,64 @@ export function LiveSearch({
         </div>
       )}
 
-      {/* Saved creators: floating button + panel */}
-      {savedCreators.length > 0 && !showSaved && (
-        <button
-          onClick={() => setShowSaved(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(108,77,246,0.4)] hover:-translate-y-0.5 transition-transform"
-          style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, animation: 'ii-fadeup .3s both' }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
-          {savedCreators.length} saved
-        </button>
+      {/* Floating actions: follow-up nudges + saved creators */}
+      {!showSaved && !showFollowups && (savedCreators.length > 0 || dueFollowups.length > 0) && (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2.5">
+          {dueFollowups.length > 0 && (
+            <button
+              onClick={() => setShowFollowups(true)}
+              className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(245,158,11,0.45)] hover:-translate-y-0.5 transition-transform"
+              style={{ background: 'linear-gradient(135deg, #F59E0B, #F7B500)', animation: 'ii-fadeup .3s both' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+              {dueFollowups.length} follow-up{dueFollowups.length > 1 ? 's' : ''} due
+            </button>
+          )}
+          {savedCreators.length > 0 && (
+            <button
+              onClick={() => setShowSaved(true)}
+              className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(108,77,246,0.4)] hover:-translate-y-0.5 transition-transform"
+              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, animation: 'ii-fadeup .3s both' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
+              {savedCreators.length} saved
+            </button>
+          )}
+        </div>
+      )}
+
+      {showFollowups && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setShowFollowups(false)}>
+          <div className="w-full max-w-md h-full bg-white shadow-2xl flex flex-col" style={{ animation: 'ii-slidein .25s both' }} onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 flex items-center justify-between text-white" style={{ background: 'linear-gradient(135deg, #F59E0B, #F7B500)' }}>
+              <div className="text-[15px] font-semibold">Follow-ups due · {dueFollowups.length}</div>
+              <button onClick={() => setShowFollowups(false)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="px-5 py-2.5 text-[12px] text-[#888] border-b border-[#f0f0f0]">Contacted {FOLLOWUP_DAYS}+ days ago with no reply marked. Send a gentle nudge.</div>
+            <div className="flex-1 overflow-y-auto divide-y divide-[#f3f3f3]">
+              {dueFollowups.length === 0 ? (
+                <div className="px-5 py-10 text-center text-[14px] text-[#999]">You're all caught up 🎉</div>
+              ) : (
+                dueFollowups.map(({ handle, ts }) => {
+                  const days = Math.floor((Date.now() - ts) / 86_400_000);
+                  return (
+                    <div key={handle} className="flex items-center gap-3 px-5 py-3">
+                      <Avatar name={handle} url={null} />
+                      <div className="min-w-0 flex-1">
+                        <a href={`https://instagram.com/${handle}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-[#111] truncate hover:underline">@{handle}</a>
+                        <div className="text-[12px] text-[#999]">contacted {days} day{days !== 1 ? 's' : ''} ago</div>
+                      </div>
+                      <button onClick={() => openFollowup(handle)} className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold hover:brightness-105 shrink-0" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>✦ Follow up</button>
+                      <button onClick={() => markFollowupDone(handle)} className="text-[#bbb] hover:text-emerald-500 shrink-0" title="Mark replied / done">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10" /></svg>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {showSaved && (

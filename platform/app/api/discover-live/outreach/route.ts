@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
       channel,
       recent_highlight: highlight,
       language,
+      followup: body?.followup === true,
     });
     return NextResponse.json({ message, language: language ? reqLang === 'auto' ? 'hinglish' : reqLang : 'english' });
   } catch (err) {
