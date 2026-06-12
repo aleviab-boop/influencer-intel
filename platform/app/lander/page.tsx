@@ -581,7 +581,7 @@ const TESTIMONIALS = [
 ];
 
 function TrendingStrip() {
-  const [news, setNews] = useState<{ title: string; link: string; source: string; image: string }[]>([]);
+  const [news, setNews] = useState<{ title: string; link: string; source: string; image: string; logo: string }[]>([]);
   const [trends, setTrends] = useState<{ title: string; link: string }[]>([]);
   useEffect(() => {
     fetch('/api/news')
@@ -606,13 +606,14 @@ function TrendingStrip() {
         <div className="grid lg:grid-cols-[1.7fr_1fr] gap-6">
           <div className="grid sm:grid-cols-2 gap-3">
             {news.map((n, i) => (
-              <a key={i} href={n.link} target="_blank" rel="noreferrer" className="flex gap-3 p-4 rounded-xl border border-[#eee] hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all">
-                {n.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={n.image} alt="" className="w-10 h-10 rounded-lg object-contain bg-[#fafafc] border border-[#eee] p-1.5 shrink-0" />
-                )}
-                <div className="min-w-0">
-                  <div className="text-[11px] font-medium mb-1 px-2 py-0.5 rounded-md inline-block" style={{ background: ACCENT_SOFT, color: ACCENT }}>{n.source}</div>
+              <a key={i} href={n.link} target="_blank" rel="noreferrer" className="flex flex-col rounded-xl border border-[#eee] overflow-hidden hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={n.image || n.logo} alt="" className={`w-full h-32 bg-[#fafafc] ${n.image ? 'object-cover' : 'object-contain p-6'}`} />
+                <div className="p-3.5">
+                  <div className="flex items-center gap-1.5 mb-1 text-[11px]">
+                    {n.logo && /* eslint-disable-next-line @next/next/no-img-element */ <img src={n.logo} alt="" className="w-3.5 h-3.5 rounded" />}
+                    <span className="font-medium" style={{ color: ACCENT }}>{n.source}</span>
+                  </div>
                   <div className="text-[14px] font-medium text-[#111] leading-snug line-clamp-3">{n.title}</div>
                 </div>
               </a>

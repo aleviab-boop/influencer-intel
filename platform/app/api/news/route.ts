@@ -29,6 +29,15 @@ function items(xml: string): string[] {
   return xml.match(/<item[\s\S]*?<\/item>/gi) ?? [];
 }
 
+// First embedded image: <media:content url> / <media:thumbnail> / <enclosure>.
+function mediaImage(block: string): string {
+  const m =
+    block.match(/<media:content[^>]*url="([^"]+)"/i) ||
+    block.match(/<media:thumbnail[^>]*url="([^"]+)"/i) ||
+    block.match(/<enclosure[^>]*url="([^"]+)"/i);
+  return m ? m[1]!.replace(/&amp;/g, '&') : '';
+}
+
 async function fetchRss(url: string): Promise<string> {
   try {
     const res = await fetch(url, { headers: { 'User-Agent': UA }, next: { revalidate } });
@@ -44,18 +53,8 @@ export interface NewsItem {
   link: string;
   source: string;
   date: string;
-  image: string;
-}
-
-// Publisher logo via Google's free favicon service (the source's own site image).
-function logoFor(block: string): string {
-  const m = block.match(/<source[^>]*url="([^"]+)"/i);
-  if (!m) return '';
-  try {
-    return `https://www.google.com/s2/favicons?domain=${new URL(m[1]!).hostname}&sz=128`;
-  } catch {
-    return '';
-  }
+  image: string; // real article thumbnail
+  logo: string; // publisher favicon (badge)
 }
 export interface TrendItem {
   title: string;
@@ -63,24 +62,26 @@ export interface TrendItem {
   link: string;
 }
 
+// ET BrandEquity is India's marketing/advertising/brand desk — every RSS item
+// carries a real article image (media:content), exactly what we want here.
+const BE = 'https://brandequity.economictimes.indiatimes.com/rss';
+const NEWS_FEEDS = [
+  `${BE}/marketing`,
+  `${BE}/advertising`,
+  `${BE}/digital`,
+  `${BE}/media`,
+  `${BE}/topstories`,
+];
+const BE_LOGO = 'https://www.google.com/s2/favicons?domain=brandequity.economictimes.indiatimes.com&sz=128';
+
 // GET /api/news → { news: NewsItem[], trends: TrendItem[] }
 export async function GET(): Promise<NextResponse> {
-  const NEWS_QUERIES = [
-    'influencer marketing india campaign',
-    'brand creator collaboration india',
-    'social media marketing trends',
-  ];
-
   const [newsXmls, trendsXml] = await Promise.all([
-    Promise.all(
-      NEWS_QUERIES.map((q) =>
-        fetchRss(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-IN&gl=IN&ceid=IN:en`),
-      ),
-    ),
+    Promise.all(NEWS_FEEDS.map(fetchRss)),
     fetchRss('https://trends.google.com/trending/rss?geo=IN'),
   ]);
 
-  // ---- News: merge queries, dedupe by title, newest first ----
+  // ---- News: merge feeds, dedupe by title, newest first, images first ----
   const seen = new Set<string>();
   const news: NewsItem[] = [];
   for (const xml of newsXmls) {
@@ -91,13 +92,17 @@ export async function GET(): Promise<NextResponse> {
       news.push({
         title,
         link: tag(block, 'link'),
-        source: tag(block, 'source') || 'News',
+        source: 'ET BrandEquity',
         date: tag(block, 'pubDate'),
-        image: logoFor(block),
+        image: mediaImage(block),
+        logo: BE_LOGO,
       });
     }
   }
   news.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Prefer items that actually have an image.
+  const withImg = news.filter((n) => n.image);
+  const list = (withImg.length >= 8 ? withImg : news).slice(0, 14);
 
   // ---- Trends: daily search trends in India ----
   const trends: TrendItem[] = items(trendsXml)
@@ -108,5 +113,5 @@ export async function GET(): Promise<NextResponse> {
     }))
     .filter((t) => t.title);
 
-  return NextResponse.json({ news: news.slice(0, 18), trends: trends.slice(0, 12) });
+  return NextResponse.json({ news: list, trends: trends.slice(0, 12) });
 }
