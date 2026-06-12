@@ -17,6 +17,7 @@ const ACCENT_SOFT = '#F4F2FF';
 const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
   { label: 'AI Content Generator', href: '/tools/content-ideas', icon: 'spark' },
+  { label: 'Reply Assistant', href: '/tools/reply-assistant', icon: 'chat' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
   { label: 'Competitor Analysis', href: '/competitor-analysis', icon: 'bars' },

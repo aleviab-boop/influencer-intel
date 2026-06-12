@@ -525,6 +525,53 @@ Write the ${isDM ? 'DM' : 'email'}.`,
     });
     return res.choices[0]?.message?.content?.trim() ?? '';
   }
+
+  /**
+   * Given a creator's reply during outreach, draft a few ready-to-send response
+   * options from the brand, each taking a different angle.
+   */
+  async generateReply(input: {
+    creator_reply: string;
+    goal?: string;
+    brand_name?: string;
+    channel: 'ig_dm' | 'email';
+    language?: string;
+  }): Promise<{ label: string; message: string }[]> {
+    const isDM = input.channel === 'ig_dm';
+    const lang = input.language?.trim();
+    const langLine =
+      lang && !/^english$/i.test(lang)
+        ? `Write each reply in ${lang}. Keep brand names and @handles as-is. Sound like a real Indian person, natural and warm.`
+        : '';
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You help a brand reply to a creator during influencer outreach. Given the creator's incoming message (and the brand's goal, if any), write 3 short, ready-to-send response options that each take a DIFFERENT angle — e.g. an enthusiastic move-forward, a gentle rate negotiation, and asking for their rates/availability or next step.
+${isDM ? 'Format: Instagram DM — 1-3 sentences, casual.' : 'Format: email — a short subject then a 3-5 sentence body.'}
+${langLine}
+Never invent specifics not given. No pushy or desperate tone.
+Respond ONLY with JSON: { "suggestions": [ { "label": "2-4 word angle name", "message": "the reply" } ] }`,
+        },
+        {
+          role: 'user',
+          content: `Brand: ${input.brand_name?.trim() || 'our brand'}
+Goal: ${input.goal?.trim() || '(not specified — keep the conversation moving toward a collaboration)'}
+
+Creator's message:
+"""
+${input.creator_reply.trim()}
+"""
+
+Write the 3 reply options.`,
+        },
+      ],
+    });
+    const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}');
+    return Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+  }
 }
 
 let cached: OpenAIClient | null = null;
