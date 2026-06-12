@@ -106,6 +106,7 @@ export default function LanderPage() {
             <Showcase />
             <DatabaseSection />
             <FeatureGrid />
+            <TrendingStrip />
             <Testimonials />
             <StatsBand />
             <CaseStudies />
@@ -578,6 +579,53 @@ const TESTIMONIALS = [
   { q: 'A very good platform for both influencers and businesses. Finding the right fit is finally simple.', n: 'Vinay', r: 'Moda Veda', photo: 'https://i.pravatar.cc/96?img=33' },
   { q: 'Saved us the huge amount of time we used to spend on influencer marketing manually.', n: 'Alok', r: 'Educase.io', photo: 'https://i.pravatar.cc/96?img=59' },
 ];
+
+function TrendingStrip() {
+  const [news, setNews] = useState<{ title: string; link: string; source: string }[]>([]);
+  const [trends, setTrends] = useState<{ title: string; link: string }[]>([]);
+  useEffect(() => {
+    fetch('/api/news')
+      .then((r) => r.json())
+      .then((d) => {
+        setNews((d.news ?? []).slice(0, 4));
+        setTrends((d.trends ?? []).slice(0, 8));
+      })
+      .catch(() => {});
+  }, []);
+  if (news.length === 0 && trends.length === 0) return null;
+  return (
+    <section className="py-20 bg-white">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="flex items-end justify-between mb-8 flex-wrap gap-3">
+          <div>
+            <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>Stay in the loop</span>
+            <h2 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">What&apos;s trending now</h2>
+          </div>
+          <Link href="/trending" className="text-[14px] font-semibold hover:opacity-80" style={{ color: ACCENT }}>See all trending →</Link>
+        </div>
+        <div className="grid lg:grid-cols-[1.7fr_1fr] gap-6">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {news.map((n, i) => (
+              <a key={i} href={n.link} target="_blank" rel="noreferrer" className="block p-4 rounded-xl border border-[#eee] hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all">
+                <div className="text-[11px] font-medium mb-1.5 px-2 py-0.5 rounded-md inline-block" style={{ background: ACCENT_SOFT, color: ACCENT }}>{n.source}</div>
+                <div className="text-[14px] font-medium text-[#111] leading-snug line-clamp-3">{n.title}</div>
+              </a>
+            ))}
+          </div>
+          <div className="rounded-2xl border border-[#eee] overflow-hidden self-start">
+            <div className="px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-[#999] border-b border-[#f3f3f3]">🔥 Trending in India</div>
+            {trends.map((t, i) => (
+              <a key={i} href={t.link} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-4 py-2.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#faf9ff] transition-colors">
+                <span className="w-5 text-[13px] font-bold tabular-nums" style={{ color: ACCENT }}>{i + 1}</span>
+                <span className="flex-1 min-w-0 text-[13px] text-[#222] truncate">{t.title}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function Testimonials() {
   return (
