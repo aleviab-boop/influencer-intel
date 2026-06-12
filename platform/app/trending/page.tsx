@@ -19,6 +19,7 @@ function ago(date: string): string {
 export default function TrendingPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [trends, setTrends] = useState<TrendItem[]>([]);
+  const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(false);
 
@@ -28,6 +29,7 @@ export default function TrendingPage() {
       .then((d) => {
         setNews(d.news ?? []);
         setTrends(d.trends ?? []);
+        setUpdatedAt(d.updatedAt ?? '');
       })
       .catch(() => setErr(true))
       .finally(() => setLoading(false));
@@ -41,7 +43,13 @@ export default function TrendingPage() {
           <div className="max-w-6xl mx-auto px-6">
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>What&apos;s trending</span>
             <h1 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">Influencer & campaign pulse</h1>
-            <p className="mt-2 text-[15px] text-[#555]">Live marketing news and what India is searching right now — updated through the day.</p>
+            <p className="mt-2 text-[15px] text-[#555]">Live marketing news and what India is searching right now — refreshes through the day.</p>
+            {updatedAt && (
+              <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-[#999]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Updated {new Date(updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+              </div>
+            )}
           </div>
         </section>
 

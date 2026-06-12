@@ -35,7 +35,11 @@ function mediaImage(block: string): string {
     block.match(/<media:content[^>]*url="([^"]+)"/i) ||
     block.match(/<media:thumbnail[^>]*url="([^"]+)"/i) ||
     block.match(/<enclosure[^>]*url="([^"]+)"/i);
-  return m ? m[1]!.replace(/&amp;/g, '&') : '';
+  if (!m) return '';
+  const url = m[1]!.replace(/&amp;/g, '&');
+  // ET serves a tiny low-res thumb in the feed; swap to the full-res original.
+  const id = url.match(/etb2bimg\.com\/.*?\/(\d+)\.cms?(?:[?#]|$)/i);
+  return id ? `https://etimg.etb2bimg.com/photo/${id[1]}.cms` : url;
 }
 
 async function fetchRss(url: string): Promise<string> {
@@ -113,5 +117,5 @@ export async function GET(): Promise<NextResponse> {
     }))
     .filter((t) => t.title);
 
-  return NextResponse.json({ news: list, trends: trends.slice(0, 12) });
+  return NextResponse.json({ news: list, trends: trends.slice(0, 12), updatedAt: new Date().toISOString() });
 }
