@@ -262,6 +262,44 @@ export function LiveSearch({
   // pinned creators that persist across searches (localStorage)
   const [savedCreators, setSavedCreators] = useState<SavedCreator[]>([]);
   const [showSaved, setShowSaved] = useState(false);
+  // side-by-side compare
+  const [compareSel, setCompareSel] = useState<Set<string>>(new Set());
+  const [compareFor, setCompareFor] = useState<string[] | null>(null);
+  const [compareData, setCompareData] = useState<Record<string, ProfileData | null>>({});
+  const [compareLoading, setCompareLoading] = useState(false);
+
+  function toggleCompare(handle: string) {
+    setCompareSel((s) => {
+      const n = new Set(s);
+      if (n.has(handle)) n.delete(handle);
+      else if (n.size < 4) n.add(handle);
+      return n;
+    });
+  }
+
+  async function openCompare() {
+    const handles = [...compareSel];
+    if (handles.length < 2) return;
+    setCompareFor(handles);
+    setShowSaved(false);
+    setCompareLoading(true);
+    setCompareData({});
+    try {
+      const entries = await Promise.all(
+        handles.map(async (h) => {
+          try {
+            const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(h)}`).then((r) => r.json());
+            return [h, d.error ? null : (d as ProfileData)] as const;
+          } catch {
+            return [h, null] as const;
+          }
+        }),
+      );
+      setCompareData(Object.fromEntries(entries));
+    } finally {
+      setCompareLoading(false);
+    }
+  }
 
   useEffect(() => {
     try {
@@ -1259,6 +1297,14 @@ export function LiveSearch({
             <div className="flex-1 overflow-y-auto divide-y divide-[#f3f3f3]">
               {savedCreators.map((s) => (
                 <div key={s.username} className="flex items-center gap-3 px-5 py-3">
+                  <input
+                    type="checkbox"
+                    className="accent-[#6C4DF6] shrink-0"
+                    checked={compareSel.has(s.username)}
+                    disabled={!compareSel.has(s.username) && compareSel.size >= 4}
+                    onChange={() => toggleCompare(s.username)}
+                    title="Select to compare (up to 4)"
+                  />
                   <Avatar name={s.full_name || s.username} url={s.profile_pic_url} />
                   <div className="min-w-0 flex-1">
                     <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-[#111] truncate hover:underline">@{s.username}</a>
@@ -1268,6 +1314,16 @@ export function LiveSearch({
                 </div>
               ))}
             </div>
+            {compareSel.size > 0 && (
+              <button
+                onClick={() => void openCompare()}
+                disabled={compareSel.size < 2}
+                className="mx-5 mt-3 px-4 py-2.5 rounded-xl text-[13px] font-semibold border-2 disabled:opacity-50"
+                style={{ color: ACCENT, borderColor: ACCENT }}
+              >
+                ⚖ Compare {compareSel.size} {compareSel.size < 2 ? '(pick 2+)' : 'side by side'}
+              </button>
+            )}
             <div className="px-5 py-4 border-t border-[#eee] flex items-center gap-2">
               <button
                 onClick={() => void runBulkDraft(savedCreators, 'dm')}
@@ -1283,6 +1339,102 @@ export function LiveSearch({
         </div>
       )}
 
+      {compareFor && (
+        <CompareModal
+          handles={compareFor}
+          data={compareData}
+          loading={compareLoading}
+          onClose={() => setCompareFor(null)}
+          onDraft={(h) => { setCompareFor(null); void openDraft({ username: h } as LiveProfile); }}
+        />
+      )}
+
+    </div>
+  );
+}
+
+function CompareModal({
+  handles,
+  data,
+  loading,
+  onClose,
+  onDraft,
+}: {
+  handles: string[];
+  data: Record<string, ProfileData | null>;
+  loading: boolean;
+  onClose: () => void;
+  onDraft: (handle: string) => void;
+}) {
+  const erOf = (p: ProfileData) =>
+    p.followers > 0 && p.recent.length > 0
+      ? Math.round((p.recent.reduce((s, x) => s + x.likes + x.comments, 0) / p.recent.length / p.followers) * 1000) / 10
+      : null;
+
+  const cols = handles.map((h) => {
+    const p = data[h] ?? null;
+    const er = p ? erOf(p) : null;
+    const rate = p ? estimatedRate(p.followers, er) : null;
+    const rhythm = p ? postingInsight(p.recent) : null;
+    const themes = p ? contentThemes(p.recent, 4) : [];
+    return { h, p, er, rate, rhythm, themes };
+  });
+
+  // Best-in-row highlights.
+  const maxFollowers = Math.max(...cols.map((c) => c.p?.followers ?? 0));
+  const maxEr = Math.max(...cols.map((c) => c.er ?? 0));
+
+  const Row = ({ label, render }: { label: string; render: (c: (typeof cols)[number]) => React.ReactNode }) => (
+    <tr className="border-t border-[#f3f3f3]">
+      <td className="py-2.5 pr-3 text-[12px] text-[#999] align-top whitespace-nowrap">{label}</td>
+      {cols.map((c) => (
+        <td key={c.h} className="py-2.5 px-3 text-[13px] text-[#222] align-top">{render(c)}</td>
+      ))}
+    </tr>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[55] grid place-items-center bg-black/40 backdrop-blur-sm px-4" onClick={onClose}>
+      <div className="w-full max-w-4xl max-h-[85vh] overflow-auto rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 px-5 py-4 flex items-center justify-between text-white z-10" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+          <div className="text-[15px] font-semibold">⚖ Compare creators · {cols.length}</div>
+          <button onClick={onClose} className="text-white/80 hover:text-white text-xl leading-none">×</button>
+        </div>
+        {loading ? (
+          <div className="p-12 grid place-items-center"><div className="w-7 h-7 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
+        ) : (
+          <div className="p-5 overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th />
+                  {cols.map((c) => (
+                    <th key={c.h} className="px-3 pb-2 text-left">
+                      <div className="flex items-center gap-2">
+                        <Avatar name={c.p?.full_name || c.h} url={c.p?.profile_pic_url ?? null} />
+                        <a href={`https://instagram.com/${c.h}`} target="_blank" rel="noreferrer" className="text-[13px] font-semibold text-[#111] hover:underline truncate">@{c.h}</a>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <Row label="Followers" render={(c) => <span className={c.p && c.p.followers === maxFollowers && maxFollowers > 0 ? 'font-bold' : ''} style={c.p && c.p.followers === maxFollowers ? { color: ACCENT } : undefined}>{c.p ? fmt(c.p.followers) : '—'}</span>} />
+                <Row label="Engagement" render={(c) => c.er != null ? <span className={c.er === maxEr && maxEr > 0 ? 'font-bold' : ''} style={c.er === maxEr ? { color: '#059669' } : undefined}>{c.er}%</span> : '—'} />
+                <Row label="Est. rate / post" render={(c) => c.rate ? `${inr(c.rate.low)}–${inr(c.rate.high)}` : '—'} />
+                <Row label="Posts" render={(c) => c.p ? fmt(c.p.posts) : '—'} />
+                <Row label="Cadence" render={(c) => c.rhythm?.cadence ?? '—'} />
+                <Row label="Best time" render={(c) => c.rhythm ? `${c.rhythm.bestDay}, ${c.rhythm.bestWindow}` : '—'} />
+                <Row label="Themes" render={(c) => c.themes.length ? <span className="text-[12px]">{c.themes.join(' ')}</span> : '—'} />
+                <Row label="Contact" render={(c) => c.p?.email ? <span className="text-[12px] text-[#10b981] break-all">{c.p.email}</span> : c.p?.phone ? <span className="text-[12px] text-[#0ea5e9]">{c.p.phone}</span> : '—'} />
+                <Row label="" render={(c) => (
+                  <button onClick={() => onDraft(c.h)} className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold hover:brightness-105" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>✦ Draft</button>
+                )} />
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
