@@ -269,6 +269,7 @@ export function MarketingNav() {
               </div>
             </div>
           </div>
+          <Link href="/trending" className="hover:text-[#111]">Trending</Link>
           <Link href="/pricing" className="hover:text-[#111]">Pricing</Link>
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
