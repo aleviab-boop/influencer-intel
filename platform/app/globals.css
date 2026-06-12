@@ -85,13 +85,12 @@ button, input, textarea, select {
 
 /* Global scroll-reveal (driven by ScrollMotion). Sections rise + fade in as
    they enter the viewport. JS adds .ii-reveal (hidden), then .ii-inview. */
-.ii-reveal { opacity: 0; transform: translateY(60px) scale(.96); filter: blur(6px); will-change: opacity, transform, filter; }
+.ii-reveal { opacity: 0; transform: translateY(22px); will-change: opacity, transform; }
 .ii-reveal.ii-inview {
   opacity: 1;
   transform: none;
-  filter: none;
-  transition: opacity .8s ease, transform .9s cubic-bezier(.16,.84,.44,1), filter .8s ease;
+  transition: opacity .55s ease-out, transform .55s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
-  .ii-reveal { opacity: 1; transform: none; filter: none; }
+  .ii-reveal { opacity: 1; transform: none; }
 }

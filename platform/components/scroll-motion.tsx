@@ -39,7 +39,7 @@ export function ScrollMotion() {
       (entries) => {
         for (const e of entries) if (e.isIntersecting) reveal(e.target);
       },
-      { threshold: 0.08, rootMargin: '0px 0px -18% 0px' },
+      { threshold: 0.05, rootMargin: '0px 0px -10% 0px' },
     );
 
     // Coalesce scans into a single rAF so frequent re-renders don't thrash.
