@@ -21,19 +21,33 @@ export default function TrendingPage() {
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState(false);
 
+  async function load(force = false) {
+    try {
+      if (force) await fetch('/api/news/refresh', { method: 'POST' }).catch(() => {});
+      const d = await fetch('/api/news', { cache: 'no-store' }).then((r) => r.json());
+      setNews(d.news ?? []);
+      setTrends(d.trends ?? []);
+      setUpdatedAt(d.updatedAt ?? '');
+      setErr(false);
+    } catch {
+      setErr(true);
+    }
+  }
+
   useEffect(() => {
-    fetch('/api/news')
-      .then((r) => r.json())
-      .then((d) => {
-        setNews(d.news ?? []);
-        setTrends(d.trends ?? []);
-        setUpdatedAt(d.updatedAt ?? '');
-      })
-      .catch(() => setErr(true))
-      .finally(() => setLoading(false));
+    load().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function refresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    await load(true);
+    setRefreshing(false);
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-white text-[#111]">
@@ -44,12 +58,25 @@ export default function TrendingPage() {
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>What&apos;s trending</span>
             <h1 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">Influencer & campaign pulse</h1>
             <p className="mt-2 text-[15px] text-[#555]">Live marketing news and what India is searching right now — refreshes through the day.</p>
-            {updatedAt && (
-              <div className="mt-2 inline-flex items-center gap-1.5 text-[12px] text-[#999]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Updated {new Date(updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
-              </div>
-            )}
+            <div className="mt-3 flex items-center gap-3">
+              {updatedAt && (
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-[#999]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Updated {new Date(updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                onClick={refresh}
+                disabled={refreshing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#e3def9] text-[12px] font-medium hover:bg-[#faf9ff] disabled:opacity-60"
+                style={{ color: ACCENT }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? 'animate-spin' : ''}>
+                  <path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v4h-4" />
+                </svg>
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
           </div>
         </section>
 
