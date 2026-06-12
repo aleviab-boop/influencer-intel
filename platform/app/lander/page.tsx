@@ -533,14 +533,14 @@ function DatabaseSection() {
 }
 
 const FEATURES = [
-  { t: 'Campaign Management', d: 'Automate outreach, approvals, and recruitment pipelines end-to-end.', href: '/campaign-management', icon: 'list', color: '#6C4DF6' },
-  { t: 'Influencer Discovery', d: 'Type a brief in plain English, get a credibility-scored shortlist in minutes.', href: '/influencer-search', icon: 'search', color: '#0EA5E9' },
-  { t: 'AI Campaign Intelligence', d: 'Auto-generate content briefs and reel concepts tailored to each creator.', href: '/monitor', icon: 'gauge', color: '#F59E0B' },
-  { t: 'AI Analytics Dashboard', d: 'Predicted vs. real likes & views, with confidence and trend signals.', href: '/monitor', icon: 'bars', color: '#10B981' },
-  { t: 'Competitor Analysis', d: 'Track creator overlaps and share of voice against your competitors.', href: '#', icon: 'database', color: '#EC4899' },
-  { t: 'Comment to DM', d: 'Turn comments into personalized conversations, automatically.', href: '#', icon: 'chat', color: '#06B6D4' },
-  { t: 'Contracts & Payments', d: 'Streamlined agreements and creator payouts in one flow.', href: '#', icon: 'payout', color: '#F97316' },
-  { t: 'Quality & Fraud', d: 'Fake-follower detection and a 0–100 quality gate on every creator.', href: '/influencer-search', icon: 'shield', color: '#EF4444' },
+  { t: 'Campaign Management', d: 'Automate outreach, approvals, and recruitment pipelines end-to-end.', href: '/campaign-management', icon: 'list', color: '#6C4DF6', c2: '#C4B5FD', chip: 'Run campaign' },
+  { t: 'Influencer Discovery', d: 'Type a brief in plain English, get a credibility-scored shortlist in minutes.', href: '/influencer-search', icon: 'search', color: '#0EA5E9', c2: '#BAE6FD', chip: 'Search creators' },
+  { t: 'AI Campaign Intelligence', d: 'Auto-generate content briefs and reel concepts tailored to each creator.', href: '/tools/content-ideas', icon: 'gauge', color: '#F59E0B', c2: '#FDE68A', chip: 'Generate brief' },
+  { t: 'AI Analytics Dashboard', d: 'Predicted vs. real likes & views, with confidence and trend signals.', href: '/monitor', icon: 'bars', color: '#10B981', c2: '#A7F3D0', chip: 'View report' },
+  { t: 'Competitor Analysis', d: 'Track creator overlaps and share of voice against your competitors.', href: '/competitor-analysis', icon: 'database', color: '#EC4899', c2: '#FBCFE8', chip: 'Benchmark' },
+  { t: 'Comment to DM', d: 'Turn comments into personalized conversations, automatically.', href: '/comment-to-dm', icon: 'chat', color: '#06B6D4', c2: '#A5F3FC', chip: 'Auto-reply' },
+  { t: 'Contracts & Payments', d: 'Streamlined agreements and creator payouts in one flow.', href: '#', icon: 'payout', color: '#F97316', c2: '#FED7AA', chip: 'Send payout' },
+  { t: 'Quality & Fraud', d: 'Fake-follower detection and a 0–100 quality gate on every creator.', href: '/influencer-search', icon: 'shield', color: '#EF4444', c2: '#FECACA', chip: 'Run check' },
 ];
 
 function FeatureGrid() {
@@ -554,18 +554,39 @@ function FeatureGrid() {
             One platform to discover, recruit, brief, run, and measure — the full influencer lifecycle.
           </p>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {FEATURES.map((f) => (
             <Link
               key={f.t}
               href={f.href}
-              className="group p-5 rounded-2xl bg-white border border-[#ececff] hover:shadow-[0_8px_30px_rgba(108,77,246,0.12)] transition-shadow"
+              className="group rounded-[26px] bg-white border border-[#eeeef6] overflow-hidden hover:-translate-y-1.5 hover:shadow-[0_28px_70px_rgba(20,20,60,0.13)] transition-all duration-300"
             >
-              <div className="w-10 h-10 rounded-xl grid place-items-center mb-4 text-white transition-transform group-hover:scale-105" style={{ background: f.color }}>
-                <FeatureIcon name={f.icon} />
+              <div
+                className="relative h-44 grid place-items-center overflow-hidden"
+                style={{
+                  background: `radial-gradient(75% 75% at 22% 18%, ${f.color}, transparent 58%), radial-gradient(70% 70% at 88% 22%, ${f.c2}, transparent 60%), linear-gradient(170deg, ${f.c2}, #ffffff 85%)`,
+                }}
+              >
+                <div className="relative flex flex-col items-center gap-3" style={{ animation: 'none' }}>
+                  <span
+                    className="w-14 h-14 rounded-2xl grid place-items-center bg-white/95 backdrop-blur shadow-[0_10px_28px_rgba(20,20,60,0.18)] transition-transform duration-300 group-hover:-translate-y-1"
+                    style={{ color: f.color }}
+                  >
+                    <FeatureIcon name={f.icon} />
+                  </span>
+                  <span className="relative inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white shadow-[0_8px_22px_rgba(20,20,60,0.14)] text-[12.5px] font-semibold text-[#2a2a3a]">
+                    <span style={{ color: f.color }}>✦</span>
+                    {f.chip}
+                    <svg className="absolute -right-3.5 -bottom-3.5 drop-shadow-[0_2px_3px_rgba(0,0,0,0.3)] transition-transform duration-300 group-hover:translate-x-0.5 group-hover:translate-y-0.5" width="20" height="20" viewBox="0 0 24 24" fill="#1a1a2e" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round">
+                      <path d="M5 2.5l13.5 7-5.6 1.9-2 5.6z" />
+                    </svg>
+                  </span>
+                </div>
               </div>
-              <h3 className="text-[15px] font-semibold mb-1.5">{f.t}</h3>
-              <p className="text-[13px] text-[#666] leading-relaxed">{f.d}</p>
+              <div className="p-5">
+                <h3 className="text-[16px] font-bold tracking-tight">{f.t}</h3>
+                <p className="mt-1.5 text-[13px] text-[#666] leading-relaxed">{f.d}</p>
+              </div>
             </Link>
           ))}
         </div>
