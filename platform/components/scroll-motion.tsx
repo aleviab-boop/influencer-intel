@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 
 // Global scroll-reveal: every <section> (outside the nav/footer) gently rises
@@ -9,9 +9,14 @@ import { usePathname } from 'next/navigation';
 // content stays visible if JS is off. Respects prefers-reduced-motion.
 export function ScrollMotion() {
   const pathname = usePathname();
+  const firstRun = useRef(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    // On a real route change (not the first load), land at the top of the new
+    // page — so clicking a feature never drops you mid-page on the next one.
+    if (firstRun.current) firstRun.current = false;
+    else window.scrollTo(0, 0);
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 
     let io: IntersectionObserver | null = null;
@@ -25,7 +30,16 @@ export function ScrollMotion() {
     const observe = (el: Element) => {
       if (el.classList.contains('ii-reveal')) return; // already tracked
       el.classList.add('ii-reveal');
-      io?.observe(el);
+      // Anything already in (or above) the viewport — e.g. the hero of a page
+      // you just navigated to — is revealed right away rather than waiting on
+      // the observer, so navigated pages never look blank. Below-fold sections
+      // animate in on scroll via the observer.
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        requestAnimationFrame(() => el.classList.add('ii-inview'));
+      } else {
+        io?.observe(el);
+      }
     };
 
     const scan = () => {
