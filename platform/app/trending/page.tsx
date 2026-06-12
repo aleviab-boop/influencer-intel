@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
-interface NewsItem { title: string; link: string; source: string; date: string }
+interface NewsItem { title: string; link: string; source: string; date: string; image: string }
 interface TrendItem { title: string; traffic: string; link: string }
 
 function ago(date: string): string {
@@ -68,13 +68,19 @@ export default function TrendingPage() {
                     href={n.link}
                     target="_blank"
                     rel="noreferrer"
-                    className="block p-4 rounded-xl border border-[#eee] hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all"
+                    className="flex gap-3.5 p-4 rounded-xl border border-[#eee] hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all"
                   >
-                    <div className="flex items-center gap-2 mb-1.5 text-[12px]">
-                      <span className="px-2 py-0.5 rounded-md font-medium" style={{ background: ACCENT_SOFT, color: ACCENT }}>{n.source}</span>
-                      {n.date && <span className="text-[#aaa]">{ago(n.date)}</span>}
+                    {n.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={n.image} alt="" className="w-11 h-11 rounded-lg object-contain bg-[#fafafc] border border-[#eee] p-1.5 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1 text-[12px]">
+                        <span className="px-2 py-0.5 rounded-md font-medium" style={{ background: ACCENT_SOFT, color: ACCENT }}>{n.source}</span>
+                        {n.date && <span className="text-[#aaa]">{ago(n.date)}</span>}
+                      </div>
+                      <div className="text-[15px] font-medium text-[#111] leading-snug">{n.title}</div>
                     </div>
-                    <div className="text-[15px] font-medium text-[#111] leading-snug">{n.title}</div>
                   </a>
                 ))}
               </div>

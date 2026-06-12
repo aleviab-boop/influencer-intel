@@ -44,6 +44,18 @@ export interface NewsItem {
   link: string;
   source: string;
   date: string;
+  image: string;
+}
+
+// Publisher logo via Google's free favicon service (the source's own site image).
+function logoFor(block: string): string {
+  const m = block.match(/<source[^>]*url="([^"]+)"/i);
+  if (!m) return '';
+  try {
+    return `https://www.google.com/s2/favicons?domain=${new URL(m[1]!).hostname}&sz=128`;
+  } catch {
+    return '';
+  }
 }
 export interface TrendItem {
   title: string;
@@ -81,6 +93,7 @@ export async function GET(): Promise<NextResponse> {
         link: tag(block, 'link'),
         source: tag(block, 'source') || 'News',
         date: tag(block, 'pubDate'),
+        image: logoFor(block),
       });
     }
   }

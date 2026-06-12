@@ -581,7 +581,7 @@ const TESTIMONIALS = [
 ];
 
 function TrendingStrip() {
-  const [news, setNews] = useState<{ title: string; link: string; source: string }[]>([]);
+  const [news, setNews] = useState<{ title: string; link: string; source: string; image: string }[]>([]);
   const [trends, setTrends] = useState<{ title: string; link: string }[]>([]);
   useEffect(() => {
     fetch('/api/news')
@@ -606,9 +606,15 @@ function TrendingStrip() {
         <div className="grid lg:grid-cols-[1.7fr_1fr] gap-6">
           <div className="grid sm:grid-cols-2 gap-3">
             {news.map((n, i) => (
-              <a key={i} href={n.link} target="_blank" rel="noreferrer" className="block p-4 rounded-xl border border-[#eee] hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all">
-                <div className="text-[11px] font-medium mb-1.5 px-2 py-0.5 rounded-md inline-block" style={{ background: ACCENT_SOFT, color: ACCENT }}>{n.source}</div>
-                <div className="text-[14px] font-medium text-[#111] leading-snug line-clamp-3">{n.title}</div>
+              <a key={i} href={n.link} target="_blank" rel="noreferrer" className="flex gap-3 p-4 rounded-xl border border-[#eee] hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.08)] transition-all">
+                {n.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={n.image} alt="" className="w-10 h-10 rounded-lg object-contain bg-[#fafafc] border border-[#eee] p-1.5 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-[11px] font-medium mb-1 px-2 py-0.5 rounded-md inline-block" style={{ background: ACCENT_SOFT, color: ACCENT }}>{n.source}</div>
+                  <div className="text-[14px] font-medium text-[#111] leading-snug line-clamp-3">{n.title}</div>
+                </div>
               </a>
             ))}
           </div>
