@@ -11,7 +11,8 @@ const SEARCH_TEXT = `lower(
   coalesce(handle,'') || ' ' || coalesce(display_name,'') || ' ' ||
   coalesce(bio,'') || ' ' || coalesce(primary_category,'') || ' ' ||
   coalesce(genre,'') || ' ' || coalesce(niche,'') || ' ' ||
-  coalesce(region,'') || ' ' || coalesce(primary_city,'')
+  coalesce(region,'') || ' ' || coalesce(primary_city,'') || ' ' ||
+  coalesce(array_to_string(tags, ' '), '')
 )`;
 
 interface Row {
