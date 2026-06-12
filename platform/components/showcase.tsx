@@ -49,7 +49,13 @@ export function Showcase() {
 
   return (
     <section ref={ref} className="relative" style={{ height: `${N * 80}vh`, background: '#eef1ff' }}>
-      <div className="sticky top-0 h-screen flex flex-col justify-center overflow-hidden">
+      <div
+        className="sticky top-0 h-screen flex flex-col justify-center overflow-hidden"
+        style={{
+          background:
+            'radial-gradient(55% 45% at 12% 10%, rgba(108,77,246,.16), transparent 60%), radial-gradient(50% 45% at 90% 12%, rgba(247,181,0,.14), transparent 60%), radial-gradient(55% 50% at 70% 96%, rgba(236,72,153,.12), transparent 60%), #eef1ff',
+        }}
+      >
         <div className="max-w-6xl mx-auto px-6 w-full">
           <div className="text-center max-w-3xl mx-auto mb-8">
             <h2 className="text-3xl md:text-[40px] font-bold tracking-tight leading-tight text-[#1a1a3a]">

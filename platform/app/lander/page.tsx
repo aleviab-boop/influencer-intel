@@ -545,7 +545,7 @@ const FEATURES = [
 
 function FeatureGrid() {
   return (
-    <section id="features" className="py-20" style={{ background: ACCENT_SOFT }}>
+    <section id="features" className="py-20" style={{ background: `radial-gradient(45% 40% at 10% 5%, rgba(108,77,246,.12), transparent 60%), radial-gradient(40% 40% at 92% 8%, rgba(247,181,0,.12), transparent 60%), radial-gradient(45% 45% at 70% 100%, rgba(236,72,153,.10), transparent 60%), ${ACCENT_SOFT}` }}>
       <div className="max-w-6xl mx-auto px-6">
         <div className="text-center max-w-2xl mx-auto mb-12">
           <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>Everything in one place</span>
