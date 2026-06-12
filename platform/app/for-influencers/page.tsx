@@ -14,7 +14,7 @@ export default function ForInfluencersPage() {
       <main className="flex-1">
         {/* Hero */}
         <section className="relative overflow-hidden">
-          <div className="absolute inset-0" style={{ background: `linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
+          <div className="absolute inset-0" style={{ background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 55% at 90% 6%, rgba(247,181,0,.15), transparent 60%), radial-gradient(55% 50% at 60% 0%, rgba(236,72,153,.12), transparent 55%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
           <div className="grid-bg absolute inset-0 opacity-50" />
           <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full blur-3xl opacity-25" style={{ background: ACCENT }} />
           <div className="relative max-w-5xl mx-auto px-6 pt-16 pb-14 text-center">
