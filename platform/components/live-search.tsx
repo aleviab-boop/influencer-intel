@@ -87,6 +87,41 @@ function inr(n: number): string {
   return `₹${Math.round(n / 100) * 100}`;
 }
 
+// Rising star = a modest-sized creator punching well above their tier's
+// engagement floor — the kind worth signing before they get expensive.
+function isRisingStar(followers: number, engagement: number | null): boolean {
+  if (engagement == null || followers <= 0) return false;
+  return followers < 250_000 && engagement >= expectedErFloor(followers) * 1.6;
+}
+
+// Lightweight follower-growth tracking via localStorage. We snapshot followers
+// on each profile view; on a later view we can show the delta since first seen.
+interface GrowthSnap { f: number; t: number }
+function readGrowth(handle: string): GrowthSnap[] {
+  try {
+    const all = JSON.parse(localStorage.getItem('ii_growth') ?? '{}');
+    return Array.isArray(all[handle.toLowerCase()]) ? all[handle.toLowerCase()] : [];
+  } catch {
+    return [];
+  }
+}
+function recordGrowth(handle: string, followers: number): void {
+  if (followers <= 0) return;
+  try {
+    const all = JSON.parse(localStorage.getItem('ii_growth') ?? '{}');
+    const key = handle.toLowerCase();
+    const list: GrowthSnap[] = Array.isArray(all[key]) ? all[key] : [];
+    const last = list[list.length - 1];
+    // Skip if we already logged this count within the last 12h (avoid noise).
+    if (last && last.f === followers && Date.now() - last.t < 12 * 3_600_000) return;
+    list.push({ f: followers, t: Date.now() });
+    all[key] = list.slice(-8); // keep recent history
+    localStorage.setItem('ii_growth', JSON.stringify(all));
+  } catch {
+    /* ignore */
+  }
+}
+
 // Rough sponsored-post rate range (single IG in-feed post, India market).
 // Rate-per-1k-followers tapers as audiences scale; healthy engagement commands
 // a premium, weak engagement a discount. Heuristic — a starting point, not a quote.
@@ -1042,6 +1077,11 @@ export function LiveSearch({
                                   DB
                                 </span>
                               )}
+                              {isRisingStar(p.followers, p.engagement ?? null) && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200" title="High engagement for their size — likely on the rise">
+                                  ⭐ Rising
+                                </span>
+                              )}
                               {isContacted(p.username) && (
                                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600" title="You've reached out">
                                   Contacted ✓
@@ -1528,6 +1568,20 @@ function CompareModal({
 function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [rivals, setRivals] = useState('');
+  const [growth, setGrowth] = useState<{ pct: number; days: number } | null>(null);
+  useEffect(() => {
+    if (!profile) return;
+    const prior = readGrowth(profile.handle);
+    const first = prior[0];
+    if (first && first.f > 0 && first.f !== profile.followers) {
+      const pct = Math.round(((profile.followers - first.f) / first.f) * 1000) / 10;
+      const days = Math.max(1, Math.round((Date.now() - first.t) / 86_400_000));
+      setGrowth({ pct, days });
+    } else {
+      setGrowth(null);
+    }
+    recordGrowth(profile.handle, profile.followers);
+  }, [profile?.handle, profile?.followers]);
   if (loading || !profile) {
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
@@ -1547,6 +1601,7 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
   const rhythm = postingInsight(profile.recent);
   const themes = contentThemes(profile.recent);
   const rate = estimatedRate(profile.followers, engagement);
+  const rising = isRisingStar(profile.followers, engagement);
   const collabs = profile.collabs ?? [];
   const rivalTerms = rivals.toLowerCase().split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean);
   const isRival = (h: string) => rivalTerms.some((t) => h.toLowerCase().includes(t));
@@ -1575,11 +1630,23 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
         <div className="flex items-center gap-3">
           <Avatar name={profile.full_name || profile.handle} url={profile.profile_pic_url} />
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-[#111] truncate hover:underline">@{profile.handle}</a>
               {profile.is_verified && <span style={{ color: ACCENT }}>✔</span>}
+              {rising && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-200" title="High engagement for their size — likely on the rise">
+                  ⭐ Rising star
+                </span>
+              )}
             </div>
-            <div className="text-[12px] text-[#999] truncate">{profile.full_name}{profile.category ? ` · ${profile.category}` : ''}</div>
+            <div className="text-[12px] text-[#999] truncate">
+              {profile.full_name}{profile.category ? ` · ${profile.category}` : ''}
+              {growth && (
+                <span className={`ml-1.5 font-medium ${growth.pct >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {growth.pct >= 0 ? '▲' : '▼'} {Math.abs(growth.pct)}% · {growth.days}d
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
