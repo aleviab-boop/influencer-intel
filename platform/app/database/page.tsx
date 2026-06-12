@@ -54,7 +54,7 @@ export default function DatabasePage() {
   const [category, setCategory] = useState('');
   const [tier, setTier] = useState('');
   const [verified, setVerified] = useState(false);
-  const [sort, setSort] = useState('followers');
+  const [sort, setSort] = useState('recent');
 
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState<number | null>(null);
