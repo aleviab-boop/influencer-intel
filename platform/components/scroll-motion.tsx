@@ -3,79 +3,71 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 
-// Global scroll-reveal: every <section> (outside the nav/footer) gently rises
-// and fades in as it scrolls into view — on every page, no per-page wiring.
-// Progressive enhancement: elements are only hidden once JS marks them, so
-// content stays visible if JS is off. Respects prefers-reduced-motion.
+// Global scroll-reveal: every <section> (outside nav/footer) fades + rises in as
+// it scrolls into view. Driven by a plain scroll handler (not an
+// IntersectionObserver) so it fires reliably — including right after a
+// client-side navigation — and a safety pass guarantees content is never left
+// hidden. Progressive enhancement: sections are only hidden once JS marks them.
 export function ScrollMotion() {
   const pathname = usePathname();
   const firstRun = useRef(true);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    // On a real route change (not the first load), land at the top of the new
-    // page — so clicking a feature never drops you mid-page on the next one.
+    // On a real route change, land at the top of the new page.
     if (firstRun.current) firstRun.current = false;
     else window.scrollTo(0, 0);
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 
-    let io: IntersectionObserver | null = null;
-    let mo: MutationObserver | null = null;
+    const sections = () =>
+      Array.from(document.querySelectorAll('section')).filter((el) => !el.closest('header, footer'));
 
-    const reveal = (el: Element) => {
-      el.classList.add('ii-inview');
-      io?.unobserve(el);
-    };
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      sections().forEach((el) => el.classList.remove('ii-reveal'));
+      return;
+    }
 
-    const observe = (el: Element) => {
-      if (el.classList.contains('ii-reveal')) return; // already tracked
-      el.classList.add('ii-reveal');
-      // Anything already in (or above) the viewport — e.g. the hero of a page
-      // you just navigated to — is revealed right away rather than waiting on
-      // the observer, so navigated pages never look blank. Below-fold sections
-      // animate in on scroll via the observer.
-      const rect = el.getBoundingClientRect();
-      if (rect.top < window.innerHeight && rect.bottom > 0) {
-        requestAnimationFrame(() => el.classList.add('ii-inview'));
-      } else {
-        io?.observe(el);
+    let raf = 0;
+    const tick = () => {
+      const h = window.innerHeight;
+      for (const el of sections()) {
+        const inview = el.classList.contains('ii-inview');
+        if (!inview && !el.classList.contains('ii-reveal')) el.classList.add('ii-reveal');
+        if (!inview && el.getBoundingClientRect().top < h - 60) el.classList.add('ii-inview');
       }
     };
-
-    const scan = () => {
-      document.querySelectorAll('section').forEach((el) => {
-        if (el.closest('header, footer')) return;
-        observe(el);
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        tick();
       });
     };
 
-    io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) if (e.isIntersecting) reveal(e.target);
-      },
-      { threshold: 0.05, rootMargin: '0px 0px -10% 0px' },
-    );
+    tick(); // hide below-fold + reveal what's already visible
+    requestAnimationFrame(tick); // re-run once layout settles
 
-    // Coalesce scans into a single rAF so frequent re-renders don't thrash.
-    let scheduled = 0;
-    const scheduleScan = () => {
-      if (scheduled) return;
-      scheduled = requestAnimationFrame(() => {
-        scheduled = 0;
-        scan();
-      });
-    };
-
-    scheduleScan(); // initial pass after layout settles
-
-    // Catch sections added later (e.g. live results appearing after a search).
-    mo = new MutationObserver(scheduleScan);
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    const mo = new MutationObserver(schedule); // catch sections added later
     mo.observe(document.body, { childList: true, subtree: true });
 
+    // Safety net: anything visible but somehow still hidden after a moment gets
+    // revealed, so the page can never be stuck blank.
+    const safety = window.setTimeout(() => {
+      const h = window.innerHeight;
+      for (const el of sections()) {
+        if (!el.classList.contains('ii-inview') && el.getBoundingClientRect().top < h) {
+          el.classList.add('ii-inview');
+        }
+      }
+    }, 1000);
+
     return () => {
-      if (scheduled) cancelAnimationFrame(scheduled);
-      io?.disconnect();
-      mo?.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+      clearTimeout(safety);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      mo.disconnect();
     };
   }, [pathname]);
 
