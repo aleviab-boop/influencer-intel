@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { findInfluencersForRegion } from '../[id]/influencers/route';
+import { findInfluencersForRegion } from '@/lib/region-influencers';
 
 export const runtime = 'nodejs';
 

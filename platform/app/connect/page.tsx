@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppHeader } from '@/components/app-header';
 
@@ -26,6 +26,14 @@ interface Account {
 }
 
 export default function ConnectPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConnectContent />
+    </Suspense>
+  );
+}
+
+function ConnectContent() {
   const params = useSearchParams();
   const [config, setConfig] = useState<ConfigStatus | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);

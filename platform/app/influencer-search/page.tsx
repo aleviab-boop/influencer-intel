@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
@@ -10,7 +10,9 @@ export default function InfluencerSearchPage() {
   return (
     <div className="min-h-screen bg-white text-[#111] font-sans">
       <MarketingNav />
-      <Hero />
+      <Suspense fallback={null}>
+        <Hero />
+      </Suspense>
       <FeatureRow
         flip
         title="One of the best influencer search tools for Instagram and Youtube"

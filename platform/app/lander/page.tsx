@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
@@ -70,6 +70,14 @@ function FeatureIcon({ name }: { name: string }) {
 }
 
 export default function LanderPage() {
+  return (
+    <Suspense fallback={null}>
+      <LanderContent />
+    </Suspense>
+  );
+}
+
+function LanderContent() {
   const params = useSearchParams();
   const router = useRouter();
   // View is driven by the URL so "Home" (→ /lander) always resets to the hero.
