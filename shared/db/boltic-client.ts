@@ -22,8 +22,23 @@ export function getPool(): Pool {
   }
   const sslDisabled = /[?&]sslmode=disable\b/.test(connectionString);
 
+  // Strip `sslmode` from the URL so node-postgres uses our explicit `ssl`
+  // option below. Otherwise the URL's sslmode (e.g. require/verify) forces
+  // strict certificate validation and rejects Boltic's self-signed cert
+  // (DEPTH_ZERO_SELF_SIGNED_CERT) — which is what breaks the connection on
+  // stricter runtimes like Node 24 on Vercel.
+  let conn = connectionString;
+  try {
+    const u = new URL(connectionString);
+    u.searchParams.delete('sslmode');
+    conn = u.toString();
+  } catch {
+    /* not a parseable URL — use as-is */
+  }
+
   pool = new Pool({
-    connectionString,
+    connectionString: conn,
+    // Boltic's proxy uses a self-signed cert, so accept it (don't verify the CA).
     ssl: sslDisabled ? false : { rejectUnauthorized: false },
     max: Number(process.env.BOLTIC_POOL_MAX ?? 10),
     idleTimeoutMillis: 30_000,
