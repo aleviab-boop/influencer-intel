@@ -50,3 +50,40 @@ Tested every page and flow. **What works:** home search, Discover (4,782 creator
 1. Fix the 4 demo-visible bugs (chart, follower count, error page, broken images) — start here, they're the most visible.
 2. Clear the polish backlog.
 3. Backfill post-level engagement for top creators so marquee names don't look broken.
+
+## Session: 2026-06-09
+
+### Headline — seed-based Instagram scraper (free, login-free)
+- Built a discovery engine that avoids Instagram's login wall: never calls blocked search APIs; instead **seeds from known handles and crawls outward** via the public `web_profile_info` endpoint (related accounts + caption @mentions).
+- Three ways to seed a search:
+  1. **Prompt only** → auto-derives seed handles from city + niche (e.g. "food bloggers in indore" → probes `indorefoodie`, `indorefoodblogger`…), keeps the real ones.
+  2. **A name** ("mridul sharma") → generates handle spellings, probes, seeds from hits.
+  3. **An exact @handle** → seeds directly.
+- Ported the Python prototype (`ig_hybrid.py`) to TypeScript (`platform/lib/live-discovery.ts`).
+
+### What we built
+- **Search UI** (lander + Influencer Search): live ranked table, profile photos via `/api/ig-image` proxy, Excel export, prompt autocomplete, DB persistence.
+- **API**: `POST /api/discover-live` (crawl + rank + persist), `/api/discover-live/export` (xlsx), `/api/ig-image` (CDN proxy).
+- **Ranking**: iterated DB-first → **live-first with quality ranking** (relevance, then followers, source-agnostic).
+- **Coverage**: ~90 cities + 26 niche-synonym sets + unlisted-city fallback.
+- **DB**: every search upserts results into `creators` (source=scrape, tier_c); a richer DB plugs in for free.
+- **For Influencers**: animated AI creator-toolkit section.
+- **Creator dashboard**: photo proxy fix, responsive stats, gradient redesign.
+- **Login**: animated split-panel redesign + drifting background orbs.
+- **Showcase**: accurate state-level India map (`public/india.svg`) + colourful pins/features.
+- Removed "Instagram Search (live)" from the Features nav.
+
+### Bugs fixed
+- **`400 SecFetch Policy violation`** — Node's `fetch` auto-sent `Sec-Fetch-*` headers Instagram rejects; spoofed browser headers + `Referer` to make server-side requests work.
+- **Profile photos not loading** — Instagram CDN blocks hotlinking; added a server-side image proxy with host allowlist.
+
+### Known limits / open
+- Seed-based scraping catches **predictable handles** only; unusual ones need Instagram's logged-in search (deferred — reintroduces the 2FA wall).
+- Every search now always crawls (~15–20s); no instant DB-only path.
+- Test/seed campaigns still showing on `/creator`; engagement value looks like seed data — both DB cleanups.
+
+### Next steps
+1. Engagement rate + quality score from the post data we already fetch (biggest result-quality jump, still free).
+2. Result filters + sorting (min followers, verified-only).
+3. Optionally blend authenticated search for the unpredictable-handle misses.
+4. Clean test campaigns / fix seed engagement values in the DB.

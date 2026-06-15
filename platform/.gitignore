@@ -1,1 +1,3 @@
 .ig-session.json
+.vercel
+.env*
