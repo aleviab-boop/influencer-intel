@@ -1,9 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractContact } from '@/lib/live-discovery';
 import { igFetch } from '@/lib/ig-fetch';
+import { getBolticClient } from '@influencer-intel/shared/db';
 
 export const runtime = 'nodejs';
 export const maxDuration = 20;
+
+// Fallback when the live Instagram fetch is unavailable (e.g. blocked from a
+// cloud server): serve the creator's stored profile from the database so the
+// snapshot still shows real stats. Returns a 404 response if not in the DB.
+async function dbProfileOr404(handle: string): Promise<NextResponse> {
+  try {
+    const rows = await getBolticClient().query<Record<string, unknown>>(
+      `SELECT handle, display_name, bio, primary_category, niche, follower_count,
+              following_count, posts_count, engagement_rate, profile_photo_url,
+              profile_url, is_verified, primary_city
+       FROM creators WHERE handle = $1 LIMIT 1`,
+      [handle.toLowerCase()],
+    );
+    const c = rows[0];
+    if (!c) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    const bio = (c.bio as string) ?? '';
+    const contact = extractContact(bio, { externalUrl: (c.profile_url as string) ?? null });
+    const er = c.engagement_rate != null ? Math.round(Number(c.engagement_rate) * 1000) / 10 : null;
+    return NextResponse.json({
+      handle: c.handle,
+      full_name: (c.display_name as string) ?? '',
+      biography: bio,
+      category: ((c.primary_category as string) || (c.niche as string)) ?? '',
+      followers: Number(c.follower_count ?? 0),
+      following: Number(c.following_count ?? 0),
+      posts: Number(c.posts_count ?? 0),
+      is_verified: Boolean(c.is_verified),
+      is_private: false,
+      profile_pic_url: (c.profile_photo_url as string) ?? null,
+      external_url: contact.link,
+      email: contact.email,
+      phone: contact.phone,
+      recent: [],
+      related: [],
+      collabs: [],
+      sponsored_posts: 0,
+      engagement: er,
+      source: 'db',
+    });
+  } catch {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+}
 
 // GET /api/ig-profile?handle=X
 //   Full public profile + recent posts (login-free). Powers the profile drawer.
@@ -30,9 +74,9 @@ export async function GET(req: NextRequest) {
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
       { headers: HEADERS },
     );
-    if (!res.ok) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (!res.ok) return dbProfileOr404(handle);
     const u = (await res.json())?.data?.user;
-    if (!u) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if (!u) return dbProfileOr404(handle);
 
     const media = u.edge_owner_to_timeline_media?.edges ?? [];
     // Brand-conflict signals: who the creator tags/mentions in recent captions
@@ -109,7 +153,7 @@ export async function GET(req: NextRequest) {
       collabs,
       sponsored_posts: sponsoredPosts,
     });
-  } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  } catch {
+    return dbProfileOr404(handle);
   }
 }

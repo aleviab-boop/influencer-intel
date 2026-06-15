@@ -61,6 +61,8 @@ interface ProfileData {
   related?: { handle: string; full_name: string; is_verified: boolean; profile_pic_url: string | null }[];
   collabs?: { handle: string; count: number }[];
   sponsored_posts?: number;
+  engagement?: number | null;
+  source?: 'db' | 'live';
 }
 
 interface RunResponse {
@@ -1641,7 +1643,7 @@ function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }:
     ? Math.round(
         (profile.recent.reduce((s, p) => s + p.likes + p.comments, 0) / profile.recent.length / profile.followers) * 1000,
       ) / 10
-    : null;
+    : (profile.engagement ?? null);
 
   const floor = expectedErFloor(profile.followers);
   const healthy = engagement != null && engagement >= floor;
