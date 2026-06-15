@@ -323,6 +323,7 @@ export function LiveSearch({
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   // outreach "contacted" tracking (localStorage) — handle -> first-contacted ms
   const [contacted, setContacted] = useState<Record<string, number>>({});
   const [hideContacted, setHideContacted] = useState(false);
@@ -447,10 +448,14 @@ export function LiveSearch({
     }
     setProfileFor(handle);
     setProfile(null);
+    setProfileError(null);
     setProfileLoading(true);
     try {
       const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}`).then((r) => r.json());
-      if (!d.error) setProfile(d as ProfileData);
+      if (d && !d.error) setProfile(d as ProfileData);
+      else setProfileError('live');
+    } catch {
+      setProfileError('live');
     } finally {
       setProfileLoading(false);
     }
@@ -1206,7 +1211,7 @@ export function LiveSearch({
                     {profileFor === p.username && (
                       <tr>
                         <td colSpan={8} className="px-4 pb-4 pt-0 bg-[#faf9ff]">
-                          <ProfileSnapshot loading={profileLoading} profile={profile} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
+                          <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
                         </td>
                       </tr>
                     )}
@@ -1596,7 +1601,7 @@ function CompareModal({
   );
 }
 
-function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { loading: boolean; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
+function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }: { loading: boolean; error?: string | null; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [rivals, setRivals] = useState('');
   const [growth, setGrowth] = useState<{ pct: number; days: number } | null>(null);
@@ -1613,11 +1618,22 @@ function ProfileSnapshot({ loading, profile, onDraft, onClose, onPivot }: { load
     }
     recordGrowth(profile.handle, profile.followers);
   }, [profile?.handle, profile?.followers]);
-  if (loading || !profile) {
+  if (loading) {
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
         <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
         <div className="w-7 h-7 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+      </div>
+    );
+  }
+  if (error || !profile) {
+    return (
+      <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 text-center" style={{ animation: 'ii-fadeup .3s both' }}>
+        <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
+        <div className="text-[14px] font-medium text-[#444]">Couldn&apos;t load the live profile</div>
+        <p className="mt-1.5 text-[12px] text-[#888] max-w-md mx-auto leading-relaxed">
+          Live profile details are fetched from Instagram, which blocks requests from cloud servers. This works on localhost, or on the server once a proxy is configured.
+        </p>
       </div>
     );
   }
