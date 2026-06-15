@@ -22,7 +22,8 @@
     "db:diff": "npm --workspace shared run db:diff",
     "db:fix": "npm --workspace shared run db:fix",
     "db:check-session": "npm --workspace shared run db:check-session",
-    "typecheck": "npm --workspace shared run typecheck && npm --workspace scraper run typecheck && npm --workspace platform run typecheck"
+    "typecheck": "npm --workspace shared run typecheck && npm --workspace scraper run typecheck && npm --workspace platform run typecheck",
+    "relay": "node tools/ig-relay.mjs"
   },
   "engines": {
     "node": ">=20"
