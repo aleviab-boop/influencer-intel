@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { igFetch } from '@/lib/ig-fetch';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const infoRes = await fetch(
+    const infoRes = await igFetch(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
       {
         headers: {
@@ -43,7 +44,7 @@ export async function GET(req: NextRequest) {
       return new NextResponse('host not allowed', { status: 400 });
     }
 
-    const imgRes = await fetch(url.toString(), {
+    const imgRes = await igFetch(url.toString(), {
       headers: { Referer: 'https://www.instagram.com/', 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' },
     });
     if (!imgRes.ok || !imgRes.body) return new NextResponse('image error', { status: 502 });

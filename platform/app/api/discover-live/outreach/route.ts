@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOpenAIClient } from '@influencer-intel/shared/llm';
+import { igFetch } from '@/lib/ig-fetch';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -23,7 +24,7 @@ async function fetchRecentContext(
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(
+    const res = await igFetch(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
       { headers: IG_HEADERS, signal: ctrl.signal },
     ).finally(() => clearTimeout(timer));

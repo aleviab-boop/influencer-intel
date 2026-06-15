@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { igFetch } from '@/lib/ig-fetch';
 
 export const runtime = 'nodejs';
 
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const res = await fetch(url.toString(), {
+    const res = await igFetch(url.toString(), {
       headers: {
         Referer: 'https://www.instagram.com/',
         'User-Agent':

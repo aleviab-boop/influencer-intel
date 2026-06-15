@@ -14,6 +14,8 @@
 // account, no ban risk — just public data + polite throttling.
 // ============================================================
 
+import { igFetch } from './ig-fetch';
+
 const APP_ID = '936619743392459';
 const PROFILE_URL = (u: string) =>
   `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(u)}`;
@@ -118,7 +120,7 @@ async function fetchProfile(username: string, budgetMs: number): Promise<RawUser
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), Math.min(12_000, budgetMs));
   try {
-    const res = await fetch(PROFILE_URL(username), {
+    const res = await igFetch(PROFILE_URL(username), {
       headers: REQUEST_HEADERS,
       signal: ctrl.signal,
     });

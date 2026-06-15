@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractContact } from '@/lib/live-discovery';
+import { igFetch } from '@/lib/ig-fetch';
 
 export const runtime = 'nodejs';
 export const maxDuration = 20;
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
   try {
-    const res = await fetch(
+    const res = await igFetch(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
       { headers: HEADERS },
     );
