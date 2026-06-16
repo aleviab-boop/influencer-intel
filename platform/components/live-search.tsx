@@ -2138,6 +2138,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
           }}
         />
         <AuthenticityCard profile={profile} engagement={engagement} />
+        <ReelForecast profile={profile} />
       </div>
 
       {/* right column: recent posts + similar creators */}
@@ -2267,6 +2268,92 @@ function AuthenticityCard({ profile, engagement }: { profile: ProfileData; engag
 // AI insights panel inside the profile drawer: auto-extracts the brands a
 // creator has worked with + what they're known for, and answers free-form
 // campaign-fit questions ("how good for a Goa campaign?") via /api/creator-ai.
+// Typical share of a reel's total views accrued by N hours after posting —
+// fast early, then a long tail. Used to turn an expected total into a
+// views-over-time curve.
+const REEL_CURVE = [
+  { h: 1, f: 0.08 }, { h: 3, f: 0.18 }, { h: 6, f: 0.30 }, { h: 12, f: 0.45 },
+  { h: 24, f: 0.62 }, { h: 48, f: 0.78 }, { h: 72, f: 0.88 }, { h: 120, f: 0.96 }, { h: 168, f: 1.0 },
+];
+// Reels are viewed far more than they're liked; ~6% like-through is typical, so
+// views ≈ likes × ~16. A rough but consistent way to turn engagement → views.
+const VIEWS_PER_LIKE = 16;
+const hLabel = (h: number) => (h < 24 ? `${h}h` : `${h / 24}d`);
+
+interface Forecast { expected: number; low: number; high: number; basisCount: number; avgLikes: number; curve: { h: number; low: number; exp: number; high: number }[] }
+
+function reelForecast(profile: ProfileData): Forecast | null {
+  const reels = profile.recent.filter((p) => p.is_video);
+  const src = reels.length >= 2 ? reels : profile.recent;
+  const likes = src.map((p) => p.likes).filter((n) => n > 0).sort((a, b) => a - b);
+  if (likes.length < 2) return null;
+  // Median + 20th/80th percentiles, so one viral/flop reel doesn't skew the
+  // projection and the expected value always sits inside the low–high band.
+  const pct = (q: number) => likes[Math.min(likes.length - 1, Math.max(0, Math.round(q * (likes.length - 1))))]!;
+  const typicalLikes = pct(0.5);
+  const expected = Math.round(typicalLikes * VIEWS_PER_LIKE);
+  const low = Math.round(pct(0.2) * VIEWS_PER_LIKE);
+  const high = Math.round(pct(0.8) * VIEWS_PER_LIKE);
+  const curve = REEL_CURVE.map((c) => ({ h: c.h, low: Math.round(low * c.f), exp: Math.round(expected * c.f), high: Math.round(high * c.f) }));
+  return { expected, low, high, basisCount: src.length, avgLikes: Math.round(typicalLikes), curve };
+}
+
+// Projected views-over-time for a creator's NEXT reel, modelled from how their
+// recent reels actually performed. Shows an expected curve with a low–high band
+// so you can sanity-check a reel idea before commissioning it.
+function ReelForecast({ profile }: { profile: ProfileData }) {
+  const f = reelForecast(profile);
+  if (!f) {
+    return (
+      <div className="rounded-2xl border border-[#e3def9] bg-white p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">Reel performance forecast</div>
+        <p className="text-[12px] text-[#888]">Needs a few recent posts to project — hit “Refresh live”.</p>
+      </div>
+    );
+  }
+  const W = 300, H = 120, PAD_L = 4, PAD_B = 16;
+  const n = f.curve.length;
+  const maxY = Math.max(f.high, 1);
+  const x = (i: number) => PAD_L + (i / (n - 1)) * (W - PAD_L * 2);
+  const y = (v: number) => (H - PAD_B) - (v / maxY) * (H - PAD_B - 4);
+  const lineExp = f.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(c.exp).toFixed(1)}`).join(' ');
+  const band =
+    f.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(c.high).toFixed(1)}`).join(' ') +
+    ' ' +
+    [...f.curve].reverse().map((c, i) => `L${x(n - 1 - i).toFixed(1)},${y(c.low).toFixed(1)}`).join(' ') +
+    ' Z';
+
+  return (
+    <div className="rounded-2xl border border-[#e3def9] bg-white p-4" style={{ animation: 'ii-fadeup .4s .14s both' }}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">Reel performance forecast</div>
+      <div className="flex items-baseline gap-2">
+        <div className="text-[20px] font-bold text-[#111] tabular-nums">~{fmt(f.expected)}</div>
+        <div className="text-[12px] text-[#888]">views in 7 days</div>
+      </div>
+      <div className="text-[12px] text-[#999] mb-2">Likely range {fmt(f.low)}–{fmt(f.high)} · from {f.basisCount} recent reels (typically {fmt(f.avgLikes)} likes)</div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
+        <path d={band} fill="#ede9fd" opacity="0.7" />
+        <path d={lineExp} fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        {f.curve.map((c, i) => (
+          <circle key={i} cx={x(i)} cy={y(c.exp)} r="2" fill={ACCENT} />
+        ))}
+        {f.curve.map((c, i) => (
+          (i === 0 || i === 4 || i === 6 || i === n - 1) ? (
+            <text key={`t${i}`} x={x(i)} y={H - 4} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize="9" fill="#aaa">{hLabel(c.h)}</text>
+          ) : null
+        ))}
+      </svg>
+
+      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-[#999]">
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-[2px] rounded" style={{ background: ACCENT }} /> expected</span>
+        <span className="inline-flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: '#ede9fd' }} /> low–high range</span>
+      </div>
+      <p className="mt-2 text-[11px] text-[#aaa] leading-snug">Projection from their recent reels — actual results vary with audio, timing and trends. Connect the account for live tracking.</p>
+    </div>
+  );
+}
+
 function CreatorAI({ body }: { body: Record<string, unknown> }) {
   const handle = String(body.handle ?? '');
   const [insight, setInsight] = useState<{ brands: string[]; content: string; summary: string } | null>(null);
