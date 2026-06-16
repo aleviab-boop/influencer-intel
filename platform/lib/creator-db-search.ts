@@ -59,7 +59,11 @@ export async function searchCreatorsInDb(
            engagement_rate, is_verified, profile_photo_url, (${scoreExpr}) as score
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
-    order by score desc, follower_count desc nulls last
+    -- Relevance first; then prioritise the user's own curated/imported list
+    -- (source='manual') over scraped creators; reach only as a final tiebreak.
+    order by score desc,
+             coalesce(source = 'manual', false) desc,
+             follower_count desc nulls last
     limit $${tokens.length + 1}
   `;
 
