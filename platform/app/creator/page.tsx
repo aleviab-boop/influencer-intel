@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface Profile {
@@ -236,7 +237,7 @@ export default function CreatorPortal() {
                     const hasBudget = c.budget != null && Number(c.budget) > 0;
                     return (
                       <div key={c.id} className="rounded-2xl bg-white border border-border shadow-card p-5 flex flex-col hover:-translate-y-0.5 hover:shadow-[0_10px_40px_rgba(108,77,246,0.12)] transition-all">
-                        <div className="font-semibold text-ink-900 text-[15px]">{c.name}</div>
+                        <Link href={`/creator/campaigns/${c.id}`} className="font-semibold text-ink-900 text-[15px] hover:underline" style={{ textDecorationColor: ACCENT }}>{c.name}</Link>
                         <p className="mt-1 text-[13px] text-ink-500 leading-relaxed line-clamp-3 flex-1">{c.description || 'A brand campaign looking for creators like you.'}</p>
                         <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
                           {hasBudget && (
@@ -246,14 +247,19 @@ export default function CreatorPortal() {
                           )}
                           <span className="px-2 py-1 rounded-md bg-[#f4f4f6] text-ink-500">{c.recruit_count} creators</span>
                         </div>
-                        <button
-                          onClick={() => apply(c.id)}
-                          disabled={applied || applying === c.id}
-                          className={`mt-4 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-all ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white hover:brightness-105'}`}
-                          style={applied ? undefined : { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
-                        >
-                          {applied ? 'Applied ✓' : applying === c.id ? 'Applying…' : 'Apply now'}
-                        </button>
+                        <div className="mt-4 flex items-center gap-2">
+                          <button
+                            onClick={() => apply(c.id)}
+                            disabled={applied || applying === c.id}
+                            className={`flex-1 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-all ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white hover:brightness-105'}`}
+                            style={applied ? undefined : { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                          >
+                            {applied ? 'Applied ✓' : applying === c.id ? 'Applying…' : 'Apply now'}
+                          </button>
+                          <Link href={`/creator/campaigns/${c.id}`} className="px-4 py-2.5 rounded-xl text-[14px] font-semibold border border-border hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
+                            Details
+                          </Link>
+                        </div>
                       </div>
                     );
                   })}
