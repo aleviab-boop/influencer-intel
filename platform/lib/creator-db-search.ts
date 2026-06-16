@@ -6,14 +6,30 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { extractContact, type LiveProfile } from './live-discovery';
 
-// Concatenated, lower-cased searchable text for a creator row.
-const SEARCH_TEXT = `lower(
-  coalesce(handle,'') || ' ' || coalesce(display_name,'') || ' ' ||
-  coalesce(bio,'') || ' ' || coalesce(primary_category,'') || ' ' ||
-  coalesce(genre,'') || ' ' || coalesce(niche,'') || ' ' ||
-  coalesce(region,'') || ' ' || coalesce(primary_city,'') || ' ' ||
-  coalesce(array_to_string(tags, ' '), '')
-)`;
+// Searchable text split by field group, so a token's relevance depends on
+// WHERE it matched — not just whether it matched. For a campaign brief
+// ("summer outfit for goa") a location or niche hit is a far stronger signal
+// than a stray substring in someone's bio. Ranking by this weighted relevance
+// (instead of by follower count) stops mega-celebrities from burying smaller,
+// better-matched creators.
+const LOC_TXT = `lower(coalesce(region,'') || ' ' || coalesce(primary_city,''))`;
+const NICHE_TXT = `lower(coalesce(genre,'') || ' ' || coalesce(niche,'') || ' ' || coalesce(primary_category,'') || ' ' || coalesce(array_to_string(tags, ' '), ''))`;
+const ID_TXT = `lower(coalesce(handle,'') || ' ' || coalesce(display_name,''))`;
+const BIO_TXT = `lower(coalesce(bio,''))`;
+
+// A token scores at its best-matching field's weight (location 3, niche/name 2,
+// bio 1) so matching the same token in multiple fields isn't double-counted.
+function tokenScore(placeholder: string): string {
+  return `greatest(
+    case when ${LOC_TXT} like ${placeholder} then 3 else 0 end,
+    case when ${NICHE_TXT} like ${placeholder} then 2 else 0 end,
+    case when ${ID_TXT} like ${placeholder} then 2 else 0 end,
+    case when ${BIO_TXT} like ${placeholder} then 1 else 0 end
+  )`;
+}
+function tokenMatches(placeholder: string): string {
+  return `(${LOC_TXT} like ${placeholder} or ${NICHE_TXT} like ${placeholder} or ${ID_TXT} like ${placeholder} or ${BIO_TXT} like ${placeholder})`;
+}
 
 interface Row {
   id: string;
@@ -35,10 +51,8 @@ export async function searchCreatorsInDb(
   if (tokens.length === 0) return [];
 
   const params = tokens.map((t) => `%${t.toLowerCase()}%`);
-  const scoreExpr = tokens
-    .map((_, i) => `(case when ${SEARCH_TEXT} like $${i + 1} then 1 else 0 end)`)
-    .join(' + ');
-  const whereAny = tokens.map((_, i) => `${SEARCH_TEXT} like $${i + 1}`).join(' or ');
+  const scoreExpr = tokens.map((_, i) => tokenScore(`$${i + 1}`)).join(' + ');
+  const whereAny = tokens.map((_, i) => tokenMatches(`$${i + 1}`)).join(' or ');
 
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
