@@ -197,6 +197,93 @@ function authenticityFlag(followers: number, engagement?: number): 'healthy' | '
   return engagement >= expectedErFloor(followers) ? 'healthy' : 'low';
 }
 
+interface AuthFactor { key: string; label: string; value: number; detail: string }
+interface AuthReport { score: number; band: 'Strong' | 'Moderate' | 'Caution'; color: string; verdict: string; factors: AuthFactor[]; perPost: number[] }
+
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+
+// Authenticity score: a transparent composite of four signals you can actually
+// see in public data — real engagement vs the size benchmark, genuine comment
+// activity (not just likes), consistency across recent posts (bot spikes are
+// erratic), and a healthy follower/following ratio (mass-following is a red
+// flag). Each factor is 0-100 with a plain-English reason, so the number is
+// explainable rather than a black box.
+function authenticityReport(
+  profile: ProfileData,
+  engagement: number | null,
+): AuthReport | null {
+  const recent = profile.recent ?? [];
+  if (recent.length < 1 || profile.followers <= 0) return null;
+  const followers = profile.followers;
+  const floor = expectedErFloor(followers);
+
+  // Per-post engagement rate (%) — the series behind the consistency chart.
+  const perPost = recent.map((p) => ((p.likes + p.comments) / followers) * 100);
+  const er = engagement ?? (perPost.reduce((s, x) => s + x, 0) / perPost.length);
+
+  // 1) Engagement strength vs the expected floor for this follower tier.
+  const ratio = er / floor;
+  const engScore = clamp(ratio * 50, 8, 100);
+
+  // 2) Comment quality — comments per 100 likes. Bought likes rarely come with
+  //    proportional comments, so genuine discussion signals a real audience.
+  const totalLikes = recent.reduce((s, p) => s + p.likes, 0);
+  const totalComments = recent.reduce((s, p) => s + p.comments, 0);
+  const cpl = (totalComments / Math.max(1, totalLikes)) * 100;
+  const commentScore = clamp(20 + cpl * 30, 5, 100);
+
+  // 3) Consistency — coefficient of variation of per-post ER. Real reach is
+  //    steady; sudden isolated spikes hint at boosted/bot activity.
+  const mean = perPost.reduce((s, x) => s + x, 0) / perPost.length;
+  const sd = Math.sqrt(perPost.reduce((s, x) => s + (x - mean) ** 2, 0) / perPost.length);
+  const cv = mean > 0 ? sd / mean : 1;
+  const consistencyScore = clamp(100 - cv * 120, 5, 100);
+
+  // 4) Follower/following ratio — accounts that follow huge numbers back often
+  //    have inflated, low-quality audiences.
+  const fr = profile.following / Math.max(1, followers);
+  const ratioScore = clamp(100 - fr * 70, 15, 98);
+
+  const score = Math.round(engScore * 0.4 + commentScore * 0.25 + consistencyScore * 0.2 + ratioScore * 0.15);
+  const band: AuthReport['band'] = score >= 75 ? 'Strong' : score >= 55 ? 'Moderate' : 'Caution';
+  const color = band === 'Strong' ? '#059669' : band === 'Moderate' ? '#b45309' : '#dc2626';
+  const verdict =
+    band === 'Strong'
+      ? 'Signals point to a real, engaged audience — safe to shortlist.'
+      : band === 'Moderate'
+        ? 'Mostly healthy, with one or two signals worth a manual check.'
+        : 'Several signals look off — verify the audience before committing budget.';
+
+  const factors: AuthFactor[] = [
+    {
+      key: 'engagement',
+      label: 'Engagement strength',
+      value: Math.round(engScore),
+      detail: `${er.toFixed(1)}% engagement vs ~${floor}% expected at ${fmt(followers)} followers — ${ratio >= 1 ? 'above' : 'below'} benchmark.`,
+    },
+    {
+      key: 'comments',
+      label: 'Comment quality',
+      value: Math.round(commentScore),
+      detail: `${cpl.toFixed(1)} comments per 100 likes — ${cpl >= 1 ? 'genuine conversation, not just passive likes.' : 'light on comments relative to likes.'}`,
+    },
+    {
+      key: 'consistency',
+      label: 'Consistency',
+      value: Math.round(consistencyScore),
+      detail: cv <= 0.4 ? 'Engagement is steady across recent posts.' : 'Engagement swings a lot post-to-post — worth a look.',
+    },
+    {
+      key: 'ratio',
+      label: 'Audience ratio',
+      value: Math.round(ratioScore),
+      detail: `Follows ${fmt(profile.following)} vs ${fmt(followers)} followers — ${fr <= 0.3 ? 'healthy ratio.' : 'follows back heavily, can dilute audience quality.'}`,
+    },
+  ];
+
+  return { score, band, color, verdict, factors, perPost };
+}
+
 // Posting rhythm from recent-post timestamps + engagement. IG timestamps are
 // UTC; we read them in IST (UTC+5:30) since the audience is India-first. Returns
 // posts/week, the highest-engagement weekday, and a 3-hour best-time window.
@@ -334,6 +421,7 @@ export function LiveSearch({
   const [profileFor, setProfileFor] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   // outreach "contacted" tracking (localStorage) — handle -> first-contacted ms
   const [contacted, setContacted] = useState<Record<string, number>>({});
@@ -497,6 +585,22 @@ export function LiveSearch({
       setProfileError('live');
     } finally {
       setProfileLoading(false);
+    }
+  }
+
+  // Re-pull the open profile live (cache-busted) so followers / engagement /
+  // posts reflect the real numbers right now — without closing the drawer.
+  async function refreshProfile() {
+    const handle = profileFor;
+    if (!handle || profileRefreshing) return;
+    setProfileRefreshing(true);
+    try {
+      const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}&_t=${Date.now()}`).then((r) => r.json());
+      if (d && !d.error) { setProfile(d as ProfileData); setProfileError(null); }
+    } catch {
+      /* keep the existing data on a failed refresh */
+    } finally {
+      setProfileRefreshing(false);
     }
   }
   // saved searches (localStorage)
@@ -1250,7 +1354,7 @@ export function LiveSearch({
                     {profileFor === p.username && (
                       <tr>
                         <td colSpan={8} className="px-4 pb-4 pt-0 bg-[#faf9ff]">
-                          <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
+                          <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} refreshing={profileRefreshing} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
                         </td>
                       </tr>
                     )}
@@ -1708,7 +1812,7 @@ function CompareModal({
   );
 }
 
-function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }: { loading: boolean; error?: string | null; profile: ProfileData | null; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
+function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDraft, onClose, onPivot }: { loading: boolean; error?: string | null; profile: ProfileData | null; refreshing?: boolean; onRefresh?: () => void; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
   const [copied, setCopied] = useState(false);
   const [rivals, setRivals] = useState('');
   const [growth, setGrowth] = useState<{ pct: number; days: number } | null>(null);
@@ -1947,6 +2051,11 @@ function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }:
           <button onClick={copySummary} className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: copied ? '#059669' : ACCENT, borderColor: copied ? '#a7f3d0' : undefined }}>
             {copied ? '✓ Copied' : '⧉ Copy summary'}
           </button>
+          {onRefresh && (
+            <button onClick={onRefresh} disabled={refreshing} title="Re-fetch live followers & engagement from Instagram now" className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff] disabled:opacity-60" style={{ color: ACCENT }}>
+              <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>⟳</span> {refreshing ? 'Refreshing…' : 'Refresh live'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1967,6 +2076,7 @@ function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }:
             tagged_accounts: collabs.map((c) => c.handle),
           }}
         />
+        <AuthenticityCard profile={profile} engagement={engagement} />
         {profile.recent.length > 0 && (
           <div>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Recent posts</div>
@@ -2018,6 +2128,73 @@ function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }:
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Authenticity score, explained: a ring for the headline number, a labelled bar
+// + plain-English reason per factor, and a per-post engagement chart so the
+// score is backed by visible evidence rather than a bare number.
+function AuthenticityCard({ profile, engagement }: { profile: ProfileData; engagement: number | null }) {
+  const report = authenticityReport(profile, engagement);
+  if (!report) {
+    return (
+      <div className="rounded-2xl border border-[#e3def9] bg-white p-4">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">Authenticity score</div>
+        <p className="text-[12px] text-[#888]">Needs live posts to score — hit “Refresh live” to pull the latest.</p>
+      </div>
+    );
+  }
+  const { score, band, color, verdict, factors, perPost } = report;
+  const R = 26;
+  const C = 2 * Math.PI * R;
+  const dash = (score / 100) * C;
+  const maxER = Math.max(...perPost, 0.01);
+  const barColor = (v: number) => (v >= 70 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444');
+  const txtColor = (v: number) => (v >= 70 ? '#059669' : v >= 50 ? '#b45309' : '#dc2626');
+
+  return (
+    <div className="rounded-2xl border border-[#e3def9] bg-white p-4" style={{ animation: 'ii-fadeup .4s .12s both' }}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-3">Authenticity score</div>
+
+      <div className="flex items-center gap-4">
+        <svg width="68" height="68" viewBox="0 0 68 68" className="shrink-0">
+          <circle cx="34" cy="34" r={R} fill="none" stroke="#eee" strokeWidth="7" />
+          <circle cx="34" cy="34" r={R} fill="none" stroke={color} strokeWidth="7" strokeLinecap="round" strokeDasharray={`${dash} ${C}`} transform="rotate(-90 34 34)" />
+          <text x="34" y="35" textAnchor="middle" dominantBaseline="central" fontSize="19" fontWeight="700" fill="#111">{score}</text>
+        </svg>
+        <div className="min-w-0">
+          <div className="text-[14px] font-bold" style={{ color }}>{band}</div>
+          <p className="text-[12px] text-[#666] leading-snug">{verdict}</p>
+        </div>
+      </div>
+
+      <div className="mt-3.5 space-y-2.5">
+        {factors.map((f) => (
+          <div key={f.key}>
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-[#444] font-medium">{f.label}</span>
+              <span className="tabular-nums font-semibold" style={{ color: txtColor(f.value) }}>{f.value}</span>
+            </div>
+            <div className="mt-1 h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${f.value}%`, background: barColor(f.value) }} />
+            </div>
+            <p className="mt-1 text-[11px] text-[#888] leading-snug">{f.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      {perPost.length >= 3 && (
+        <div className="mt-4">
+          <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Engagement per recent post</div>
+          <div className="flex items-end gap-1 h-16">
+            {perPost.map((v, i) => (
+              <div key={i} className="flex-1 rounded-t bg-[#ddd6fb] hover:bg-[#6C4DF6] transition-colors" style={{ height: `${Math.max(6, (v / maxER) * 100)}%` }} title={`${v.toFixed(1)}% engagement`} />
+            ))}
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-[#aaa]"><span>newest</span><span>older</span></div>
+        </div>
+      )}
     </div>
   );
 }
