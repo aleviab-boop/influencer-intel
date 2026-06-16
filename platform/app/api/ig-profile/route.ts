@@ -69,15 +69,26 @@ export async function GET(req: NextRequest) {
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
-  try {
-    const res = await igFetch(
-      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
-      { headers: HEADERS },
-    );
-    if (!res.ok) return dbProfileOr404(handle);
-    const u = (await res.json())?.data?.user;
-    if (!u) return dbProfileOr404(handle);
+  // Instagram throttles login-free requests sporadically (a 429 or an empty
+  // body here and there). A couple of quick retries turns most of those
+  // transient blips into a successful live fetch, instead of dropping straight
+  // to the DB fallback — which has no recent posts, so the profile preview
+  // would otherwise flicker to "0 posts / no images".
+  const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let u: any = null;
+  for (let attempt = 0; attempt < 3 && !u; attempt++) {
+    try {
+      const res = await igFetch(url, { headers: HEADERS });
+      if (res.ok) u = (await res.json())?.data?.user ?? null;
+    } catch {
+      /* transient network error — fall through to retry */
+    }
+    if (!u && attempt < 2) await new Promise((r) => setTimeout(r, 300 + attempt * 500));
+  }
+  if (!u) return dbProfileOr404(handle);
 
+  try {
     const media = u.edge_owner_to_timeline_media?.edges ?? [];
     // Brand-conflict signals: who the creator tags/mentions in recent captions
     // and whether posts look sponsored — so you can spot competitor collabs
