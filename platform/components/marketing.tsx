@@ -217,7 +217,7 @@ export function FeatureIcon({ name }: { name: string }) {
     case 'shield':
       return (<svg {...common}><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" /><path d="M9 12l2 2 4-4" /></svg>);
     case 'gauge':
-      return (<svg {...common}><path d="M5 17a7 7 0 0 1 14 0" /><path d="M12 17l3.5-4.5" /><circle cx="12" cy="17" r="1" fill="currentColor" stroke="none" /></svg>);
+      return (<svg {...common}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>);
     case 'instagram':
       return (<svg {...common}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>);
     case 'spark':
