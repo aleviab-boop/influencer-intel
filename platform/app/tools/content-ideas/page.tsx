@@ -270,10 +270,118 @@ export default function ContentIdeas() {
                 </div>
               </div>
             </div>
+
+            <RefineChat key={pack.concept} prompt={prompt} pack={pack} />
           </section>
         )}
       </main>
       <MarketingFooter />
+    </div>
+  );
+}
+
+// Chat box to refine the generated pack conversationally — "what should the
+// first 3 seconds be?", "swap the music", "make the hook punchier". The pack is
+// sent as context with every turn so replies stay grounded in this concept.
+function RefineChat({ prompt, pack }: { prompt: string; pack: Pack }) {
+  const [q, setQ] = useState('');
+  const [chat, setChat] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [asking, setAsking] = useState(false);
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' });
+  }, [chat, asking]);
+
+  const SUGGESTIONS = ['What should the first 3 seconds be?', 'Make the hook punchier', 'Swap the music to lo-fi', 'Make the caption shorter'];
+
+  async function send(text?: string) {
+    const question = (text ?? q).trim();
+    if (question.length < 2 || asking) return;
+    const next = [...chat, { role: 'user' as const, content: question }];
+    setChat(next);
+    setQ('');
+    setAsking(true);
+    try {
+      const d = await fetch('/api/content-ideas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, pack, messages: next }),
+      }).then((r) => r.json());
+      setChat((c) => [...c, { role: 'assistant', content: d.error ? 'Could not reach AI right now.' : (d.answer || 'No answer.') }]);
+    } catch {
+      setChat((c) => [...c, { role: 'assistant', content: 'Could not reach AI right now.' }]);
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-2xl border border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[14px] font-bold flex items-center gap-2" style={{ color: ACCENT }}>✦ Refine with AI</div>
+        {chat.length > 0 && (
+          <button onClick={() => setChat([])} className="text-[11px] text-[#aaa] hover:text-[#666]">Clear</button>
+        )}
+      </div>
+      <p className="text-[12px] text-[#777] mb-3 -mt-1">Tweak anything — ask for a punchier hook, the first 3 seconds, different music, a shorter caption.</p>
+
+      {(chat.length > 0 || asking) && (
+        <div ref={threadRef} className="mb-3 max-h-72 overflow-y-auto flex flex-col gap-2 pr-0.5">
+          {chat.map((m, i) => (
+            <div
+              key={i}
+              className={`max-w-[85%] px-3 py-2 rounded-2xl text-[13px] leading-relaxed whitespace-pre-line ${
+                m.role === 'user' ? 'self-end text-white rounded-br-sm' : 'self-start bg-white border border-[#e3def9] text-[#333] rounded-bl-sm'
+              }`}
+              style={m.role === 'user' ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` } : { animation: 'ii-fadeup .25s both' }}
+            >
+              {m.content}
+            </div>
+          ))}
+          {asking && (
+            <div className="self-start bg-white border border-[#e3def9] text-[#999] px-3 py-2 rounded-2xl rounded-bl-sm">
+              <span className="inline-flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#c4b9f5] animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#c4b9f5] animate-bounce" style={{ animationDelay: '120ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#c4b9f5] animate-bounce" style={{ animationDelay: '240ms' }} />
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {chat.length === 0 && !asking && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              onClick={() => void send(s)}
+              className="px-2.5 py-1 rounded-full text-[12px] font-medium border border-[#e3def9] bg-white text-[#555] hover:border-[#6C4DF6] hover:text-[#6C4DF6] transition-colors"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
+          placeholder={chat.length ? 'Ask a follow-up…' : 'e.g. what should the first 3 seconds be?'}
+          className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-[#e3def9] text-[13px] focus:outline-none focus:border-[#6C4DF6]"
+        />
+        <button
+          onClick={() => void send()}
+          disabled={asking || q.trim().length < 2}
+          className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50 hover:brightness-105"
+          style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+        >
+          {asking ? '…' : 'Send'}
+        </button>
+      </div>
     </div>
   );
 }

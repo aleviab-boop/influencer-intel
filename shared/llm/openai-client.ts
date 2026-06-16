@@ -695,6 +695,60 @@ ${context}`,
     });
     return res.choices[0]?.message?.content?.trim() ?? '';
   }
+
+  /**
+   * Multi-turn chat to refine a generated content pack — powers the Content
+   * Idea Generator's "edit as a chatbot" box. The generated reel concept is
+   * pinned as context so follow-ups ("what should the first 3 seconds be?",
+   * "swap the music to lofi", "make the hook punchier") stay coherent.
+   */
+  async contentChat(input: {
+    prompt: string;
+    pack: {
+      concept?: string;
+      format?: string;
+      best_window?: string;
+      script?: { scene: string; onscreen: string; voiceover: string }[];
+      songs?: string[];
+      setting?: string[];
+      props?: string[];
+      caption?: string;
+      hashtags?: string[];
+    } | null;
+    messages: { role: 'user' | 'assistant'; content: string }[];
+  }): Promise<string> {
+    const p = input.pack ?? {};
+    const scriptLines = (p.script ?? []).map((s) => `${s.scene}: ${s.onscreen} | ${s.voiceover}`).join('\n');
+    const context = `Original brief: ${input.prompt}
+Concept: ${p.concept ?? '—'}
+Format: ${p.format ?? '—'}${p.best_window ? ` · best ${p.best_window}` : ''}
+Script:
+${scriptLines || '(none)'}
+Music: ${(p.songs ?? []).join('; ') || '—'}
+Setting: ${(p.setting ?? []).join('; ') || '—'}
+Props: ${(p.props ?? []).join('; ') || '—'}
+Caption: ${p.caption ?? '—'}`;
+
+    const history = input.messages
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
+
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      messages: [
+        {
+          role: 'system',
+          content: `You are a short-form content director helping a creator refine THIS Instagram reel concept (context below). Answer their requests with concrete, production-ready direction — rewrite the first-3-seconds hook, adjust pacing, swap music/props/setting, tighten the caption. When they ask for a rewrite, give the actual new line, not vague advice. Keep replies punchy: 1-5 sentences or a short rewritten snippet. Stay consistent with the existing concept unless they ask to change direction. No hype, no filler.
+
+REEL CONTEXT:
+${context}`,
+        },
+        ...history,
+      ],
+    });
+    return res.choices[0]?.message?.content?.trim() ?? '';
+  }
 }
 
 let cached: OpenAIClient | null = null;
