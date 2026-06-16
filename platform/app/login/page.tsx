@@ -51,6 +51,20 @@ export default function LoginPage() {
     if (r === 'influencer' || r === 'agency') setRole(r);
   }, []);
 
+  // Pre-fill the agency demo credentials so the agency tab is one-click — no
+  // empty-field error. Clear them when switching to the influencer tab.
+  useEffect(() => {
+    setError(null);
+    if (role === 'agency') {
+      setEmail(AGENCY_EMAIL);
+      setPassword(AGENCY_PASSWORD);
+    } else {
+      setEmail('');
+      setPassword('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
