@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const ACCENT = '#6C4DF6';
 
@@ -21,7 +22,10 @@ export function BookDemoButton({ className }: { className?: string }) {
       >
         Book a demo
       </button>
-      {open && <BookDemoModal onClose={() => setOpen(false)} />}
+      {open && typeof document !== 'undefined' &&
+        // Portal to <body> so the fixed overlay isn't trapped inside the
+        // header's backdrop-filter containing block (which clipped it).
+        createPortal(<BookDemoModal onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }
@@ -63,7 +67,7 @@ function BookDemoModal({ onClose }: { onClose: () => void }) {
     >
       <style>{`@keyframes ii-pop{from{opacity:0;transform:scale(.96) translateY(10px)}to{opacity:1;transform:none}}`}</style>
       <div
-        className="w-full max-w-md rounded-2xl bg-white shadow-[0_30px_80px_rgba(20,20,60,0.3)] overflow-hidden"
+        className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-[0_30px_80px_rgba(20,20,60,0.3)]"
         style={{ animation: 'ii-pop .25s both' }}
         onClick={(e) => e.stopPropagation()}
       >
