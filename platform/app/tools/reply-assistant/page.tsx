@@ -5,6 +5,26 @@ import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components
 
 interface Suggestion { label: string; message: string }
 
+function ChannelIcon({ kind }: { kind: 'dm' | 'email' }) {
+  if (kind === 'dm') {
+    // Instagram glyph
+    return (
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="20" height="20" rx="5.5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="17.5" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  // Envelope
+  return (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2.5" y="4.5" width="19" height="15" rx="2.5" />
+      <path d="m3 6 9 6 9-6" />
+    </svg>
+  );
+}
+
 const inp =
   'w-full px-3.5 py-2.5 rounded-xl border border-[#e3def9] text-[14px] text-[#222] bg-white focus:outline-none focus:border-[#6C4DF6] focus:ring-4 focus:ring-[#6C4DF6]/10 transition-all';
 
@@ -58,6 +78,30 @@ export default function ReplyAssistant() {
 
         <section className="max-w-2xl mx-auto px-6 py-8">
           <div className="space-y-3">
+            {/* Channel — icon-only toggle, sits on top so you pick the medium first */}
+            <div className="flex justify-center">
+              <div className="inline-flex items-center gap-1.5 p-1.5 rounded-2xl bg-[#f4f0ff]">
+                <button
+                  onClick={() => setChannel('dm')}
+                  title="Instagram DM"
+                  aria-label="Instagram DM"
+                  className={`w-11 h-10 grid place-items-center rounded-xl transition-all ${channel === 'dm' ? 'bg-white shadow-sm' : 'hover:bg-white/60'}`}
+                  style={{ color: channel === 'dm' ? ACCENT : '#9b93b5' }}
+                >
+                  <ChannelIcon kind="dm" />
+                </button>
+                <button
+                  onClick={() => setChannel('email')}
+                  title="Email"
+                  aria-label="Email"
+                  className={`w-11 h-10 grid place-items-center rounded-xl transition-all ${channel === 'email' ? 'bg-white shadow-sm' : 'hover:bg-white/60'}`}
+                  style={{ color: channel === 'email' ? ACCENT : '#9b93b5' }}
+                >
+                  <ChannelIcon kind="email" />
+                </button>
+              </div>
+            </div>
+
             <textarea
               value={reply}
               onChange={(e) => setReply(e.target.value)}
@@ -71,13 +115,6 @@ export default function ReplyAssistant() {
               <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="Your goal — e.g. negotiate to ₹40k, share brief" className={inp} />
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#f4f0ff] text-[13px]">
-                {(['dm', 'email'] as const).map((ch) => (
-                  <button key={ch} onClick={() => setChannel(ch)} className={`px-3 py-1 rounded-md transition-colors ${channel === ch ? 'bg-white shadow-sm font-medium' : 'text-[#888]'}`} style={channel === ch ? { color: ACCENT } : undefined}>
-                    {ch === 'dm' ? 'Instagram DM' : 'Email'}
-                  </button>
-                ))}
-              </div>
               <select value={language} onChange={(e) => setLanguage(e.target.value as 'english' | 'hinglish' | 'hindi')} className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[13px] text-[#444] focus:outline-none focus:border-[#6C4DF6]">
                 <option value="english">English</option>
                 <option value="hinglish">Hinglish</option>
