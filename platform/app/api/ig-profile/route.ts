@@ -49,6 +49,30 @@ async function dbProfileOr404(handle: string): Promise<NextResponse> {
   }
 }
 
+// Best-effort: store the @-tagged accounts (collabs) we detected on this
+// creator into raw_metadata, merging without clobbering other keys (e.g.
+// vision). Powers the competitor "who works with whom" tool for any creator
+// whose profile has been viewed. Failures are swallowed — never block the read.
+async function persistCollabs(
+  handle: string,
+  collabs: { handle: string; count: number }[],
+  sponsored: number,
+): Promise<void> {
+  if (!handle) return;
+  try {
+    await getBolticClient().query(
+      `UPDATE creators
+         SET raw_metadata = COALESCE(raw_metadata, '{}'::jsonb)
+               || jsonb_build_object('collabs', $2::jsonb, 'sponsored_posts', $3::int),
+             updated_at = now()
+       WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
+      [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored],
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
+
 // GET /api/ig-profile?handle=X
 //   Full public profile + recent posts (login-free). Powers the profile drawer.
 const APP_ID = '936619743392459';
@@ -123,6 +147,11 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 12)
       .map(([handle, count]) => ({ handle, count }));
+
+    // Persist the detected collabs so the competitor tool ("who works with
+    // whom") can match against them later — best-effort, never blocks the
+    // response.
+    void persistCollabs(u.username, collabs, sponsoredPosts);
 
     const contact = extractContact(u.biography, {
       businessEmail: u.business_email,

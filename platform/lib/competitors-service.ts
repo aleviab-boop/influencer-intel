@@ -32,18 +32,34 @@ async function findBrandCreators(brand: string): Promise<BrandCreator[]> {
   const db = getBolticClient();
   const name = brand.trim();
   const safe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // word-boundary regex against each brand mention
+  // Match a brand two ways, so coverage isn't limited to vision-processed
+  // profiles:
+  //   1. vision.brand_mentions[] — brands the vision model read off the profile
+  //      (carries the paid-partnership signal).
+  //   2. collabs[].handle — accounts the creator @-tagged in recent post
+  //      captions, persisted from live profile views. Covers any creator whose
+  //      profile has been opened, including DB-imported ones.
   const rows = await db.query<BrandCreatorRow>(
     `SELECT c.id, c.handle, c.display_name, c.profile_url, c.follower_count, c.primary_category, c.quality_score,
             COALESCE((c.raw_metadata->'vision'->>'has_paid_partnership') = 'true', false) AS verified,
-            (SELECT string_agg(DISTINCT bm.mention, ', ')
-               FROM jsonb_array_elements_text(c.raw_metadata->'vision'->'brand_mentions') bm(mention)
-               WHERE lower(bm.mention) = lower($1) OR lower(bm.mention) ~ ('\\y' || $2 || '\\y')) AS matched_brand
+            COALESCE(
+              (SELECT string_agg(DISTINCT bm.mention, ', ')
+                 FROM jsonb_array_elements_text(c.raw_metadata->'vision'->'brand_mentions') bm(mention)
+                 WHERE lower(bm.mention) = lower($1) OR lower(bm.mention) ~ ('\\y' || $2 || '\\y')),
+              (SELECT string_agg(DISTINCT co->>'handle', ', ')
+                 FROM jsonb_array_elements(c.raw_metadata->'collabs') co
+                 WHERE lower(co->>'handle') = lower($1) OR lower(co->>'handle') LIKE '%' || lower($1) || '%')
+            ) AS matched_brand
      FROM creators c
      WHERE c.is_active = true
-       AND jsonb_typeof(c.raw_metadata->'vision'->'brand_mentions') = 'array'
-       AND EXISTS (
-         SELECT 1 FROM jsonb_array_elements_text(c.raw_metadata->'vision'->'brand_mentions') bm(mention)
-         WHERE lower(bm.mention) = lower($1) OR lower(bm.mention) ~ ('\\y' || $2 || '\\y')
+       AND (
+         (jsonb_typeof(c.raw_metadata->'vision'->'brand_mentions') = 'array' AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(c.raw_metadata->'vision'->'brand_mentions') bm(mention)
+            WHERE lower(bm.mention) = lower($1) OR lower(bm.mention) ~ ('\\y' || $2 || '\\y')))
+         OR
+         (jsonb_typeof(c.raw_metadata->'collabs') = 'array' AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(c.raw_metadata->'collabs') co
+            WHERE lower(co->>'handle') = lower($1) OR lower(co->>'handle') LIKE '%' || lower($1) || '%'))
        )
      ORDER BY verified DESC, c.follower_count DESC NULLS LAST
      LIMIT 60`,
