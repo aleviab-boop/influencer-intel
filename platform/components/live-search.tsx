@@ -346,6 +346,54 @@ function contentThemes(
     .map(([tag]) => tag);
 }
 
+// Competitor brands to blacklist against. A creator who has tagged/mentioned
+// one of these in a recent post is likely under a conflicting collaboration —
+// flag them so they aren't approached while that overlap is live.
+const COMPETITOR_BRANDS: { name: string; terms: string[] }[] = [
+  { name: 'Myntra', terms: ['myntra'] },
+  { name: 'Zara', terms: ['zara'] },
+  { name: 'Max Fashion', terms: ['maxfashion', 'max fashion'] },
+  { name: 'Pantaloons', terms: ['pantaloons'] },
+  { name: 'Unique Loom', terms: ['uniqueloom', 'unique loom'] },
+  { name: 'Ajio', terms: ['ajio'] },
+  { name: 'Westside', terms: ['westside'] },
+];
+
+const BLACKLIST_WINDOW_DAYS = 30;
+
+// Scan recent posts (within the blacklist window) for competitor mentions.
+// Extra brand terms (comma-separated names/handles) can be supplied by the user.
+function competitorConflicts(
+  recent: { caption: string; taken_at: number | null; shortcode: string }[],
+  extraTerms: string[] = [],
+): { brand: string; daysAgo: number; shortcode: string }[] {
+  const nowSec = Date.now() / 1000;
+  const windowSec = BLACKLIST_WINDOW_DAYS * 86_400;
+  const brands = [
+    ...COMPETITOR_BRANDS,
+    ...extraTerms.map((t) => ({ name: t, terms: [t.toLowerCase()] })),
+  ];
+  const hits: { brand: string; daysAgo: number; shortcode: string }[] = [];
+  for (const p of recent) {
+    if (!p.caption || !p.taken_at) continue;
+    if (nowSec - p.taken_at > windowSec) continue; // older than the window
+    const cap = p.caption.toLowerCase();
+    for (const b of brands) {
+      if (b.terms.some((t) => t && cap.includes(t))) {
+        hits.push({ brand: b.name, daysAgo: Math.max(0, Math.round((nowSec - p.taken_at) / 86_400)), shortcode: p.shortcode });
+        break;
+      }
+    }
+  }
+  // De-dupe by brand, keep the most recent.
+  const byBrand = new Map<string, { brand: string; daysAgo: number; shortcode: string }>();
+  for (const h of hits) {
+    const ex = byBrand.get(h.brand);
+    if (!ex || h.daysAgo < ex.daysAgo) byBrand.set(h.brand, h);
+  }
+  return [...byBrand.values()].sort((a, b) => a.daysAgo - b.daysAgo);
+}
+
 // Split the start-from field into exact handles vs names to resolve.
 // Comma-separated; an entry with an internal space is treated as a name
 // (e.g. "mridul sharma"), otherwise as an @handle.
@@ -1866,6 +1914,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
   const rivalTerms = rivals.toLowerCase().split(',').map((s) => s.trim().replace(/^@/, '')).filter(Boolean);
   const isRival = (h: string) => rivalTerms.some((t) => h.toLowerCase().includes(t));
   const conflictCount = collabs.filter((c) => isRival(c.handle)).length;
+  const blacklistHits = competitorConflicts(profile.recent, rivalTerms);
 
   const copySummary = () => {
     const lines = [
@@ -1967,6 +2016,18 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
             : `${safety.level === 'flag' ? '⛔' : '⚠'} Brand safety: ${safety.hits.map((h) => h.category).join(', ')}`}
         </div>
 
+        {blacklistHits.length > 0 && (
+          <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5" style={{ animation: 'ii-fadeup .4s .32s both' }}>
+            <div className="flex items-center gap-1.5 text-[13px] font-semibold text-rose-700">
+              ⛔ Blacklist — competitor conflict
+            </div>
+            <p className="mt-0.5 text-[12px] text-rose-600 leading-snug">
+              Collaborated with {blacklistHits.map((h) => h.brand).join(', ')} in the last {BLACKLIST_WINDOW_DAYS} days
+              {' '}(most recent {blacklistHits[0]!.daysAgo === 0 ? 'today' : `${blacklistHits[0]!.daysAgo}d ago`}). Avoid approaching while that overlap is live.
+            </p>
+          </div>
+        )}
+
         {rate && (
           <div className="mt-3 flex items-center justify-between rounded-xl border border-[#e3def9] bg-[#faf9ff] px-3.5 py-2.5" style={{ animation: 'ii-fadeup .4s .28s both' }}>
             <div>
@@ -2013,7 +2074,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
             <input
               value={rivals}
               onChange={(e) => setRivals(e.target.value)}
-              placeholder="Flag conflicts — your brand / competitors (comma-sep)"
+              placeholder="Add more competitors to blacklist (comma-sep) — Myntra, Zara, Max, Pantaloons auto-checked"
               className="w-full mb-2 px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[12px] focus:outline-none focus:border-[#6C4DF6]"
             />
             {conflictCount > 0 && (
