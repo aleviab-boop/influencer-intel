@@ -177,6 +177,7 @@ export default function ContentIdeas() {
 
         {pack && (
           <section className="max-w-3xl mx-auto px-6 py-10">
+            <RefineChat key={pack.concept} prompt={prompt} pack={pack} />
             <div className="rounded-2xl border border-[#eaeaea] shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden">
               <div className="px-6 py-5 flex items-start justify-between gap-4 border-b border-[#f0f0f0]">
                 <div>
@@ -270,8 +271,6 @@ export default function ContentIdeas() {
                 </div>
               </div>
             </div>
-
-            <RefineChat key={pack.concept} prompt={prompt} pack={pack} />
           </section>
         )}
       </main>
@@ -317,7 +316,7 @@ function RefineChat({ prompt, pack }: { prompt: string; pack: Pack }) {
   }
 
   return (
-    <div className="mt-5 rounded-2xl border border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white p-5">
+    <div className="mb-5 rounded-2xl border-2 border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white p-5 shadow-[0_8px_30px_rgba(108,77,246,0.08)]">
       <div className="flex items-center justify-between mb-3">
         <div className="text-[14px] font-bold flex items-center gap-2" style={{ color: ACCENT }}>✦ Refine with AI</div>
         {chat.length > 0 && (
