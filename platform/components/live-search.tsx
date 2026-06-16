@@ -1933,7 +1933,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
     window.setTimeout(() => setCopied(false), 1600);
   };
   return (
-    <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-3 gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
+    <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.7fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
       <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
       {/* left: details, vertically balanced */}
       <div className="flex flex-col">
@@ -2120,31 +2120,34 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
         </div>
       </div>
 
-      {/* middle column: AI insights + authenticity */}
-      <div className="flex flex-col gap-5">
-        <CreatorAI
-          body={{
-            handle: profile.handle,
-            full_name: profile.full_name,
-            category: profile.category,
-            followers: profile.followers,
-            engagement,
-            rate: rate ? `${inr(rate.low)}–${inr(rate.high)}` : null,
-            themes,
-            cadence: rhythm?.cadence ?? null,
-            biography: profile.biography,
-            recent_captions: profile.recent.map((p) => p.caption).filter(Boolean).slice(0, 9),
-            tagged_accounts: collabs.map((c) => c.handle),
-          }}
-        />
-        <AuthenticityCard profile={profile} engagement={engagement} />
-        <ReelForecast profile={profile} />
-      </div>
-
-      {/* right column: recent posts + similar creators */}
-      <div className="flex flex-col gap-5">
+      {/* analytics + media — masonry so cards fill the space evenly instead of
+          leaving a tall column beside short ones */}
+      <div className="lg:columns-2 [column-gap:1rem]">
+        <div className="break-inside-avoid mb-4">
+          <CreatorAI
+            body={{
+              handle: profile.handle,
+              full_name: profile.full_name,
+              category: profile.category,
+              followers: profile.followers,
+              engagement,
+              rate: rate ? `${inr(rate.low)}–${inr(rate.high)}` : null,
+              themes,
+              cadence: rhythm?.cadence ?? null,
+              biography: profile.biography,
+              recent_captions: profile.recent.map((p) => p.caption).filter(Boolean).slice(0, 9),
+              tagged_accounts: collabs.map((c) => c.handle),
+            }}
+          />
+        </div>
+        <div className="break-inside-avoid mb-4">
+          <AuthenticityCard profile={profile} engagement={engagement} />
+        </div>
+        <div className="break-inside-avoid mb-4">
+          <ReelForecast profile={profile} />
+        </div>
         {profile.recent.length > 0 && (
-          <div>
+          <div className="break-inside-avoid mb-4">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Recent posts</div>
             <div className="grid grid-cols-3 gap-2">
               {profile.recent.map((post, i) => (
@@ -2171,7 +2174,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
         )}
 
         {profile.related && profile.related.length > 0 && (
-          <div>
+          <div className="break-inside-avoid mb-4">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Similar creators</div>
             <div className="flex flex-col gap-1.5">
               {profile.related.slice(0, 6).map((r, i) => (
