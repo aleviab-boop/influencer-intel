@@ -1284,7 +1284,7 @@ export function LiveSearch({
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <button onClick={() => void openProfile(p.username)} className="shrink-0" title="View profile">
-                            <Avatar name={p.full_name || p.username} url={p.profile_pic_url} />
+                            <Avatar name={p.full_name || p.username} url={p.profile_pic_url} handle={p.username} />
                           </button>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
@@ -1621,7 +1621,7 @@ export function LiveSearch({
                   const days = Math.floor((Date.now() - ts) / 86_400_000);
                   return (
                     <div key={handle} className="flex items-center gap-3 px-5 py-3">
-                      <Avatar name={handle} url={null} />
+                      <Avatar name={handle} url={null} handle={handle} />
                       <div className="min-w-0 flex-1">
                         <a href={`https://instagram.com/${handle}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-[#111] truncate hover:underline">@{handle}</a>
                         <div className="text-[12px] text-[#999]">contacted {days} day{days !== 1 ? 's' : ''} ago</div>
@@ -1658,7 +1658,7 @@ export function LiveSearch({
                     onChange={() => toggleCompare(s.username)}
                     title="Select to compare (up to 4)"
                   />
-                  <Avatar name={s.full_name || s.username} url={s.profile_pic_url} />
+                  <Avatar name={s.full_name || s.username} url={s.profile_pic_url} handle={s.username} />
                   <div className="min-w-0 flex-1">
                     <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-[#111] truncate hover:underline">@{s.username}</a>
                     <div className="text-[12px] text-[#999] truncate">{fmt(s.followers)} followers{s.category ? ` · ${s.category}` : ''}</div>
@@ -1744,7 +1744,7 @@ export function LiveSearch({
                   )}
                   {lookalikes.map((l) => (
                     <div key={l.handle} className="flex items-center gap-3 px-5 py-3">
-                      <Avatar name={l.full_name || l.handle} url={l.profile_pic_url} />
+                      <Avatar name={l.full_name || l.handle} url={l.profile_pic_url} handle={l.handle} />
                       <div className="min-w-0 flex-1">
                         <button onClick={() => { setShowLookalikes(false); void openProfile(l.handle); }} className="flex items-center gap-1 text-[14px] font-semibold text-[#111] truncate hover:underline">
                           @{l.handle}{l.is_verified && <span style={{ color: ACCENT }}>✓</span>}
@@ -1832,7 +1832,7 @@ function CompareModal({
                   {cols.map((c) => (
                     <th key={c.h} className="px-3 pb-2 text-left">
                       <div className="flex items-center gap-2">
-                        <Avatar name={c.p?.full_name || c.h} url={c.p?.profile_pic_url ?? null} />
+                        <Avatar name={c.p?.full_name || c.h} url={c.p?.profile_pic_url ?? null} handle={c.h} />
                         <a href={`https://instagram.com/${c.h}`} target="_blank" rel="noreferrer" className="text-[13px] font-semibold text-[#111] hover:underline truncate">@{c.h}</a>
                       </div>
                     </th>
@@ -1938,7 +1938,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
       {/* left: details, vertically balanced */}
       <div className="flex flex-col">
         <div className="flex items-center gap-3">
-          <Avatar name={profile.full_name || profile.handle} url={profile.profile_pic_url} />
+          <Avatar name={profile.full_name || profile.handle} url={profile.profile_pic_url} handle={profile.handle} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-[#111] truncate hover:underline">@{profile.handle}</a>
@@ -2181,7 +2181,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
                   title={`Explore @${r.handle}`}
                   style={{ animation: `ii-fadeup .4s ${0.1 + i * 0.04}s both` }}
                 >
-                  <Avatar name={r.full_name || r.handle} url={r.profile_pic_url} />
+                  <Avatar name={r.full_name || r.handle} url={r.profile_pic_url} handle={r.handle} />
                   <span className="min-w-0">
                     <span className="flex items-center gap-1 text-[13px] font-semibold text-[#111] truncate">@{r.handle}{r.is_verified && <span style={{ color: ACCENT }}>✔</span>}</span>
                     {r.full_name && <span className="block text-[11px] text-[#999] truncate">{r.full_name}</span>}
@@ -2444,17 +2444,24 @@ function IconBtn({ children, onClick, title, disabled }: { children: React.React
   );
 }
 
-function Avatar({ name, url }: { name: string; url: string | null }) {
-  const [err, setErr] = useState(false);
-  if (url && !err) {
+function Avatar({ name, url, handle }: { name: string; url?: string | null; handle?: string | null }) {
+  // Image source falls through stages: stored photo (proxied) → live photo
+  // fetched by handle (for DB creators with no stored photo) → initials.
+  const [stage, setStage] = useState(0);
+  const cleanHandle = handle?.replace(/^@/, '');
+
+  let src: string | null = null;
+  if (stage === 0 && url) src = `/api/ig-image?u=${encodeURIComponent(url)}`;
+  else if (stage < 2 && cleanHandle) src = `/api/ig-avatar?handle=${encodeURIComponent(cleanHandle)}`;
+
+  if (src) {
     // IG CDN blocks hotlinking — route through our server-side proxy.
-    const src = `/api/ig-image?u=${encodeURIComponent(url)}`;
     // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={src}
         alt={name}
-        onError={() => setErr(true)}
+        onError={() => setStage((s) => (s === 0 && url ? 1 : 2))}
         className="w-9 h-9 rounded-full object-cover shrink-0 bg-[#eee]"
       />
     );
