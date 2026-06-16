@@ -165,24 +165,6 @@ function MarketingNav() {
               </div>
             </div>
           </div>
-          <div className="relative group h-16 flex items-center">
-            <button className="flex items-center gap-1 group-hover:text-[var(--ii-accent)] transition-colors">
-              Services
-              <svg className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6l4 4 4-4" /></svg>
-            </button>
-            <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 w-[340px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
-              <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-                <Link href="/tools/fake-follower-checker" className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
-                  <span style={{ color: ACCENT }}><FeatureIcon name="shield" /></span>
-                  <span className="text-[15px] font-medium text-[#222]">Authenticity Score</span>
-                </Link>
-                <Link href="/tools/er-calculator" className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
-                  <span style={{ color: ACCENT }}><FeatureIcon name="gauge" /></span>
-                  <span className="text-[15px] font-medium text-[#222]">Engagement Rate (ER)</span>
-                </Link>
-              </div>
-            </div>
-          </div>
           <Link href="/trending" className="hover:text-[#111]">Trending</Link>
           <Link href="/pricing" className="hover:text-[#111]">Pricing</Link>
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
