@@ -45,7 +45,7 @@ function Hero() {
       <div className="max-w-5xl mx-auto px-6 py-16">
         <div className="text-center max-w-3xl mx-auto mb-8">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.08]">
-            Search Indian Instagram influencers
+            Search Instagram influencers
           </h1>
           <p className="mt-5 text-[17px] text-[#555]">
             Type a brief and a starting creator — we crawl Instagram live, rank the most relevant
@@ -243,7 +243,7 @@ function Sparkline() {
 }
 
 const FAQS = [
-  { q: 'How many influencers can I search?', a: 'Search across 2.5 lakh+ Indian creators on Instagram and YouTube, with 12+ data metrics per profile.' },
+  { q: 'How many influencers can I search?', a: 'Search across 2.5 lakh+ creators on Instagram and YouTube, with 12+ data metrics per profile.' },
   { q: 'What filters are available?', a: 'Category, niche, location, language, followers, engagement rate, audience demographics, and creator traits — combine any of them.' },
   { q: 'Can I see audience quality?', a: 'Yes — every creator carries a credibility score and fake-follower signals so you avoid inflated accounts.' },
   { q: 'How do I shortlist creators?', a: 'Add creators to curated lists or recruit them straight into a campaign program from the results.' },
