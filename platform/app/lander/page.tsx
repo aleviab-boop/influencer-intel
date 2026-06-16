@@ -26,6 +26,8 @@ const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Campaign Analytics', href: '/campaign-analytics', icon: 'clock' },
   { label: 'Media Management', href: '/media-management', icon: 'video' },
   { label: 'Influencer Payouts', href: '/influencer-payouts', icon: 'payout' },
+  { label: 'Authenticity Score', href: '/tools/fake-follower-checker', icon: 'shield' },
+  { label: 'Engagement Rate (ER)', href: '/tools/er-calculator', icon: 'gauge' },
 ];
 
 function FeatureIcon({ name }: { name: string }) {
