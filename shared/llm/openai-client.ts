@@ -572,6 +572,71 @@ Write the 3 reply options.`,
     const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}');
     return Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
   }
+
+  /**
+   * Analyse a creator for a brand-marketing team: extract the brands they've
+   * likely worked with, summarise the content they're known for, and — when a
+   * question is supplied (e.g. "how good for a Goa campaign?") — answer it using
+   * the engagement + content signals provided. Powers the profile "Ask AI" panel.
+   */
+  async creatorInsight(input: {
+    handle: string;
+    full_name: string | null;
+    category: string | null;
+    followers: number;
+    engagement: number | null;
+    rate: string | null;
+    themes: string[];
+    cadence: string | null;
+    biography: string | null;
+    recent_captions: string[];
+    tagged_accounts: string[];
+    question?: string | null;
+  }): Promise<{ brands: string[]; content: string; summary: string; answer: string | null }> {
+    const q = input.question?.trim();
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You analyse an Instagram creator for an Indian brand's influencer-marketing team, using ONLY the data given. Be concrete, cite the numbers, never invent facts.
+
+Respond ONLY with JSON:
+{
+  "brands": ["brand names this creator has likely WORKED WITH — sponsored/paid/collab. Infer from bio, captions (look for #ad/paid partnership/collab cues) and tagged accounts. ONLY real, recognisable BRAND/company names — never personal accounts, friends, the creator's own pages, or generic words. Empty array if none are evident."],
+  "content": "1-2 sentences on what this creator is known for / the famous content they make (their formats, themes, signature style).",
+  "summary": "2-3 sentence overall read for a brand: reach tier, engagement health, and who they're a fit for.",
+  "answer": ${q ? '"a direct, specific answer to the user\'s question, 2-4 sentences, citing the creator\'s numbers and content where relevant. Give a clear verdict (good fit / weak fit / depends) with the why."' : 'null'}
+}`,
+        },
+        {
+          role: 'user',
+          content: `Creator: @${input.handle}${input.full_name ? ` (${input.full_name})` : ''}
+Category: ${input.category ?? '—'}
+Followers: ${input.followers}
+Engagement: ${input.engagement != null ? `${input.engagement}%` : 'unknown'}
+Est. rate/post: ${input.rate ?? 'unknown'}
+Posting cadence: ${input.cadence ?? 'unknown'}
+Content themes: ${input.themes.join(', ') || 'unknown'}
+Tagged accounts (from recent posts): ${input.tagged_accounts.join(', ') || 'none'}
+Bio: ${input.biography ?? '—'}
+Recent captions:
+${input.recent_captions.map((c, i) => `${i + 1}. ${c}`).join('\n') || '(none)'}
+${q ? `\nQuestion from the marketing team: ${q}` : ''}
+
+Analyse this creator.`,
+        },
+      ],
+    });
+    const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}');
+    return {
+      brands: Array.isArray(parsed.brands) ? parsed.brands.filter((b: unknown): b is string => typeof b === 'string').slice(0, 12) : [],
+      content: typeof parsed.content === 'string' ? parsed.content : '',
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      answer: typeof parsed.answer === 'string' ? parsed.answer : null,
+    };
+  }
 }
 
 let cached: OpenAIClient | null = null;

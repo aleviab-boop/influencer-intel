@@ -1950,8 +1950,23 @@ function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }:
         </div>
       </div>
 
-      {/* right: recent posts + similar creators */}
+      {/* right: AI insights + recent posts + similar creators */}
       <div className="flex flex-col gap-5">
+        <CreatorAI
+          body={{
+            handle: profile.handle,
+            full_name: profile.full_name,
+            category: profile.category,
+            followers: profile.followers,
+            engagement,
+            rate: rate ? `${inr(rate.low)}–${inr(rate.high)}` : null,
+            themes,
+            cadence: rhythm?.cadence ?? null,
+            biography: profile.biography,
+            recent_captions: profile.recent.map((p) => p.caption).filter(Boolean).slice(0, 9),
+            tagged_accounts: collabs.map((c) => c.handle),
+          }}
+        />
         {profile.recent.length > 0 && (
           <div>
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Recent posts</div>
@@ -2001,6 +2016,113 @@ function ProfileSnapshot({ loading, error, profile, onDraft, onClose, onPivot }:
               ))}
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// AI insights panel inside the profile drawer: auto-extracts the brands a
+// creator has worked with + what they're known for, and answers free-form
+// campaign-fit questions ("how good for a Goa campaign?") via /api/creator-ai.
+function CreatorAI({ body }: { body: Record<string, unknown> }) {
+  const handle = String(body.handle ?? '');
+  const [insight, setInsight] = useState<{ brands: string[]; content: string; summary: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [q, setQ] = useState('');
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true); setFailed(false); setInsight(null); setAnswer(null); setQ('');
+    fetch('/api/creator-ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!alive) return;
+        if (d.error) setFailed(true);
+        else setInsight({ brands: d.brands ?? [], content: d.content ?? '', summary: d.summary ?? '' });
+      })
+      .catch(() => { if (alive) setFailed(true); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle]);
+
+  async function ask() {
+    const question = q.trim();
+    if (question.length < 3 || asking) return;
+    setAsking(true); setAnswer(null);
+    try {
+      const d = await fetch('/api/creator-ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, question }) }).then((r) => r.json());
+      setAnswer(d.error ? 'Could not reach AI right now.' : (d.answer || d.summary || 'No answer.'));
+    } catch {
+      setAnswer('Could not reach AI right now.');
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white p-4" style={{ animation: 'ii-fadeup .4s .1s both' }}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2.5">✦ AI insights</div>
+
+      {loading ? (
+        <div className="space-y-2">
+          <div className="h-3.5 w-2/3 rounded bg-[#efecfb] animate-pulse" />
+          <div className="h-3.5 w-5/6 rounded bg-[#efecfb] animate-pulse" />
+          <div className="h-3.5 w-1/2 rounded bg-[#efecfb] animate-pulse" />
+        </div>
+      ) : failed ? (
+        <div className="text-[12px] text-[#888]">AI insights are unavailable right now.</div>
+      ) : insight && (
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Brands worked with</div>
+            {insight.brands.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {insight.brands.map((b) => (
+                  <span key={b} className="px-2.5 py-1 rounded-full text-[12px] font-medium border border-[#e3def9] bg-white" style={{ color: ACCENT }}>{b}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-[12px] text-[#999]">No clear brand collaborations detected in recent posts.</div>
+            )}
+          </div>
+          {insight.content && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1">Known for</div>
+              <p className="text-[13px] text-[#333] leading-relaxed">{insight.content}</p>
+            </div>
+          )}
+          {insight.summary && (
+            <p className="text-[12px] text-[#666] leading-relaxed border-t border-[#efecfb] pt-2.5">{insight.summary}</p>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3.5 pt-3.5 border-t border-[#efecfb]">
+        <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Ask AI</div>
+        <div className="flex gap-2">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void ask(); }}
+            placeholder="e.g. how good for a Goa summer campaign?"
+            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[12px] focus:outline-none focus:border-[#6C4DF6]"
+          />
+          <button
+            onClick={() => void ask()}
+            disabled={asking || q.trim().length < 3}
+            className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 hover:brightness-105"
+            style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+          >
+            {asking ? '…' : 'Ask'}
+          </button>
+        </div>
+        {answer && (
+          <p className="mt-2.5 text-[13px] text-[#333] leading-relaxed bg-white rounded-lg border border-[#e3def9] p-2.5" style={{ animation: 'ii-fadeup .3s both' }}>{answer}</p>
         )}
       </div>
     </div>
