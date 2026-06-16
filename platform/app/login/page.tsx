@@ -37,6 +37,11 @@ export default function LoginPage() {
   const [plan, setPlan] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Hardcoded agency demo credentials.
+  const AGENCY_EMAIL = 'agency@gmail.com';
+  const AGENCY_PASSWORD = 'agency';
 
   useEffect(() => {
     setMounted(true);
@@ -48,7 +53,17 @@ export default function LoginPage() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim() || loading) return;
+    if (loading) return;
+    setError(null);
+    // Agency role is gated behind hardcoded demo credentials.
+    if (role === 'agency') {
+      if (email.trim().toLowerCase() !== AGENCY_EMAIL || password !== AGENCY_PASSWORD) {
+        setError('Invalid agency credentials. Use agency@gmail.com / agency.');
+        return;
+      }
+    } else if (!email.trim()) {
+      return;
+    }
     setLoading(true);
     try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
     const params = new URLSearchParams(window.location.search);
@@ -182,6 +197,10 @@ export default function LoginPage() {
                 </div>
               </label>
 
+              {error && (
+                <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -204,7 +223,9 @@ export default function LoginPage() {
             </form>
 
             <p className="mt-6 text-center text-[13px] text-ink-500">New here? <Link href={`/signup?role=${role}`} className="font-semibold" style={{ color: ACCENT }}>Create an account</Link></p>
-            <p className="mt-1 text-center text-[11px] text-ink-400">Demo login — any email gets you in.</p>
+            <p className="mt-1 text-center text-[11px] text-ink-400">
+              {role === 'agency' ? 'Agency demo login — agency@gmail.com / agency' : 'Demo login — any email gets you in.'}
+            </p>
           </div>
         </div>
       </main>
