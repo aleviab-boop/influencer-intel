@@ -637,6 +637,64 @@ Analyse this creator.`,
       answer: typeof parsed.answer === 'string' ? parsed.answer : null,
     };
   }
+
+  /**
+   * Multi-turn chat about a specific creator — powers the profile "Ask AI"
+   * chatbot. The creator's data is pinned as context; the conversation history
+   * keeps follow-ups coherent ("what should they do in the first 3 sec?").
+   */
+  async creatorChat(input: {
+    handle: string;
+    full_name: string | null;
+    category: string | null;
+    followers: number;
+    engagement: number | null;
+    rate: string | null;
+    themes: string[];
+    cadence: string | null;
+    biography: string | null;
+    recent_captions: string[];
+    tagged_accounts: string[];
+    messages: { role: 'user' | 'assistant'; content: string }[];
+  }): Promise<string> {
+    const context = `Creator: @${input.handle}${input.full_name ? ` (${input.full_name})` : ''}
+Category: ${input.category ?? '—'}
+Followers: ${input.followers}
+Engagement: ${input.engagement != null ? `${input.engagement}%` : 'unknown'}
+Est. rate/post: ${input.rate ?? 'unknown'}
+Posting cadence: ${input.cadence ?? 'unknown'}
+Content themes: ${input.themes.join(', ') || 'unknown'}
+Tagged accounts: ${input.tagged_accounts.join(', ') || 'none'}
+Bio: ${input.biography ?? '—'}
+Recent captions:
+${input.recent_captions.map((c, i) => `${i + 1}. ${c}`).join('\n') || '(none)'}`;
+
+    const history = input.messages
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
+
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel,
+      messages: [
+        {
+          role: 'system',
+          content: `You are an influencer-marketing analyst chatting with a brand's team about ONE specific creator, whose public data is provided below. Help them decide and plan: campaign fit, concrete content ideas (hooks, first-3-seconds, formats), rate/negotiation, risks, audience read.
+
+Rules:
+- Ground every answer in the creator's data; cite their actual numbers (followers, engagement, themes) when relevant.
+- Be concrete and punchy — 1-4 sentences unless asked for more. For content ideas, give specific, production-ready direction, not generic advice.
+- If asked something the data can't support, say what you'd check rather than inventing facts.
+- No hype, no filler.
+
+CREATOR CONTEXT:
+${context}`,
+        },
+        ...history,
+      ],
+    });
+    return res.choices[0]?.message?.content?.trim() ?? '';
+  }
 }
 
 let cached: OpenAIClient | null = null;

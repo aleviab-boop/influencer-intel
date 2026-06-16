@@ -2208,12 +2208,13 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [q, setQ] = useState('');
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [chat, setChat] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [asking, setAsking] = useState(false);
+  const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setFailed(false); setInsight(null); setAnswer(null); setQ('');
+    setLoading(true); setFailed(false); setInsight(null); setChat([]); setQ('');
     fetch('/api/creator-ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then((r) => r.json())
       .then((d) => {
@@ -2227,19 +2228,33 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handle]);
 
-  async function ask() {
-    const question = q.trim();
-    if (question.length < 3 || asking) return;
-    setAsking(true); setAnswer(null);
+  // Keep the newest message in view as the conversation grows.
+  useEffect(() => {
+    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'smooth' });
+  }, [chat, asking]);
+
+  async function send(text?: string) {
+    const question = (text ?? q).trim();
+    if (question.length < 2 || asking) return;
+    const next = [...chat, { role: 'user' as const, content: question }];
+    setChat(next);
+    setQ('');
+    setAsking(true);
     try {
-      const d = await fetch('/api/creator-ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, question }) }).then((r) => r.json());
-      setAnswer(d.error ? 'Could not reach AI right now.' : (d.answer || d.summary || 'No answer.'));
+      const d = await fetch('/api/creator-ai', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...body, messages: next }),
+      }).then((r) => r.json());
+      setChat((c) => [...c, { role: 'assistant', content: d.error ? 'Could not reach AI right now.' : (d.answer || 'No answer.') }]);
     } catch {
-      setAnswer('Could not reach AI right now.');
+      setChat((c) => [...c, { role: 'assistant', content: 'Could not reach AI right now.' }]);
     } finally {
       setAsking(false);
     }
   }
+
+  const SUGGESTIONS = ['What should the first 3 seconds be?', 'Good fit for a Goa summer campaign?', 'Suggest a reel concept', 'Is the rate fair?'];
 
   return (
     <div className="rounded-2xl border border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white p-4" style={{ animation: 'ii-fadeup .4s .1s both' }}>
@@ -2280,27 +2295,71 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
       )}
 
       <div className="mt-3.5 pt-3.5 border-t border-[#efecfb]">
-        <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Ask AI</div>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[10px] uppercase tracking-wide text-[#999]">Ask AI · chat</div>
+          {chat.length > 0 && (
+            <button onClick={() => setChat([])} className="text-[10px] text-[#aaa] hover:text-[#666]">Clear</button>
+          )}
+        </div>
+
+        {(chat.length > 0 || asking) && (
+          <div ref={threadRef} className="mb-2 max-h-60 overflow-y-auto flex flex-col gap-2 pr-0.5">
+            {chat.map((m, i) => (
+              <div
+                key={i}
+                className={`max-w-[88%] px-2.5 py-1.5 rounded-2xl text-[12.5px] leading-relaxed whitespace-pre-line ${
+                  m.role === 'user'
+                    ? 'self-end text-white rounded-br-sm'
+                    : 'self-start bg-white border border-[#e3def9] text-[#333] rounded-bl-sm'
+                }`}
+                style={m.role === 'user' ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` } : { animation: 'ii-fadeup .25s both' }}
+              >
+                {m.content}
+              </div>
+            ))}
+            {asking && (
+              <div className="self-start bg-white border border-[#e3def9] text-[#999] px-3 py-2 rounded-2xl rounded-bl-sm text-[12px]">
+                <span className="inline-flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#c4b9f5] animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#c4b9f5] animate-bounce" style={{ animationDelay: '120ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#c4b9f5] animate-bounce" style={{ animationDelay: '240ms' }} />
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {chat.length === 0 && !asking && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {SUGGESTIONS.map((s) => (
+              <button
+                key={s}
+                onClick={() => void send(s)}
+                className="px-2.5 py-1 rounded-full text-[11px] font-medium border border-[#e3def9] bg-white text-[#555] hover:border-[#6C4DF6] hover:text-[#6C4DF6] transition-colors"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void ask(); }}
-            placeholder="e.g. how good for a Goa summer campaign?"
+            onKeyDown={(e) => { if (e.key === 'Enter') void send(); }}
+            placeholder={chat.length ? 'Ask a follow-up…' : 'Ask anything — e.g. what should the first 3 seconds be?'}
             className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[12px] focus:outline-none focus:border-[#6C4DF6]"
           />
           <button
-            onClick={() => void ask()}
-            disabled={asking || q.trim().length < 3}
+            onClick={() => void send()}
+            disabled={asking || q.trim().length < 2}
             className="px-3 py-1.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 hover:brightness-105"
             style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
           >
-            {asking ? '…' : 'Ask'}
+            {asking ? '…' : 'Send'}
           </button>
         </div>
-        {answer && (
-          <p className="mt-2.5 text-[13px] text-[#333] leading-relaxed bg-white rounded-lg border border-[#e3def9] p-2.5" style={{ animation: 'ii-fadeup .3s both' }}>{answer}</p>
-        )}
       </div>
     </div>
   );
