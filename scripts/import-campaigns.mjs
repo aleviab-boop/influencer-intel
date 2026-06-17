@@ -10,7 +10,12 @@ const pool = new pg.Pool({ connectionString: conn, ssl: { rejectUnauthorized: fa
 
 const handleFromUrl = (u) => {
   if (!u) return null;
-  const m = String(u).match(/instagram\.com\/([^/?#]+)/i);
+  let s = String(u);
+  // Unwrap Google redirect links: ...google.com/url?q=<encoded instagram url>&...
+  const g = s.match(/[?&]q=([^&]+)/);
+  if (g && /google\.com\/url/i.test(s)) { try { s = decodeURIComponent(g[1]); } catch { /* keep */ } }
+  // Stop at / ? # & or whitespace so trailing query params aren't captured.
+  const m = s.match(/instagram\.com\/([^/?#&\s]+)/i);
   if (!m) return null;
   const h = m[1].trim().toLowerCase().replace(/^@/, '');
   if (['p', 'reel', 'reels', 'stories', 'explore'].includes(h)) return null;
@@ -81,6 +86,27 @@ const records = [];
   }
 }
 
+// 4. Holi 1 — Sr No, Influencer Name, Link, Location
+{
+  const ws = await readSheet('/Users/aleviabandyopadhyay/Downloads/Holi Campaign 1.xlsx');
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    const name = str(cell(row, 2)), link = cellLink(row, 3), loc = str(cell(row, 4));
+    const handle = handleFromUrl(link); if (!handle) continue;
+    records.push({ handle, name, link, loc, followers: null, er: null, tag: 'holi-campaign', meta: { import_batch: BATCH, campaign: 'Holi', source_file: 'Holi Campaign 1.xlsx', location_raw: loc } });
+  }
+}
+// 5. Holi 2 — Influencer Name, Link, Location
+{
+  const ws = await readSheet('/Users/aleviabandyopadhyay/Downloads/Holi Campaign 2.xlsx');
+  for (let r = 2; r <= ws.rowCount; r++) {
+    const row = ws.getRow(r);
+    const name = str(cell(row, 1)), link = cellLink(row, 2), loc = str(cell(row, 3));
+    const handle = handleFromUrl(link); if (!handle) continue;
+    records.push({ handle, name, link, loc, followers: null, er: null, tag: 'holi-campaign', meta: { import_batch: BATCH, campaign: 'Holi', source_file: 'Holi Campaign 2.xlsx', location_raw: loc } });
+  }
+}
+
 console.log('parsed records:', records.length);
 const byTag = {}; records.forEach(r => byTag[r.tag] = (byTag[r.tag]||0)+1); console.log('by campaign:', JSON.stringify(byTag));
 
@@ -118,7 +144,7 @@ try {
 finally { client.release(); }
 
 console.log(`upserted ok=${ok} fail=${fail}`);
-for (const tag of ['aneet-campaign','baisakhi-campaign','bihu-campaign']) {
+for (const tag of ['aneet-campaign','baisakhi-campaign','bihu-campaign','holi-campaign']) {
   const c = await pool.query(`SELECT count(*)::int n FROM creators WHERE $1 = ANY(tags)`, [tag]);
   console.log(`  ${tag}: ${c.rows[0].n} in DB`);
 }
