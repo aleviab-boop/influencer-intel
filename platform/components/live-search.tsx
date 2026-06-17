@@ -1545,14 +1545,29 @@ export function LiveSearch({
                 >
                   {copied ? 'Copied ✓' : 'Copy'}
                 </button>
-                {draftFor.email && (
+                {draftChannel === 'email' ? (
+                  draftFor.email ? (
+                    <a
+                      href={mailLink(draftFor.email, draftText)}
+                      onClick={() => markContacted(draftFor.username)}
+                      className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                      style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                    >
+                      ✉ Send email
+                    </a>
+                  ) : (
+                    <span className="px-4 py-2 text-[12px] text-[#999]">No email on file — use Copy</span>
+                  )
+                ) : (
                   <a
-                    href={mailLink(draftFor.email, draftText)}
-                    onClick={() => markContacted(draftFor.username)}
+                    href={`https://ig.me/m/${draftFor.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); markContacted(draftFor.username); }}
                     className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
                     style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                   >
-                    ✉ Send email
+                    ✦ Copy &amp; open DM →
                   </a>
                 )}
                 {draftFor.phone && (
@@ -1567,19 +1582,10 @@ export function LiveSearch({
                     Send on WhatsApp
                   </a>
                 )}
-                {!draftFor.email && !draftFor.phone && (
-                  <a
-                    href={`https://instagram.com/${draftFor.username}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={() => { void navigator.clipboard.writeText(draftText); setCopied(true); markContacted(draftFor.username); }}
-                    className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
-                    style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
-                  >
-                    Copy &amp; open Instagram →
-                  </a>
-                )}
               </div>
+              {draftChannel === 'dm' && (
+                <p className="mt-2 text-[11px] text-[#aaa] text-right">Opens the DM with @{draftFor.username} — your message is copied, just paste &amp; send.</p>
+              )}
             </div>
           </div>
         </div>,
@@ -1616,6 +1622,17 @@ export function LiveSearch({
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[13px] font-medium text-[#111]">@{item.username}</span>
                     <div className="flex items-center gap-2.5 text-[12px] font-medium">
+                      <a
+                        href={`https://ig.me/m/${item.username}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => { void navigator.clipboard.writeText(item.message); markContacted(item.username); }}
+                        title="Copies the message and opens the DM with this creator"
+                        className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`}
+                        style={{ color: ACCENT }}
+                      >
+                        ✦ DM
+                      </a>
                       {item.email && (
                         <a href={mailLink(item.email, item.message)} onClick={() => markContacted(item.username)} className={`${!item.message ? 'pointer-events-none opacity-40' : ''}`} style={{ color: ACCENT }}>✉ Email</a>
                       )}
