@@ -2432,9 +2432,14 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
   const [asking, setAsking] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
 
+  // Recompute insights whenever the underlying LIVE data changes — on open AND
+  // after a "Refresh live" pull (fresh followers / engagement / posts) — so the
+  // read stays real-time rather than frozen at first open.
+  const insightKey = `${handle}|${body.followers ?? ''}|${body.engagement ?? ''}|${Array.isArray(body.recent_posts) ? (body.recent_posts as unknown[]).length : 0}|${Array.isArray(body.recent_captions) ? (body.recent_captions as unknown[]).join('').length : 0}`;
+  useEffect(() => { setChat([]); setQ(''); }, [handle]); // reset chat only when switching creators
   useEffect(() => {
     let alive = true;
-    setLoading(true); setFailed(false); setInsight(null); setChat([]); setQ('');
+    setLoading(true); setFailed(false); setInsight(null);
     fetch('/api/creator-ai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then((r) => r.json())
       .then((d) => {
@@ -2446,7 +2451,7 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handle]);
+  }, [insightKey]);
 
   // Keep the newest message in view as the conversation grows.
   useEffect(() => {
