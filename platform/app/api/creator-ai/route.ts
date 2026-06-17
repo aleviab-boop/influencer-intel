@@ -33,6 +33,17 @@ export async function POST(req: NextRequest) {
     biography: typeof body?.biography === 'string' ? body.biography : null,
     recent_captions: toStrArr(body?.recent_captions),
     tagged_accounts: toStrArr(body?.tagged_accounts),
+    recent_posts: Array.isArray(body?.recent_posts)
+      ? body.recent_posts
+          .filter((p: unknown): p is Record<string, unknown> => !!p && typeof p === 'object' && typeof (p as Record<string, unknown>).caption === 'string')
+          .slice(0, 12)
+          .map((p: Record<string, unknown>) => ({
+            caption: String(p.caption),
+            likes: Number(p.likes) || 0,
+            comments: Number(p.comments) || 0,
+            sponsored: Boolean(p.sponsored),
+          }))
+      : [],
   };
 
   try {

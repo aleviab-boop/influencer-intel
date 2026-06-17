@@ -591,9 +591,14 @@ Write the 3 reply options.`,
     biography: string | null;
     recent_captions: string[];
     tagged_accounts: string[];
+    recent_posts?: { caption: string; likes: number; comments: number; sponsored: boolean }[];
     question?: string | null;
-  }): Promise<{ brands: string[]; content: string; summary: string; answer: string | null }> {
+  }): Promise<{ brands: string[]; content: string; summary: string; language: string; paid_performance: string; standout: string; answer: string | null }> {
     const q = input.question?.trim();
+    const posts = input.recent_posts ?? [];
+    const postLines = posts.length
+      ? posts.map((p, i) => `${i + 1}. ${p.sponsored ? '[SPONSORED]' : '[organic]'} ${p.likes} likes, ${p.comments} comments — ${p.caption}`).join('\n')
+      : input.recent_captions.map((c, i) => `${i + 1}. ${c}`).join('\n') || '(none)';
     const res = await this.client.chat.completions.create({
       model: this.outreachModel,
       response_format: { type: 'json_object' },
@@ -604,8 +609,11 @@ Write the 3 reply options.`,
 
 Respond ONLY with JSON:
 {
-  "brands": ["brand names this creator has likely WORKED WITH — sponsored/paid/collab. Infer from bio, captions (look for #ad/paid partnership/collab cues) and tagged accounts. ONLY real, recognisable BRAND/company names — never personal accounts, friends, the creator's own pages, or generic words. Empty array if none are evident."],
-  "content": "1-2 sentences on what this creator is known for / the famous content they make (their formats, themes, signature style).",
+  "brands": ["brand names this creator has likely WORKED WITH — sponsored/paid/collab. Infer from bio, captions (#ad/paid partnership/collab cues) and tagged accounts. ONLY real, recognisable BRAND/company names — never personal accounts, friends, the creator's own pages, or generic words. Empty array if none are evident."],
+  "content": "1-2 sentences on what this creator is known for / the famous content they make (formats, themes, signature style).",
+  "language": "the primary language(s) this creator makes content in, inferred from their captions/bio. Be specific to India: e.g. 'Hindi', 'English', 'Hinglish (Hindi-English mix)', 'Bengali', 'Tamil', 'Punjabi', 'Marathi'. If mixed, name the mix. 1-4 words.",
+  "paid_performance": "How this creator performs on PAID/branded content. Compare the engagement (likes+comments) on their [SPONSORED] posts vs their [organic] posts where data is given — does engagement hold up on ads or drop off? Name the brands and cite numbers. If no sponsored posts are visible, say 'No paid posts visible to assess' and note their overall engagement health as a proxy. 1-3 sentences.",
+  "standout": "What makes THIS creator stand out vs other creators in their niche — their edge (unusually high engagement for size, a distinctive format, strong regional audience, niche authority, etc.). Be specific and comparative. 1-2 sentences.",
   "summary": "2-3 sentence overall read for a brand: reach tier, engagement health, and who they're a fit for.",
   "answer": ${q ? '"a direct, specific answer to the user\'s question, 2-4 sentences, citing the creator\'s numbers and content where relevant. Give a clear verdict (good fit / weak fit / depends) with the why."' : 'null'}
 }`,
@@ -621,8 +629,8 @@ Posting cadence: ${input.cadence ?? 'unknown'}
 Content themes: ${input.themes.join(', ') || 'unknown'}
 Tagged accounts (from recent posts): ${input.tagged_accounts.join(', ') || 'none'}
 Bio: ${input.biography ?? '—'}
-Recent captions:
-${input.recent_captions.map((c, i) => `${i + 1}. ${c}`).join('\n') || '(none)'}
+Recent posts (sponsored vs organic, with engagement):
+${postLines}
 ${q ? `\nQuestion from the marketing team: ${q}` : ''}
 
 Analyse this creator.`,
@@ -630,10 +638,14 @@ Analyse this creator.`,
       ],
     });
     const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}');
+    const s = (k: string) => (typeof parsed[k] === 'string' ? parsed[k] : '');
     return {
       brands: Array.isArray(parsed.brands) ? parsed.brands.filter((b: unknown): b is string => typeof b === 'string').slice(0, 12) : [],
-      content: typeof parsed.content === 'string' ? parsed.content : '',
-      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      content: s('content'),
+      summary: s('summary'),
+      language: s('language'),
+      paid_performance: s('paid_performance'),
+      standout: s('standout'),
       answer: typeof parsed.answer === 'string' ? parsed.answer : null,
     };
   }

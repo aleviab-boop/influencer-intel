@@ -2196,6 +2196,12 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
               biography: profile.biography,
               recent_captions: profile.recent.map((p) => p.caption).filter(Boolean).slice(0, 9),
               tagged_accounts: collabs.map((c) => c.handle),
+              recent_posts: profile.recent.slice(0, 9).map((p) => ({
+                caption: p.caption,
+                likes: p.likes,
+                comments: p.comments,
+                sponsored: /#(ad|sponsored|paid|paidpartnership|collab|partner)\b|paid partnership/i.test(p.caption ?? ''),
+              })),
             }}
           />
         </div>
@@ -2418,7 +2424,7 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
 
 function CreatorAI({ body }: { body: Record<string, unknown> }) {
   const handle = String(body.handle ?? '');
-  const [insight, setInsight] = useState<{ brands: string[]; content: string; summary: string } | null>(null);
+  const [insight, setInsight] = useState<{ brands: string[]; content: string; summary: string; language: string; paid_performance: string; standout: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [q, setQ] = useState('');
@@ -2434,7 +2440,7 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
       .then((d) => {
         if (!alive) return;
         if (d.error) setFailed(true);
-        else setInsight({ brands: d.brands ?? [], content: d.content ?? '', summary: d.summary ?? '' });
+        else setInsight({ brands: d.brands ?? [], content: d.content ?? '', summary: d.summary ?? '', language: d.language ?? '', paid_performance: d.paid_performance ?? '', standout: d.standout ?? '' });
       })
       .catch(() => { if (alive) setFailed(true); })
       .finally(() => { if (alive) setLoading(false); });
@@ -2496,10 +2502,28 @@ function CreatorAI({ body }: { body: Record<string, unknown> }) {
               <div className="text-[12px] text-[#999]">No clear brand collaborations detected in recent posts.</div>
             )}
           </div>
+          {insight.language && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1">Content language</div>
+              <span className="inline-block px-2.5 py-1 rounded-full text-[12px] font-medium border border-[#e3def9] bg-[#f6f4ff]" style={{ color: ACCENT }}>{insight.language}</span>
+            </div>
+          )}
           {insight.content && (
             <div>
               <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1">Known for</div>
               <p className="text-[13px] text-[#333] leading-relaxed">{insight.content}</p>
+            </div>
+          )}
+          {insight.paid_performance && (
+            <div className="rounded-lg bg-[#faf9ff] border border-[#efecfb] p-2.5">
+              <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1">💼 Paid campaign performance</div>
+              <p className="text-[12.5px] text-[#333] leading-relaxed">{insight.paid_performance}</p>
+            </div>
+          )}
+          {insight.standout && (
+            <div className="rounded-lg bg-[#fffdf5] border border-[#f3e9c8] p-2.5">
+              <div className="text-[10px] uppercase tracking-wide text-[#a98b2e] mb-1">⭐ Stands out because</div>
+              <p className="text-[12.5px] text-[#5c4d22] leading-relaxed">{insight.standout}</p>
             </div>
           )}
           {insight.summary && (
