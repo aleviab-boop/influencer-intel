@@ -159,6 +159,7 @@ export interface Program {
   name: string;
   slug: string | null;
   description: string | null;
+  requirements: string | null;
   source_prompt: string | null;
   status: ProgramStatus;
   budget: number | null;

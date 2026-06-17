@@ -43,7 +43,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', budget: '', start_date: '', end_date: '' });
+  const [form, setForm] = useState({ name: '', description: '', requirements: '', budget: '', start_date: '', end_date: '' });
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
@@ -75,12 +75,13 @@ export default function CampaignsPage() {
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || undefined,
+          requirements: form.requirements.trim() || undefined,
           budget: form.budget ? Number(form.budget) : undefined,
           start_date: form.start_date || undefined,
           end_date: form.end_date || undefined,
         }),
       });
-      if (r.ok) { setForm({ name: '', description: '', budget: '', start_date: '', end_date: '' }); setCreating(false); await load(); }
+      if (r.ok) { setForm({ name: '', description: '', requirements: '', budget: '', start_date: '', end_date: '' }); setCreating(false); await load(); }
     } finally {
       setBusy(false);
     }
@@ -134,6 +135,9 @@ export default function CampaignsPage() {
               </Field>
               <Field label="Brief / goal (optional)" className="md:col-span-2">
                 <textarea value={form.description} onChange={setF('description')} rows={2} placeholder="What's this campaign about? e.g. recruit 10 Goa travel micro-creators for reels" className={`${cinp} resize-none`} />
+              </Field>
+              <Field label="Requirements (optional)" className="md:col-span-2">
+                <textarea value={form.requirements} onChange={setF('requirements')} rows={3} placeholder="Who & what you need — e.g. 50K–300K followers, ER 2%+, fashion/lifestyle, based in Delhi/Mumbai, 1 reel + 2 stories, deliver by 20th" className={`${cinp} resize-none`} />
               </Field>
               <Field label="Budget (₹, optional)">
                 <input type="number" value={form.budget} onChange={setF('budget')} placeholder="500000" className={cinp} />

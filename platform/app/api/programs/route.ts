@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     const program = await createProgram({
       name: body.name.trim(),
       description: typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null,
+      requirements: typeof body.requirements === 'string' && body.requirements.trim() ? body.requirements.trim() : null,
       source_prompt: typeof body.source_prompt === 'string' ? body.source_prompt : null,
       budget,
       start_date: date(body.start_date),

@@ -21,6 +21,7 @@ interface Program {
   status: string;
   source_prompt: string | null;
   description: string | null;
+  requirements: string | null;
   budget: number | string | null;
   start_date: string | null;
   end_date: string | null;
@@ -149,6 +150,18 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             />
             {program.source_prompt && <p className="text-[12px] text-ink-400 mt-1">Seeded from “{program.source_prompt}”</p>}
 
+            {/* requirements */}
+            <div className="mt-3 max-w-2xl">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400 mb-1">Requirements</div>
+              <textarea
+                defaultValue={program.requirements ?? ''}
+                onBlur={(e) => e.target.value !== (program.requirements ?? '') && patchProgram({ requirements: e.target.value.trim() || null })}
+                rows={2}
+                placeholder="Who & what you need — followers range, ER, niche, cities, deliverables, timeline…"
+                className="w-full text-sm text-ink-700 bg-white border border-border rounded-xl px-3 py-2 focus:outline-none focus:border-ink-900 resize-none"
+              />
+            </div>
+
             {/* summary stats */}
             <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
               <Stat label="Recruits" value={String(recruits.length)} />
@@ -191,7 +204,13 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               </div>
             </div>
 
-            {/* invite */}
+            {/* find & add creators by brief (scrapes + DB), then quick handle add */}
+            <FindCreators
+              programId={id}
+              defaultPrompt={program.requirements?.trim() || program.description?.trim() || ''}
+              existing={new Set(recruits.map((r) => r.creator_id))}
+              onAdded={load}
+            />
             <InviteCreators programId={id} existing={new Set(recruits.map((r) => r.creator_id))} onAdded={load} />
 
             {/* kanban */}
@@ -238,6 +257,134 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+interface DiscoverResult {
+  username: string;
+  full_name: string;
+  followers: number;
+  engagement: number;
+  score: number;
+  creator_id?: string;
+  is_verified: boolean;
+  from?: 'db' | 'live';
+}
+
+// Brief-driven discovery: type (or reuse the campaign's requirements), crawl
+// Instagram + the creator DB for relevant creators, and add them straight into
+// this campaign — singly or all at once.
+function FindCreators({ programId, defaultPrompt, existing, onAdded }: { programId: string; defaultPrompt: string; existing: Set<string>; onAdded: () => void }) {
+  const [prompt, setPrompt] = useState(defaultPrompt);
+  const [results, setResults] = useState<DiscoverResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [addingAll, setAddingAll] = useState(false);
+
+  async function run() {
+    const p = prompt.trim();
+    if (p.length < 2 || loading) return;
+    setLoading(true);
+    setResults([]);
+    try {
+      const d = await fetch('/api/discover-live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: p, mode: 'live', max: 20 }),
+      }).then((r) => r.json());
+      setResults(Array.isArray(d.results) ? d.results : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function add(r: DiscoverResult) {
+    const cid = r.creator_id;
+    if (!cid || busy.has(cid)) return;
+    setBusy((s) => new Set(s).add(cid));
+    try {
+      await fetch(`/api/programs/${programId}/recruits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creator_id: cid, relevance_score: r.score, source_prompt: prompt.trim() }),
+      });
+      setAdded((s) => new Set(s).add(cid));
+      onAdded();
+    } finally {
+      setBusy((s) => { const n = new Set(s); n.delete(cid); return n; });
+    }
+  }
+
+  async function addAll() {
+    setAddingAll(true);
+    try {
+      for (const r of results) {
+        if (r.creator_id && !existing.has(r.creator_id) && !added.has(r.creator_id)) await add(r);
+      }
+    } finally {
+      setAddingAll(false);
+    }
+  }
+
+  const addableCount = results.filter((r) => r.creator_id && !existing.has(r.creator_id) && !added.has(r.creator_id)).length;
+
+  return (
+    <div className="mt-6 p-4 rounded-2xl bg-white border border-border shadow-card">
+      <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-400 mb-2">Find &amp; add creators</div>
+      <div className="flex gap-2">
+        <input
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && run()}
+          placeholder="Describe who you need — e.g. fashion micro-creators in Delhi, 50K–300K, ER 2%+"
+          className="flex-1 min-w-0 px-3 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-xl focus:outline-none focus:border-ink-900"
+        />
+        <button onClick={run} disabled={loading || prompt.trim().length < 2} className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl disabled:opacity-50 hover:brightness-105" style={{ background: ACCENT }}>
+          {loading ? 'Finding…' : 'Find creators'}
+        </button>
+      </div>
+
+      {results.length > 0 && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[12px] text-ink-500">{results.length} matches · {addableCount} new</span>
+            <button onClick={addAll} disabled={addingAll || addableCount === 0} className="text-[12px] font-semibold disabled:opacity-50" style={{ color: ACCENT }}>
+              {addingAll ? 'Adding…' : `+ Add all (${addableCount})`}
+            </button>
+          </div>
+          <div className="max-h-[320px] overflow-auto rounded-xl border border-border-soft divide-y divide-border-soft">
+            {results.map((r) => {
+              const isAdded = (r.creator_id && (existing.has(r.creator_id) || added.has(r.creator_id))) || false;
+              const canAdd = Boolean(r.creator_id) && !isAdded;
+              return (
+                <div key={r.username} className="flex items-center gap-3 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-medium text-ink-900 truncate flex items-center gap-1">
+                      {r.full_name || `@${r.username}`}{r.is_verified && <span style={{ color: ACCENT }}>✔</span>}
+                    </div>
+                    <div className="text-[11px] text-ink-400 truncate">
+                      @{r.username} · {kfmt(r.followers)}{r.engagement > 0 ? ` · ${r.engagement}% ER` : ''} · match {r.score}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => add(r)}
+                    disabled={!canAdd || (r.creator_id ? busy.has(r.creator_id) : false)}
+                    title={!r.creator_id ? 'Open this creator from search first to add' : undefined}
+                    className="px-3 py-1.5 text-[12px] font-semibold rounded-lg disabled:opacity-60"
+                    style={{ color: isAdded ? '#6b7280' : '#fff', background: isAdded ? '#f3f4f6' : ACCENT }}
+                  >
+                    {isAdded ? 'Added' : r.creator_id && busy.has(r.creator_id) ? '…' : 'Add'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

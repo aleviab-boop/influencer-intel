@@ -33,6 +33,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       id,
       name: typeof body.name === 'string' ? body.name : undefined,
       description: typeof body.description === 'string' ? body.description : body.description === null ? null : undefined,
+      requirements: typeof body.requirements === 'string' ? body.requirements : body.requirements === null ? null : undefined,
       status: typeof body.status === 'string' ? (body.status as ProgramStatus) : undefined,
       budget: typeof body.budget === 'number' ? body.budget : body.budget === null ? null : undefined,
       start_date: dateOrUndef(body.start_date),

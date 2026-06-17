@@ -45,6 +45,7 @@ export async function listPrograms(): Promise<ProgramSummary[]> {
 export async function createProgram(input: {
   name: string;
   description?: string | null;
+  requirements?: string | null;
   source_prompt?: string | null;
   brand_id?: string | null;
   budget?: number | null;
@@ -62,6 +63,7 @@ export async function createProgram(input: {
     name: input.name,
     slug,
     description: input.description ?? null,
+    requirements: input.requirements ?? null,
     source_prompt: input.source_prompt ?? null,
     status: 'active',
     budget: input.budget ?? null,
@@ -107,6 +109,7 @@ export async function updateProgram(input: {
   id: string;
   name?: string;
   description?: string | null;
+  requirements?: string | null;
   status?: ProgramStatus;
   budget?: number | null;
   start_date?: string | null;
@@ -116,6 +119,7 @@ export async function updateProgram(input: {
   const set: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.name !== undefined) set.name = input.name;
   if (input.description !== undefined) set.description = input.description;
+  if (input.requirements !== undefined) set.requirements = input.requirements;
   if (input.status !== undefined) set.status = input.status;
   if (input.budget !== undefined) set.budget = input.budget;
   if (input.start_date !== undefined) set.start_date = input.start_date;
