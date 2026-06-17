@@ -1476,8 +1476,8 @@ export function LiveSearch({
 
       {/* AI outreach draft modal */}
       {draftFor && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm px-4" onClick={() => setDraftFor(null)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#e3def9] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 backdrop-blur-sm px-4 pt-20 pb-8" onClick={() => setDraftFor(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#e3def9] overflow-hidden" style={{ animation: 'ii-fadeup .2s both' }} onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-3.5 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
               <div className="text-[15px] font-semibold">{draftFollowup ? 'Follow-up to' : 'Outreach to'} @{draftFor.username}</div>
               <button onClick={() => setDraftFor(null)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
