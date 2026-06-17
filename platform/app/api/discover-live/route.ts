@@ -10,9 +10,54 @@ import {
   type LiveProfile,
 } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
+import { igFetch } from '@/lib/ig-fetch';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+// Live-scrape fresh stats for a DB result so prompt searches show good, current
+// data (followers / engagement / photo) instead of the sparse stored row.
+// Best-effort: returns null on any failure so the caller keeps the DB values.
+const ENRICH_HEADERS: Record<string, string> = {
+  'x-ig-app-id': '936619743392459',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: '*/*',
+  Referer: 'https://www.instagram.com/',
+  'Sec-Fetch-Site': 'same-origin',
+  'Sec-Fetch-Mode': 'cors',
+  'Sec-Fetch-Dest': 'empty',
+};
+
+async function enrichLive(handle: string): Promise<Partial<LiveProfile> | null> {
+  try {
+    const res = await igFetch(
+      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
+      { headers: ENRICH_HEADERS },
+    );
+    if (!res.ok) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const u: any = (await res.json())?.data?.user;
+    if (!u) return null;
+    const followers: number | undefined = u.edge_followed_by?.count;
+    const media = u.edge_owner_to_timeline_media?.edges ?? [];
+    const recent = media.slice(0, 9);
+    let engagement: number | undefined;
+    if (followers && recent.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sum = recent.reduce((s: number, e: any) => {
+        const n = e?.node ?? {};
+        return s + (n.edge_liked_by?.count ?? 0) + (n.edge_media_to_comment?.count ?? 0);
+      }, 0);
+      engagement = Math.round((sum / recent.length / followers) * 1000) / 10;
+    }
+    const out: Partial<LiveProfile> = { profile_pic_url: u.profile_pic_url ?? null };
+    if (followers != null) out.followers = followers;
+    if (engagement != null) out.engagement = engagement;
+    return out;
+  } catch {
+    return null;
+  }
+}
 
 // POST /api/discover-live
 //   { prompt, seeds?: string[], names?: string[], depth?, max? }
@@ -50,15 +95,30 @@ export async function POST(req: NextRequest) {
         { status: 422 },
       );
     }
-    const results = dbMatches
-      .sort((a, b) => b.score - a.score || b.followers - a.followers)
-      .slice(0, max);
+    // dbMatches already arrive ranked by relevance (and the user's curated list
+    // first). Keep that order; enrich the top results with a live scrape so the
+    // visible rows show fresh followers / engagement / photo.
+    const ranked = dbMatches.slice(0, max);
+    const TOP = Math.min(12, ranked.length);
+    const enrichedTop = await Promise.all(
+      ranked.slice(0, TOP).map(async (p) => {
+        const live = await enrichLive(p.username);
+        if (!live) return p;
+        return {
+          ...p,
+          followers: live.followers ?? p.followers,
+          engagement: live.engagement ?? p.engagement,
+          profile_pic_url: live.profile_pic_url ?? p.profile_pic_url,
+        };
+      }),
+    );
+    const results = [...enrichedTop, ...ranked.slice(TOP)];
     return NextResponse.json({
       prompt,
       tokens,
       results,
       from_db: results.length,
-      from_live: 0,
+      from_live: enrichedTop.filter((p) => p.engagement && p.engagement > 0).length,
       persisted: 0,
       resolved_from_names: [],
       auto_seeds: [],
