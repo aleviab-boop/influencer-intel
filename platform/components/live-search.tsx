@@ -471,6 +471,56 @@ export function LiveSearch({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  // Lazy live-enrichment of result rows: fresh stats stream in as rows scroll
+  // into view (via /api/ig-stats), keeping the initial search instant.
+  const [liveStats, setLiveStats] = useState<Record<string, { followers?: number; engagement?: number; profile_pic_url?: string | null }>>({});
+  const enrichingRef = useRef<Set<string>>(new Set());
+  const rowObserverRef = useRef<IntersectionObserver | null>(null);
+
+  async function enrichRow(handle: string) {
+    const key = handle.toLowerCase();
+    if (enrichingRef.current.has(key)) return;
+    enrichingRef.current.add(key);
+    try {
+      const d = await fetch(`/api/ig-stats?handle=${encodeURIComponent(handle)}`).then((r) => r.json());
+      if (d && !d.error) {
+        const patch: { followers?: number; engagement?: number; profile_pic_url?: string | null } = {};
+        if (d.followers != null) patch.followers = d.followers;
+        if (d.engagement != null) patch.engagement = d.engagement;
+        if (d.profile_pic_url) patch.profile_pic_url = d.profile_pic_url;
+        setLiveStats((s) => ({ ...s, [handle]: patch }));
+      } else {
+        enrichingRef.current.delete(key); // let it retry on the next scroll
+      }
+    } catch {
+      enrichingRef.current.delete(key);
+    }
+  }
+
+  function rowObserver(): IntersectionObserver {
+    if (!rowObserverRef.current && typeof IntersectionObserver !== 'undefined') {
+      rowObserverRef.current = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              const h = (e.target as HTMLElement).dataset.handle;
+              if (h) void enrichRow(h);
+              rowObserverRef.current?.unobserve(e.target);
+            }
+          }
+        },
+        { rootMargin: '300px' },
+      );
+    }
+    return rowObserverRef.current!;
+  }
+
+  // New search → clear cached stats so the fresh result set re-enriches.
+  useEffect(() => {
+    setLiveStats({});
+    enrichingRef.current = new Set();
+  }, [run]);
+  useEffect(() => () => rowObserverRef.current?.disconnect(), []);
   // outreach "contacted" tracking (localStorage) — handle -> first-contacted ms
   const [contacted, setContacted] = useState<Record<string, number>>({});
   const [hideContacted, setHideContacted] = useState(false);
@@ -1269,9 +1319,17 @@ export function LiveSearch({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f3f3f3]">
-                  {shown.map((p, i) => (
+                  {shown.map((pRaw, i) => {
+                    // Merge any lazily-scraped live stats over the DB row.
+                    const live = liveStats[pRaw.username];
+                    const p = live ? { ...pRaw, ...live } : pRaw;
+                    return (
                     <Fragment key={p.username}>
-                    <tr className={`hover:bg-[#fafaff] ${selected.has(p.username) || profileFor === p.username ? 'bg-[#faf9ff]' : ''}`}>
+                    <tr
+                      data-handle={p.username}
+                      ref={(el) => { if (el) rowObserver().observe(el); }}
+                      className={`hover:bg-[#fafaff] ${selected.has(p.username) || profileFor === p.username ? 'bg-[#faf9ff]' : ''}`}
+                    >
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
@@ -1407,7 +1465,8 @@ export function LiveSearch({
                       </tr>
                     )}
                     </Fragment>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
