@@ -100,7 +100,9 @@ function LanderContent() {
       <main className="flex-1 flex flex-col">
         {showResults ? (
           // Searching from the home page runs inline — no redirect to another page.
-          <section className="max-w-5xl mx-auto w-full px-6 py-10 min-h-screen">
+          // Kept as a <div> (not <section>) so the global scroll-reveal motion
+          // doesn't mutate its className and trip a hydration mismatch.
+          <div className="max-w-5xl mx-auto w-full px-6 py-10 min-h-screen">
             <div className="mb-6">
               <button
                 onClick={() => router.push('/lander')}
@@ -110,7 +112,7 @@ function LanderContent() {
               </button>
             </div>
             <LiveSearch initialPrompt={query ?? ''} initialSeed={seed} initialMode={mode} />
-          </section>
+          </div>
         ) : (
           <>
             <Hero onSearch={runSearch} />
