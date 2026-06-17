@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { buildSuggestions } from '@/lib/suggestions';
 import { brandSafety } from '@/lib/creator-metrics';
 
@@ -1475,8 +1476,8 @@ export function LiveSearch({
       )}
 
       {/* AI outreach draft modal */}
-      {draftFor && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 backdrop-blur-sm px-4 pt-20 pb-8" onClick={() => setDraftFor(null)}>
+      {draftFor && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/40 backdrop-blur-sm px-4 py-8" onClick={() => setDraftFor(null)}>
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-[#e3def9] overflow-hidden" style={{ animation: 'ii-fadeup .2s both' }} onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-3.5 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
               <div className="text-[15px] font-semibold">{draftFollowup ? 'Follow-up to' : 'Outreach to'} @{draftFor.username}</div>
@@ -1561,12 +1562,13 @@ export function LiveSearch({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* bulk outreach drafts modal */}
-      {bulkDraft && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 px-4" onClick={() => setBulkDraft(null)}>
+      {bulkDraft && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/30 px-4 py-8" onClick={() => setBulkDraft(null)}>
           <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl border border-[#eee]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 pb-3 border-b border-[#f0f0f0]">
               <div className="text-[15px] font-semibold text-[#111]">
@@ -1635,7 +1637,8 @@ export function LiveSearch({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Floating actions: follow-up nudges + saved creators */}
