@@ -35,7 +35,10 @@ const cellLink = (row, i) => {
   const v = row.getCell(i).value;
   if (v == null) return null;
   if (typeof v === 'string') return v;
-  if (typeof v === 'object') return v.hyperlink || v.text || v.result || null;
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map((t) => t.text).join('');
+    return v.hyperlink || v.text || v.result || null;
+  }
   return String(v);
 };
 const str = (v) => (v == null ? null : String(v).trim() || null);
@@ -44,9 +47,16 @@ async function readSheet(path) {
   const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile(path);
   return wb.getWorksheet('Sheet1');
 }
+async function getWb(path) { const wb = new ExcelJS.Workbook(); await wb.xlsx.readFile(path); return wb; }
+const first = (wb) => wb.worksheets[0];
 
 const BATCH = 'campaign_import_2026-06-17';
+const D = '/Users/aleviabandyopadhyay/Downloads/';
 const records = [];
+function rec(handle, name, link, loc, followers, er, tag, campaign, file, extraMeta = {}) {
+  if (!handle) return;
+  records.push({ handle, name, link, loc, followers, er, tag, meta: { import_batch: BATCH, campaign, source_file: file, location_raw: loc, ...extraMeta } });
+}
 
 // 1. Aneet — Sr No, Creator Name, Link, City
 {
@@ -107,6 +117,59 @@ const records = [];
   }
 }
 
+// 6. Mother's Day — name c2, kids c3, link c4, loc c5
+{
+  const ws = first(await getWb(D + "Mother's Day Campaign.xlsx"));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); rec(handleFromUrl(cellLink(row, 4)), str(cell(row, 2)), cellLink(row, 4), str(cell(row, 5)), null, null, 'mothers-day-campaign', "Mother's Day", "Mother's Day Campaign.xlsx", { kids: str(cell(row, 3)) }); }
+}
+// 7. Poila Baisakh — name1 link2 foll3 er4 avgv5 gender6 age7 city8-12 loc13
+{
+  const ws = first(await getWb(D + 'Poila Baisakh Influencer Campaign.xlsx'));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); const er = typeof cell(row, 4) === 'number' ? cell(row, 4) : null;
+    rec(handleFromUrl(cellLink(row, 2)), str(cell(row, 1)), cellLink(row, 2), str(cell(row, 13)), parseFollowers(cell(row, 3)), er, 'poila-baisakh-campaign', 'Poila Baisakh', 'Poila Baisakh Influencer Campaign.xlsx',
+      { avg_views: parseFollowers(cell(row, 5)), audience: { gender_split: str(cell(row, 6)), age_group: str(cell(row, 7)), top_cities: [8, 9, 10, 11, 12].map((i) => str(cell(row, i))).filter(Boolean) } }); }
+}
+// 8. Travel 1 — name1 link2 foll3 avgv4 er5 loc6
+{
+  const ws = first(await getWb(D + 'Travel Campaign 1.xlsx'));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); const er = typeof cell(row, 5) === 'number' ? cell(row, 5) : null;
+    rec(handleFromUrl(cellLink(row, 2)), str(cell(row, 1)), cellLink(row, 2), str(cell(row, 6)), parseFollowers(cell(row, 3)), er, 'travel-campaign', 'Travel', 'Travel Campaign 1.xlsx', { avg_views: parseFollowers(cell(row, 4)) }); }
+}
+// 9. Travel 2 — name2 link3 loc4
+{
+  const ws = first(await getWb(D + 'Travel Campaign 2.xlsx'));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); rec(handleFromUrl(cellLink(row, 3)), str(cell(row, 2)), cellLink(row, 3), str(cell(row, 4)), null, null, 'travel-campaign', 'Travel', 'Travel Campaign 2.xlsx'); }
+}
+// 10. Travel 3 — List 1 (name3 loc2 foll4 link5) + List 2/3 (name2 loc3 link4 foll5)
+{
+  const wb = await getWb(D + 'Travel Campaign 3.xlsx');
+  const l1 = wb.getWorksheet('List 1');
+  if (l1) for (let r = 2; r <= l1.rowCount; r++) { const row = l1.getRow(r); rec(handleFromUrl(cellLink(row, 5)), str(cell(row, 3)), cellLink(row, 5), str(cell(row, 2)), parseFollowers(cell(row, 4)), null, 'travel-campaign', 'Travel', 'Travel Campaign 3.xlsx (List 1)'); }
+  for (const sn of ['List 2', 'List 3']) { const ws = wb.getWorksheet(sn); if (!ws) continue; for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); rec(handleFromUrl(cellLink(row, 4)), str(cell(row, 2)), cellLink(row, 4), str(cell(row, 3)), parseFollowers(cell(row, 5)), null, 'travel-campaign', 'Travel', `Travel Campaign 3.xlsx (${sn})`); } }
+}
+// 11. Travel Seeding — name2 link3 foll4
+{
+  const ws = first(await getWb(D + 'Travel Seeding Campaign.xlsx'));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); rec(handleFromUrl(cellLink(row, 3)), str(cell(row, 2)), cellLink(row, 3), null, parseFollowers(cell(row, 4)), null, 'travel-seeding-campaign', 'Travel Seeding', 'Travel Seeding Campaign.xlsx'); }
+}
+// 12. Travel UGC — 2 sheets: name1 link2 foll3 loc4
+{
+  const wb = await getWb(D + 'Travel UGC Campaign.xlsx');
+  for (const sn of ['List 1', 'List 2']) { const ws = wb.getWorksheet(sn); if (!ws) continue; for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); rec(handleFromUrl(cellLink(row, 2)), str(cell(row, 1)), cellLink(row, 2), str(cell(row, 4)), parseFollowers(cell(row, 3)), null, 'travel-ugc-campaign', 'Travel UGC', `Travel UGC Campaign.xlsx (${sn})`); } }
+}
+// 13. Ugadi — name1 link2 cat3 foll4 avgv5 er6 gender7 age8 cred9 male10 female11 city12-15
+{
+  const ws = first(await getWb(D + 'Ugadi Campaign.xlsx'));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); const er = typeof cell(row, 6) === 'number' ? cell(row, 6) : null;
+    rec(handleFromUrl(cellLink(row, 2)), str(cell(row, 1)), cellLink(row, 2), null, parseFollowers(cell(row, 4)), er, 'ugadi-campaign', 'Ugadi', 'Ugadi Campaign.xlsx',
+      { category: str(cell(row, 3)), avg_views: parseFollowers(cell(row, 5)), audience: { gender: str(cell(row, 7)), age_group: str(cell(row, 8)), credibility: typeof cell(row, 9) === 'number' ? cell(row, 9) : null, top_cities: [12, 13, 14, 15].map((i) => str(cell(row, i))).filter(Boolean) } }); }
+}
+// 14. Wedding — name2 link3 loc4
+{
+  const ws = first(await getWb(D + 'Wedding Campaign.xlsx'));
+  for (let r = 2; r <= ws.rowCount; r++) { const row = ws.getRow(r); rec(handleFromUrl(cellLink(row, 3)), str(cell(row, 2)), cellLink(row, 3), str(cell(row, 4)), null, null, 'wedding-campaign', 'Wedding', 'Wedding Campaign.xlsx'); }
+}
+
 console.log('parsed records:', records.length);
 const byTag = {}; records.forEach(r => byTag[r.tag] = (byTag[r.tag]||0)+1); console.log('by campaign:', JSON.stringify(byTag));
 
@@ -144,7 +207,7 @@ try {
 finally { client.release(); }
 
 console.log(`upserted ok=${ok} fail=${fail}`);
-for (const tag of ['aneet-campaign','baisakhi-campaign','bihu-campaign','holi-campaign']) {
+for (const tag of ['aneet-campaign','baisakhi-campaign','bihu-campaign','holi-campaign','mothers-day-campaign','poila-baisakh-campaign','travel-campaign','travel-seeding-campaign','travel-ugc-campaign','ugadi-campaign','wedding-campaign']) {
   const c = await pool.query(`SELECT count(*)::int n FROM creators WHERE $1 = ANY(tags)`, [tag]);
   console.log(`  ${tag}: ${c.rows[0].n} in DB`);
 }
