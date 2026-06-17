@@ -472,6 +472,21 @@ export function LiveSearch({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  // Measure the results-table viewport so the inline profile drawer can be
+  // pinned to the left and sized to the visible width — keeping it fully on
+  // screen instead of clipped inside the table's horizontal scroll.
+  const tableWrapRef = useRef<HTMLDivElement>(null);
+  const [drawerW, setDrawerW] = useState(0);
+  useEffect(() => {
+    const el = tableWrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const update = () => setDrawerW(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileFor]);
   // Lazy live-enrichment of result rows: fresh stats stream in as rows scroll
   // into view (via /api/ig-stats), keeping the initial search instant.
   const [liveStats, setLiveStats] = useState<Record<string, { followers?: number; engagement?: number; profile_pic_url?: string | null }>>({});
@@ -1296,7 +1311,7 @@ export function LiveSearch({
                 : 'No profiles match these filters. Loosen them to see more.'}
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#eee]">
+            <div ref={tableWrapRef} className="overflow-x-auto rounded-xl border border-[#eee]">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#faf9ff] text-[12px] uppercase tracking-wider text-[#888]">
@@ -1460,8 +1475,13 @@ export function LiveSearch({
                     </tr>
                     {profileFor === p.username && (
                       <tr>
-                        <td colSpan={8} className="px-4 pb-4 pt-0 bg-[#faf9ff]">
-                          <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} refreshing={profileRefreshing} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
+                        <td colSpan={8} className="p-0 bg-[#faf9ff]">
+                          {/* Pin the drawer to the left edge and size it to the
+                              visible width so it stays fully on screen even when
+                              the table scrolls horizontally. */}
+                          <div className="sticky left-0 px-4 pb-4 pt-0" style={drawerW ? { width: drawerW } : undefined}>
+                            <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} refreshing={profileRefreshing} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
+                          </div>
                         </td>
                       </tr>
                     )}
