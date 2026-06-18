@@ -3,20 +3,30 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, signIn, signOut } from '@/lib/auth';
+import { getSession, signIn, signInWithPassword, createAccount, signOut } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as { email?: string; brand_name?: string; ig_handle?: string; action?: string } | null;
+  const body = (await req.json().catch(() => null)) as { email?: string; password?: string; brand_name?: string; ig_handle?: string; action?: string } | null;
   if (!body) return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   if (body.action === 'sign_out') {
     await signOut();
     return NextResponse.json({ ok: true });
   }
-  if (!body.email) return NextResponse.json({ error: 'email required' }, { status: 400 });
   try {
-    const payload = await signIn(body.email, body.brand_name, body.ig_handle);
+    let payload;
+    if (body.action === 'sign_up') {
+      if (!body.email || !body.password) return NextResponse.json({ error: 'email and password required' }, { status: 400 });
+      payload = await createAccount(body.email, body.password, body.brand_name);
+    } else if (body.action === 'sign_in') {
+      if (!body.email || !body.password) return NextResponse.json({ error: 'email and password required' }, { status: 400 });
+      payload = await signInWithPassword(body.email, body.password);
+    } else {
+      // Legacy passwordless sign-in (influencer / OAuth flows).
+      if (!body.email) return NextResponse.json({ error: 'email required' }, { status: 400 });
+      payload = await signIn(body.email, body.brand_name, body.ig_handle);
+    }
     return NextResponse.json({
       email: payload.email,
       brand_id: payload.brand_id,

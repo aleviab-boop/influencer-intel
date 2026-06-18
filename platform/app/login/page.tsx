@@ -65,20 +65,29 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
     setError(null);
-    // Agency role is gated behind hardcoded demo credentials.
+    // Agency role uses real email + password accounts.
     if (role === 'agency') {
-      if (email.trim().toLowerCase() !== AGENCY_EMAIL || password !== AGENCY_PASSWORD) {
-        setError('Invalid agency credentials. Use agency@gmail.com / agency.');
-        return;
+      if (!email.trim() || !password) { setError('Enter your email and password.'); return; }
+      setLoading(true);
+      try {
+        const r = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sign_in', email: email.trim(), password }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
+      } catch {
+        setError('Could not reach the server. Try again.'); setLoading(false); return;
       }
-    } else if (!email.trim()) {
-      return;
+    } else {
+      if (!email.trim()) return;
+      setLoading(true);
     }
-    setLoading(true);
     try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
     const params = new URLSearchParams(window.location.search);
     const next = params.get('next');

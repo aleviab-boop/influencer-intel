@@ -13,6 +13,8 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // honour ?role= from the entry cards
   useEffect(() => {
@@ -20,12 +22,27 @@ export default function SignupPage() {
     if (r === 'influencer' || r === 'agency') setRole(r);
   }, []);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !/.+@.+\..+/.test(email)) return;
-    // demo auth — remember the chosen role; for now both roles land on /lander
-    try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
-    router.push('/lander');
+    if (loading) return;
+    setError(null);
+    if (!name.trim()) { setError('Enter your name.'); return; }
+    if (!/.+@.+\..+/.test(email)) { setError('Enter a valid email.'); return; }
+    if (password.length < 4) { setError('Password must be at least 4 characters.'); return; }
+    setLoading(true);
+    try {
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_up', email: email.trim(), password, brand_name: name.trim() }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(d.error || 'Could not create your account.'); setLoading(false); return; }
+      try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
+      router.push('/lander');
+    } catch {
+      setError('Could not reach the server. Try again.'); setLoading(false);
+    }
   }
 
   return (
@@ -53,13 +70,14 @@ export default function SignupPage() {
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" className={inp} /></label>
             <label className="block"><span className="text-[12px] text-ink-500 mb-1 block">Password</span>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={inp} /></label>
-            <button type="submit" className="w-full px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold bg-ink-900 hover:bg-ink-800 transition-colors">
-              Create {role === 'influencer' ? 'creator' : 'agency'} account
+            {error && <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
+            <button type="submit" disabled={loading} className="w-full px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold bg-ink-900 hover:bg-ink-800 transition-colors disabled:opacity-60">
+              {loading ? 'Creating…' : `Create ${role === 'influencer' ? 'creator' : 'agency'} account`}
             </button>
           </form>
 
           <p className="mt-5 text-center text-[13px] text-ink-500">Already have an account? <Link href={`/login?role=${role}`} className="font-semibold" style={{ color: ACCENT }}>Log in</Link></p>
-          <p className="mt-1 text-center text-[11px] text-ink-400">Demo sign-up — any details get you in.</p>
+          <p className="mt-1 text-center text-[11px] text-ink-400">Create an account, then log in with your email &amp; password.</p>
         </div>
       </main>
     </div>

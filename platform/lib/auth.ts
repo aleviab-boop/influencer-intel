@@ -29,6 +29,47 @@ function getSecret(): string {
   return process.env.SESSION_SECRET ?? 'change-me-in-prod-influencer-intel-dev';
 }
 
+// ---- password hashing (scrypt, no external dep) ----
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+}
+function verifyPassword(password: string, stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const [scheme, salt, hash] = stored.split('$');
+  if (scheme !== 'scrypt' || !salt || !hash) return false;
+  const computed = crypto.scryptSync(password, salt, 64).toString('hex');
+  const a = Buffer.from(hash, 'hex');
+  const b = Buffer.from(computed, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const slugFor = (email: string) => email.replace(/[^a-z0-9]/g, '_');
+
+type BrandRow = Brand & { ig_handle?: string | null; password_hash?: string | null };
+
+function payloadFor(brand: BrandRow, email: string): SessionPayload {
+  return {
+    email,
+    brand_id: brand.id,
+    brand_name: brand.name,
+    ig_handle: brand.ig_handle ?? null,
+    iat: Math.floor(Date.now() / 1000),
+  };
+}
+async function setSessionCookie(payload: SessionPayload): Promise<void> {
+  const c = await cookies();
+  c.set(COOKIE_NAME, sign(payload), {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: COOKIE_MAX_AGE,
+  });
+}
+
 function sign(payload: SessionPayload): string {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', getSecret()).update(body).digest('base64url');
@@ -108,6 +149,56 @@ export async function signIn(email: string, brandName?: string, igHandle?: strin
     secure: process.env.NODE_ENV === 'production',
     maxAge: COOKIE_MAX_AGE,
   });
+  return payload;
+}
+
+/**
+ * Create a real account: email + password. Hashes the password, stores it on
+ * the brand row, and signs the user in. Rejects if an account already exists.
+ */
+export async function createAccount(email: string, password: string, brandName?: string): Promise<SessionPayload> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!EMAIL_RE.test(cleanEmail)) throw new Error('Enter a valid email address');
+  if (!password || password.length < 4) throw new Error('Password must be at least 4 characters');
+  const db = getBolticClient();
+  const slug = slugFor(cleanEmail);
+  const display = (brandName?.trim() || cleanEmail.split('@')[0]!.replace(/[^a-z0-9]/gi, ' ')).slice(0, 80);
+  const existing = await db.query<BrandRow>(`SELECT * FROM brands WHERE slug = $1 LIMIT 1`, [slug]);
+  let brand = existing[0];
+  const password_hash = hashPassword(password);
+  if (brand) {
+    if (brand.password_hash) throw new Error('An account with this email already exists — please log in.');
+    await db.query(`UPDATE brands SET password_hash = $1, name = $2, updated_at = NOW() WHERE id = $3`, [password_hash, display, brand.id]);
+    brand.name = display;
+  } else {
+    brand = await db.insert<BrandRow>('brands', {
+      name: display,
+      slug,
+      category: null,
+      plan: 'design_partner',
+      research_quota_used: 0,
+      research_quota_max: 50,
+      onboarded_at: new Date().toISOString(),
+      password_hash,
+    });
+  }
+  const payload = payloadFor(brand, cleanEmail);
+  await setSessionCookie(payload);
+  return payload;
+}
+
+/**
+ * Sign in with email + password, verifying against the stored hash.
+ */
+export async function signInWithPassword(email: string, password: string): Promise<SessionPayload> {
+  const cleanEmail = email.trim().toLowerCase();
+  const db = getBolticClient();
+  const rows = await db.query<BrandRow>(`SELECT * FROM brands WHERE slug = $1 LIMIT 1`, [slugFor(cleanEmail)]);
+  const brand = rows[0];
+  if (!brand || !brand.password_hash) throw new Error('No account found for this email — create one first.');
+  if (!verifyPassword(password, brand.password_hash)) throw new Error('Incorrect email or password.');
+  const payload = payloadFor(brand, cleanEmail);
+  await setSessionCookie(payload);
   return payload;
 }
 
