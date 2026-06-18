@@ -388,10 +388,11 @@ const ROW_A = [
   { name: 'L’ORÉAL', slug: 'loreal' },
   { name: 'LVMH', slug: 'lvmh' },
   { name: 'Marriott', slug: 'marriott' },
-  { name: 'MICHELIN', slug: 'michelin' },
+  { name: 'Nykaa', slug: 'nykaa' },
   { name: 'PHILIPS', slug: 'philips' },
   { name: 'SHISEIDO', slug: 'shiseido' },
   { name: 'Unilever', slug: 'unilever' },
+  { name: 'Myntra', slug: 'myntra' },
 ];
 
 const ROW_B = [
@@ -404,7 +405,9 @@ const ROW_B = [
   { name: 'NIVEA', slug: 'nivea' },
   { name: 'PUMA', slug: 'puma' },
   { name: 'ZARA', slug: 'zara' },
-  { name: 'Mastercard', slug: 'mastercard' },
+  { name: 'boAt', slug: 'boat' },
+  { name: 'Mamaearth', slug: 'mamaearth' },
+  { name: 'Noise', slug: 'noise' },
 ];
 
 function LogoMarquee() {
