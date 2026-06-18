@@ -39,10 +39,6 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Hardcoded agency demo credentials.
-  const AGENCY_EMAIL = 'agency@gmail.com';
-  const AGENCY_PASSWORD = 'agency';
-
   useEffect(() => {
     setMounted(true);
     const params = new URLSearchParams(window.location.search);
@@ -51,18 +47,11 @@ export default function LoginPage() {
     if (r === 'influencer' || r === 'agency') setRole(r);
   }, []);
 
-  // Pre-fill the agency demo credentials so the agency tab is one-click — no
-  // empty-field error. Clear them when switching to the influencer tab.
+  // Clear fields/errors when switching roles — no pre-filled credentials.
   useEffect(() => {
     setError(null);
-    if (role === 'agency') {
-      setEmail(AGENCY_EMAIL);
-      setPassword(AGENCY_PASSWORD);
-    } else {
-      setEmail('');
-      setPassword('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setEmail('');
+    setPassword('');
   }, [role]);
 
   async function submit(e: React.FormEvent) {
