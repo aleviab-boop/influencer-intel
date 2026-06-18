@@ -69,7 +69,7 @@ export default function SignupPage() {
             <label className="block"><span className="text-[12px] text-ink-500 mb-1 block">{role === 'agency' ? 'Work email' : 'Email'}</span>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" className={inp} /></label>
             <label className="block"><span className="text-[12px] text-ink-500 mb-1 block">Password</span>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className={inp} /></label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Create a password" className={inp} /></label>
             {error && <div className="text-[13px] text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{error}</div>}
             <button type="submit" disabled={loading} className="w-full px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold bg-ink-900 hover:bg-ink-800 transition-colors disabled:opacity-60">
               {loading ? 'Creating…' : `Create ${role === 'influencer' ? 'creator' : 'agency'} account`}
