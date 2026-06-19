@@ -353,6 +353,21 @@ function brandFit(profile: ProfileData, engagement: number | null, brief: string
   return { score, band, color, verdict, factors, matched, missed };
 }
 
+// Lightweight fit for a search-results row: the full Brand Fit card needs recent
+// posts (captions/themes), which list rows don't carry — so here we score
+// relevance from the bio/name/category against the brief, plus engagement fit.
+// It's the quick, sortable read; the drawer recomputes the full version.
+function listFit(p: { full_name?: string; biography?: string; category?: string; followers: number; engagement?: number | null }, briefKws: string[]): number | null {
+  if (briefKws.length === 0) return null;
+  const hay = `${p.full_name ?? ''} ${p.biography ?? ''} ${p.category ?? ''}`.toLowerCase();
+  const matched = briefKws.filter((k) => hay.includes(k)).length;
+  const rel = clamp(Math.round((matched / briefKws.length) * 100), matched ? 25 : 6, 100);
+  const er = p.engagement ?? 0;
+  if (er <= 0) return rel; // no engagement scraped yet — relevance only
+  const erScore = clamp(Math.round((er / expectedErFloor(p.followers)) * 55), 18, 100);
+  return clamp(Math.round(rel * 0.68 + erScore * 0.32), 0, 100);
+}
+
 // Posting rhythm from recent-post timestamps + engagement. IG timestamps are
 // UTC; we read them in IST (UTC+5:30) since the audience is India-first. Returns
 // posts/week, the highest-engagement weekday, and a 3-hour best-time window.
@@ -514,7 +529,7 @@ export function LiveSearch({
   const [minER, setMinER] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [healthyOnly, setHealthyOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement'>('relevance');
+  const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState('');
@@ -962,6 +977,12 @@ export function LiveSearch({
   const suggestions = buildSuggestions(prompt);
   const sugOpen = showSug && suggestions.length > 0;
 
+  // Brief = the search prompt; drives the "Fit" column for the whole list.
+  const briefKws = fitKeywords(run?.prompt ?? '');
+  // Score against the row merged with any lazily-scraped live stats, so Fit
+  // sharpens as engagement streams in.
+  const fitOf = (p: LiveProfile) => listFit({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws) ?? -1;
+
   const shown = (() => {
     if (!run) return [] as LiveProfile[];
     const filtered = run.results.filter(
@@ -977,6 +998,7 @@ export function LiveSearch({
     if (sortBy === 'followers_desc') sorted.sort((a, b) => b.followers - a.followers);
     else if (sortBy === 'followers_asc') sorted.sort((a, b) => a.followers - b.followers);
     else if (sortBy === 'engagement') sorted.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
+    else if (sortBy === 'fit') sorted.sort((a, b) => fitOf(b) - fitOf(a));
     // 'relevance' keeps the server order (score, then followers)
     return sorted;
   })();
@@ -1352,6 +1374,7 @@ export function LiveSearch({
               className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
             >
               <option value="relevance">Relevance</option>
+              <option value="fit">Brand fit</option>
               <option value="followers_desc">Followers: high → low</option>
               <option value="followers_asc">Followers: low → high</option>
               <option value="engagement">Engagement</option>
@@ -1428,6 +1451,7 @@ export function LiveSearch({
                     <th className="px-3 py-2.5 font-medium">Category</th>
                     <th className="px-3 py-2.5 font-medium text-right">Followers</th>
                     <th className="px-3 py-2.5 font-medium text-right">Eng.</th>
+                    <th className="px-3 py-2.5 font-medium text-center" title="How well each creator matches your search brief — relevance + engagement. Open a profile for the full breakdown.">Fit</th>
                     <th className="px-3 py-2.5 font-medium text-center">Relevance</th>
                     <th className="px-3 py-2.5 font-medium"></th>
                   </tr>
@@ -1522,6 +1546,18 @@ export function LiveSearch({
                         })()}
                       </td>
                       <td className="px-3 py-3 text-center">
+                        {(() => {
+                          const fit = listFit({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws);
+                          if (fit == null) return <span className="text-[13px] text-[#ccc]">—</span>;
+                          const c = fit >= 72 ? { bg: '#ecfdf5', fg: '#059669' } : fit >= 52 ? { bg: '#fff7ed', fg: '#b45309' } : { bg: '#fef2f2', fg: '#dc2626' };
+                          return (
+                            <span className="inline-block text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums" style={{ background: c.bg, color: c.fg }} title="Quick fit vs your search brief — open the profile for the full Brand Fit breakdown">
+                              {fit}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-3 py-3 text-center">
                         <span
                           className="inline-block text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums"
                           style={{ background: ACCENT_SOFT, color: ACCENT }}
@@ -1573,7 +1609,7 @@ export function LiveSearch({
                     </tr>
                     {profileFor === p.username && (
                       <tr>
-                        <td colSpan={8} className="p-0 bg-[#faf9ff]">
+                        <td colSpan={9} className="p-0 bg-[#faf9ff]">
                           {/* Pin the drawer to the left edge and size it to the
                               visible width so it stays fully on screen even when
                               the table scrolls horizontally. */}
