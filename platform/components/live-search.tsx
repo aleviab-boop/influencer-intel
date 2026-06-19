@@ -42,6 +42,8 @@ interface SavedCreator {
   category?: string;
   email?: string | null;
   phone?: string | null;
+  biography?: string;
+  engagement?: number | null;
 }
 
 interface Lookalike {
@@ -633,6 +635,7 @@ export function LiveSearch({
   // pinned creators that persist across searches (localStorage)
   const [savedCreators, setSavedCreators] = useState<SavedCreator[]>([]);
   const [showSaved, setShowSaved] = useState(false);
+  const [shortlistBrief, setShortlistBrief] = useState('');
   // side-by-side compare
   const [compareSel, setCompareSel] = useState<Set<string>>(new Set());
   const [compareFor, setCompareFor] = useState<string[] | null>(null);
@@ -746,7 +749,7 @@ export function LiveSearch({
       const exists = list.some((s) => s.username.toLowerCase() === p.username.toLowerCase());
       const next = exists
         ? list.filter((s) => s.username.toLowerCase() !== p.username.toLowerCase())
-        : [{ username: p.username, full_name: p.full_name, followers: p.followers, profile_pic_url: p.profile_pic_url, category: p.category, email: p.email, phone: p.phone }, ...list];
+        : [{ username: p.username, full_name: p.full_name, followers: p.followers, profile_pic_url: p.profile_pic_url, category: p.category, email: p.email, phone: p.phone, biography: p.biography, engagement: liveStats[p.username]?.engagement ?? p.engagement ?? null }, ...list];
       try { localStorage.setItem('ii_saved_creators', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
@@ -1880,8 +1883,26 @@ export function LiveSearch({
               <div className="text-[15px] font-semibold">Saved creators · {savedCreators.length}</div>
               <button onClick={() => setShowSaved(false)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
             </div>
+            {savedCreators.length > 0 && (
+              <div className="px-5 pt-3 pb-2 border-b border-[#eee]">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-[#999]">Rank by brand fit</label>
+                <input
+                  value={shortlistBrief}
+                  onChange={(e) => setShortlistBrief(e.target.value)}
+                  placeholder="Brief — e.g. sustainable skincare for Gen-Z women"
+                  className="mt-1 w-full px-2.5 py-1.5 rounded-lg border border-[#e3def9] text-[12px] focus:outline-none focus:border-[#6C4DF6]"
+                />
+                {fitKeywords(shortlistBrief).length > 0 && (
+                  <p className="mt-1 text-[11px] text-[#999]">Sorted by fit against this brief.</p>
+                )}
+              </div>
+            )}
             <div className="flex-1 overflow-y-auto divide-y divide-[#f3f3f3]">
-              {savedCreators.map((s) => (
+              {(() => {
+                const kws = fitKeywords(shortlistBrief);
+                const rows = savedCreators.map((s) => ({ s, fit: kws.length ? listFit(s, kws) : null }));
+                if (kws.length) rows.sort((a, b) => (b.fit ?? -1) - (a.fit ?? -1));
+                return rows.map(({ s, fit }) => (
                 <div key={s.username} className="flex items-center gap-3 px-5 py-3">
                   <input
                     type="checkbox"
@@ -1896,9 +1917,14 @@ export function LiveSearch({
                     <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-[#111] truncate hover:underline">@{s.username}</a>
                     <div className="text-[12px] text-[#999] truncate">{fmt(s.followers)} followers{s.category ? ` · ${s.category}` : ''}</div>
                   </div>
+                  {fit != null && (() => {
+                    const c = fit >= 72 ? { bg: '#ecfdf5', fg: '#059669' } : fit >= 52 ? { bg: '#fff7ed', fg: '#b45309' } : { bg: '#fef2f2', fg: '#dc2626' };
+                    return <span className="shrink-0 text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums" style={{ background: c.bg, color: c.fg }} title="Fit vs the brief above">{fit}</span>;
+                  })()}
                   <button onClick={() => toggleSaved({ username: s.username } as LiveProfile)} className="text-[#bbb] hover:text-rose-500 text-lg leading-none" title="Remove">×</button>
                 </div>
-              ))}
+                ));
+              })()}
             </div>
             {compareSel.size > 0 && (
               <button
