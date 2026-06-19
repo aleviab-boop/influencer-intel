@@ -390,9 +390,8 @@ const ROW_A = [
   { name: 'Marriott', slug: 'marriott' },
   { name: 'Nykaa', slug: 'nykaa' },
   { name: 'PHILIPS', slug: 'philips' },
-  { name: 'SHISEIDO', slug: 'shiseido' },
-  { name: 'Unilever', slug: 'unilever' },
   { name: 'Myntra', slug: 'myntra' },
+  { name: 'Unilever', slug: 'unilever' },
 ];
 
 const ROW_B = [
