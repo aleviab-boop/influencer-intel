@@ -2418,7 +2418,11 @@ const REEL_CURVE = [
 const VIEWS_PER_LIKE = 16;
 const hLabel = (h: number) => (h < 24 ? `${h}h` : `${h / 24}d`);
 
-interface Forecast { expected: number; low: number; high: number; basisCount: number; avgLikes: number; curve: { h: number; low: number; exp: number; high: number }[] }
+interface ActualReel { ageH: number; views: number; live: boolean }
+interface Forecast { expected: number; low: number; high: number; basisCount: number; avgLikes: number; curve: { h: number; low: number; exp: number; high: number }[]; actuals: ActualReel[] }
+
+// taken_at can arrive as unix seconds or ms — normalise to ms.
+function toMs(ts: number): number { return ts > 1e12 ? ts : ts * 1000; }
 
 function reelForecast(profile: ProfileData): Forecast | null {
   const reels = profile.recent.filter((p) => p.is_video);
@@ -2433,7 +2437,17 @@ function reelForecast(profile: ProfileData): Forecast | null {
   const low = Math.round(pct(0.2) * VIEWS_PER_LIKE);
   const high = Math.round(pct(0.8) * VIEWS_PER_LIKE);
   const curve = REEL_CURVE.map((c) => ({ h: c.h, low: Math.round(low * c.f), exp: Math.round(expected * c.f), high: Math.round(high * c.f) }));
-  return { expected, low, high, basisCount: src.length, avgLikes: Math.round(typicalLikes), curve };
+  // Real recent reels plotted against the projection. Ones still inside the
+  // 7-day window are "live" (in-flight, still gaining views); older ones are
+  // settled and clamp to the right edge.
+  const now = Date.now();
+  const actuals: ActualReel[] = src
+    .filter((p) => p.likes > 0 && p.taken_at != null)
+    .map((p) => {
+      const ageH = Math.max(0, (now - toMs(p.taken_at!)) / 3_600_000);
+      return { ageH, views: Math.round(p.likes * VIEWS_PER_LIKE), live: ageH <= 168 };
+    });
+  return { expected, low, high, basisCount: src.length, avgLikes: Math.round(typicalLikes), curve, actuals };
 }
 
 // Projected views-over-time for a creator's NEXT reel, modelled from how their
@@ -2441,6 +2455,15 @@ function reelForecast(profile: ProfileData): Forecast | null {
 // so you can sanity-check a reel idea before commissioning it.
 function ReelForecast({ profile }: { profile: ProfileData }) {
   const f = reelForecast(profile);
+  // Re-render every 30s so any in-flight reel advances along the time axis,
+  // giving the graph a genuinely live feel while the drawer stays open.
+  const [, setTick] = useState(0);
+  const hasLive = !!f && f.actuals.some((a) => a.live);
+  useEffect(() => {
+    if (!hasLive) return;
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, [hasLive]);
   if (!f) {
     return (
       <div className="rounded-2xl border border-[#e3def9] bg-white p-4">
@@ -2451,8 +2474,11 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
   }
   const W = 300, H = 120, PAD_L = 4, PAD_B = 16;
   const n = f.curve.length;
-  const maxY = Math.max(f.high, 1);
+  const liveCount = f.actuals.filter((a) => a.live).length;
+  // Y-scale must contain the projection AND any real reel that overshot it.
+  const maxY = Math.max(f.high, ...f.actuals.map((a) => a.views), 1);
   const x = (i: number) => PAD_L + (i / (n - 1)) * (W - PAD_L * 2);
+  const xH = (h: number) => PAD_L + (Math.min(h, 168) / 168) * (W - PAD_L * 2);
   const y = (v: number) => (H - PAD_B) - (v / maxY) * (H - PAD_B - 4);
   const lineExp = f.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(c.exp).toFixed(1)}`).join(' ');
   const band =
@@ -2463,7 +2489,16 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
 
   return (
     <div className="rounded-2xl border border-[#e3def9] bg-white p-4" style={{ animation: 'ii-fadeup .4s .14s both' }}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">Reel performance forecast</div>
+      <style>{`@keyframes ii-trace{to{stroke-dashoffset:0}}@keyframes ii-livepulse{0%,100%{r:3;opacity:1}50%{r:5;opacity:.55}}`}</style>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999]">Reel performance forecast</div>
+        {liveCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#d97706]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" style={{ animation: 'ii-livepulse 1.4s ease-in-out infinite' }} />
+            {liveCount} live now
+          </span>
+        )}
+      </div>
       <div className="flex items-baseline gap-2">
         <div className="text-[20px] font-bold text-[#111] tabular-nums">~{fmt(f.expected)}</div>
         <div className="text-[12px] text-[#888]">views in 7 days</div>
@@ -2472,9 +2507,19 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
         <path d={band} fill="#ede9fd" opacity="0.7" />
-        <path d={lineExp} fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={lineExp} fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          pathLength={1} strokeDasharray={1} strokeDashoffset={1} style={{ animation: 'ii-trace 1.1s .15s ease-out forwards' }} />
         {f.curve.map((c, i) => (
           <circle key={i} cx={x(i)} cy={y(c.exp)} r="2" fill={ACCENT} />
+        ))}
+        {/* Real recent reels overlaid on the projection. Settled reels clamp to
+            the 7-day edge; in-flight reels sit at their real age and pulse. */}
+        {f.actuals.map((a, i) => (
+          <circle key={`a${i}`} cx={xH(a.ageH)} cy={y(a.views)} r={a.live ? 3 : 2.5}
+            fill={a.live ? '#f59e0b' : '#c4b5fd'} stroke="#fff" strokeWidth="1"
+            style={a.live ? { animation: 'ii-livepulse 1.6s ease-in-out infinite' } : undefined}>
+            <title>{`${fmt(a.views)} est. views · ${a.live ? `${Math.round(a.ageH)}h old (still gaining)` : 'settled'}`}</title>
+          </circle>
         ))}
         {f.curve.map((c, i) => (
           (i === 0 || i === 4 || i === 6 || i === n - 1) ? (
@@ -2483,11 +2528,13 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
         ))}
       </svg>
 
-      <div className="mt-1.5 flex items-center gap-3 text-[10px] text-[#999]">
+      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[10px] text-[#999]">
         <span className="inline-flex items-center gap-1"><span className="w-3 h-[2px] rounded" style={{ background: ACCENT }} /> expected</span>
         <span className="inline-flex items-center gap-1"><span className="w-3 h-2 rounded" style={{ background: '#ede9fd' }} /> low–high range</span>
+        {liveCount > 0 && <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#f59e0b]" /> live reel</span>}
+        {f.actuals.some((a) => !a.live) && <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#c4b5fd]" /> past reel</span>}
       </div>
-      <p className="mt-2 text-[11px] text-[#aaa] leading-snug">Projection from their recent reels — actual results vary with audio, timing and trends. Connect the account for live tracking.</p>
+      <p className="mt-2 text-[11px] text-[#aaa] leading-snug">Projection from their recent reels, with their actual recent reels overlaid live. Hit “Refresh live” to re-pull — connect the account for continuous tracking.</p>
     </div>
   );
 }
