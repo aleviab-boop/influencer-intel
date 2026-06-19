@@ -285,6 +285,74 @@ function authenticityReport(
   return { score, band, color, verdict, factors, perPost };
 }
 
+// ── Brand fit ──────────────────────────────────────────────────────────────
+// Score how well a creator matches a brand brief, from public signals only:
+// how much their bio / captions / themes overlap the brief (relevance), whether
+// engagement is healthy for their size, how authentic the audience looks, and
+// whether recent posts are brand-safe. A live competitor collab applies a
+// penalty. Every factor carries a plain-English reason, so the % is explainable.
+const FIT_STOPWORDS = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'our', 'your', 'who', 'are', 'was', 'will', 'can', 'has', 'have', 'had', 'not', 'but', 'all', 'any', 'out', 'use', 'want', 'need', 'looking', 'look', 'find', 'creators', 'creator', 'influencer', 'influencers', 'content', 'brand', 'brands', 'campaign', 'someone', 'people', 'they', 'their', 'them', 'about', 'into', 'over', 'more', 'most', 'very', 'really', 'good', 'great', 'best', 'top', 'new', 'india', 'indian', 'instagram', 'reel', 'reels', 'post', 'posts', 'who', 'whose']);
+
+function fitKeywords(brief: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of brief.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []) {
+    if (raw.length < 3 || FIT_STOPWORDS.has(raw) || /^\d+$/.test(raw) || seen.has(raw)) continue;
+    seen.add(raw);
+    out.push(raw);
+  }
+  return out.slice(0, 12);
+}
+
+interface FitFactor { key: string; label: string; value: number; detail: string }
+interface FitReport { score: number; band: 'Strong fit' | 'Possible fit' | 'Weak fit'; color: string; verdict: string; factors: FitFactor[]; matched: string[]; missed: string[] }
+
+function brandFit(profile: ProfileData, engagement: number | null, brief: string, blacklistHits: { brand: string }[]): FitReport | null {
+  const kws = fitKeywords(brief);
+  if (kws.length === 0) return null;
+
+  const haystack = [
+    profile.full_name, profile.biography, profile.category,
+    contentThemes(profile.recent, 20).join(' '),
+    ...profile.recent.map((p) => p.caption ?? ''),
+  ].join(' ').toLowerCase();
+
+  const matched = kws.filter((k) => haystack.includes(k));
+  const missed = kws.filter((k) => !haystack.includes(k));
+  const nicheScore = clamp(Math.round((matched.length / kws.length) * 100), matched.length ? 25 : 4, 100);
+
+  const floor = expectedErFloor(profile.followers);
+  const erScore = engagement && engagement > 0 ? clamp(Math.round((engagement / floor) * 55), 18, 100) : 50;
+
+  const auth = authenticityReport(profile, engagement);
+  const authScore = auth ? auth.score : 60;
+
+  const safety = brandSafety([profile.biography ?? '', ...profile.recent.map((p) => p.caption ?? '')]);
+  const safetyScore = safety.level === 'clean' ? 100 : safety.level === 'review' ? 55 : 18;
+
+  let score = Math.round(nicheScore * 0.42 + erScore * 0.23 + authScore * 0.2 + safetyScore * 0.15);
+  const conflict = blacklistHits.length > 0;
+  if (conflict) score = Math.max(0, score - 18);
+  score = clamp(score, 0, 100);
+
+  const band: FitReport['band'] = score >= 72 ? 'Strong fit' : score >= 52 ? 'Possible fit' : 'Weak fit';
+  const color = band === 'Strong fit' ? '#059669' : band === 'Possible fit' ? '#b45309' : '#dc2626';
+  const verdict =
+    band === 'Strong fit' ? 'Strong match on relevance and audience quality — shortlist with confidence.'
+      : band === 'Possible fit' ? 'Partial match — workable with the right angle; mind the gaps below.'
+        : 'Limited overlap with the brief — there are likely better fits.';
+
+  const factors: FitFactor[] = [
+    { key: 'niche', label: 'Brief relevance', value: nicheScore, detail: matched.length ? `Matches ${matched.length}/${kws.length} brief terms: ${matched.slice(0, 6).join(', ')}.` : 'No brief terms appear in their bio, captions or themes.' },
+    { key: 'er', label: 'Engagement fit', value: erScore, detail: engagement && engagement > 0 ? `${engagement}% ER vs ~${floor}% expected at this follower size.` : 'Engagement unknown — hit “Refresh live” to pull it.' },
+    { key: 'auth', label: 'Audience authenticity', value: authScore, detail: auth ? `${auth.band} authenticity signals from recent posts.` : 'Not enough recent posts to assess.' },
+    { key: 'safety', label: 'Brand safety', value: safetyScore, detail: safety.level === 'clean' ? 'No risk flags in recent posts.' : `Flagged: ${safety.hits.map((h) => h.category).join(', ')}.` },
+  ];
+  if (conflict) factors.push({ key: 'conflict', label: 'Competitor conflict', value: 15, detail: `Recently collaborated with ${blacklistHits.map((h) => h.brand).join(', ')} — score penalised.` });
+
+  return { score, band, color, verdict, factors, matched, missed };
+}
+
 // Posting rhythm from recent-post timestamps + engagement. IG timestamps are
 // UTC; we read them in IST (UTC+5:30) since the audience is India-first. Returns
 // posts/week, the highest-engagement weekday, and a 3-hour best-time window.
@@ -1510,7 +1578,7 @@ export function LiveSearch({
                               visible width so it stays fully on screen even when
                               the table scrolls horizontally. */}
                           <div className="sticky left-0 px-4 pb-4 pt-0" style={drawerW ? { width: drawerW } : undefined}>
-                            <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} refreshing={profileRefreshing} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
+                            <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} refreshing={profileRefreshing} initialBrief={run?.prompt ?? ''} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
                           </div>
                         </td>
                       </tr>
@@ -1989,7 +2057,7 @@ function CompareModal({
   );
 }
 
-function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDraft, onClose, onPivot }: { loading: boolean; error?: string | null; profile: ProfileData | null; refreshing?: boolean; onRefresh?: () => void; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void }) {
+function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDraft, onClose, onPivot, initialBrief = '' }: { loading: boolean; error?: string | null; profile: ProfileData | null; refreshing?: boolean; onRefresh?: () => void; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void; initialBrief?: string }) {
   const [copied, setCopied] = useState(false);
   const [rivals, setRivals] = useState('');
   const [growth, setGrowth] = useState<{ pct: number; days: number } | null>(null);
@@ -2253,6 +2321,9 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
           leaving a tall column beside short ones */}
       <div className="lg:columns-2 [column-gap:1rem]">
         <div className="break-inside-avoid mb-4">
+          <BrandFitCard profile={profile} engagement={engagement} blacklistHits={blacklistHits} initialBrief={initialBrief} />
+        </div>
+        <div className="break-inside-avoid mb-4">
           <CreatorAI
             body={{
               handle: profile.handle,
@@ -2398,6 +2469,72 @@ function AuthenticityCard({ profile, engagement }: { profile: ProfileData; engag
           </div>
           <div className="mt-1 flex justify-between text-[10px] text-[#aaa]"><span>newest</span><span>older</span></div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Brand-fit card: paste a brand brief, get a 0-100 fit score with a transparent
+// factor breakdown — all from public signals, no fabricated data. Brief seeds
+// from the search prompt so it scores immediately, and stays editable.
+function BrandFitCard({ profile, engagement, blacklistHits, initialBrief }: { profile: ProfileData; engagement: number | null; blacklistHits: { brand: string }[]; initialBrief: string }) {
+  const [brief, setBrief] = useState(initialBrief);
+  const report = brandFit(profile, engagement, brief, blacklistHits);
+  const R = 26, C = 2 * Math.PI * R;
+  const dash = report ? (report.score / 100) * C : 0;
+  const barColor = (v: number) => (v >= 70 ? '#10b981' : v >= 50 ? '#f59e0b' : '#ef4444');
+  const txtColor = (v: number) => (v >= 70 ? '#059669' : v >= 50 ? '#b45309' : '#dc2626');
+
+  return (
+    <div className="rounded-2xl border border-[#e3def9] bg-white p-4" style={{ animation: 'ii-fadeup .4s .1s both' }}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-2">Brand fit</div>
+      <textarea
+        value={brief}
+        onChange={(e) => setBrief(e.target.value)}
+        rows={2}
+        placeholder="Describe the brand or brief — e.g. sustainable skincare for Gen-Z women in metro cities"
+        className="w-full px-2.5 py-2 rounded-lg border border-[#e3def9] text-[12px] resize-none focus:outline-none focus:border-[#6C4DF6]"
+      />
+      {!report ? (
+        <p className="mt-2 text-[12px] text-[#888]">Enter a brand brief above to score how well this creator fits.</p>
+      ) : (
+        <>
+          <div className="mt-3 flex items-center gap-4">
+            <svg width="64" height="64" viewBox="0 0 64 64" className="shrink-0">
+              <circle cx="32" cy="32" r={R} fill="none" stroke="#eee" strokeWidth="7" />
+              <circle cx="32" cy="32" r={R} fill="none" stroke={report.color} strokeWidth="7" strokeLinecap="round" strokeDasharray={`${dash} ${C}`} transform="rotate(-90 32 32)" style={{ transition: 'stroke-dasharray .5s ease' }} />
+              <text x="32" y="33" textAnchor="middle" dominantBaseline="central" fontSize="17" fontWeight="700" fill="#111">{report.score}</text>
+            </svg>
+            <div className="min-w-0">
+              <div className="text-[14px] font-bold" style={{ color: report.color }}>{report.band}</div>
+              <p className="text-[12px] text-[#666] leading-snug">{report.verdict}</p>
+            </div>
+          </div>
+          <div className="mt-3.5 space-y-2.5">
+            {report.factors.map((f) => (
+              <div key={f.key}>
+                <div className="flex items-center justify-between text-[12px]">
+                  <span className="text-[#444] font-medium">{f.label}</span>
+                  <span className="tabular-nums font-semibold" style={{ color: txtColor(f.value) }}>{f.value}</span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${f.value}%`, background: barColor(f.value) }} />
+                </div>
+                <p className="mt-1 text-[11px] text-[#888] leading-snug">{f.detail}</p>
+              </div>
+            ))}
+          </div>
+          {report.missed.length > 0 && (
+            <div className="mt-3">
+              <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Brief terms not found</div>
+              <div className="flex flex-wrap gap-1.5">
+                {report.missed.map((m) => (
+                  <span key={m} className="px-2 py-0.5 rounded-full text-[11px] bg-[#fafafc] border border-[#eee] text-[#999]">{m}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
