@@ -2418,6 +2418,15 @@ const REEL_CURVE = [
 const VIEWS_PER_LIKE = 16;
 const hLabel = (h: number) => (h < 24 ? `${h}h` : `${h / 24}d`);
 
+// Round a value up to a clean 1/2/5 × 10ⁿ so axis labels read nicely.
+function niceCeil(v: number): number {
+  if (v <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  const r = v / pow;
+  const step = r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10;
+  return step * pow;
+}
+
 interface ActualReel { ageH: number; views: number; live: boolean }
 interface Forecast { expected: number; low: number; high: number; basisCount: number; avgLikes: number; curve: { h: number; low: number; exp: number; high: number }[]; actuals: ActualReel[] }
 
@@ -2472,14 +2481,17 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
       </div>
     );
   }
-  const W = 300, H = 120, PAD_L = 4, PAD_B = 16;
+  const W = 320, H = 124, PAD_L = 34, PAD_R = 10, PAD_T = 8, PAD_B = 16;
   const n = f.curve.length;
   const liveCount = f.actuals.filter((a) => a.live).length;
-  // Y-scale must contain the projection AND any real reel that overshot it.
-  const maxY = Math.max(f.high, ...f.actuals.map((a) => a.views), 1);
-  const x = (i: number) => PAD_L + (i / (n - 1)) * (W - PAD_L * 2);
-  const xH = (h: number) => PAD_L + (Math.min(h, 168) / 168) * (W - PAD_L * 2);
-  const y = (v: number) => (H - PAD_B) - (v / maxY) * (H - PAD_B - 4);
+  // Y-scale must contain the projection AND any real reel that overshot it,
+  // rounded up to a clean number so the axis labels read nicely.
+  const rawMax = Math.max(f.high, ...f.actuals.map((a) => a.views), 1);
+  const axisMax = niceCeil(rawMax);
+  const x = (i: number) => PAD_L + (i / (n - 1)) * (W - PAD_L - PAD_R);
+  const xH = (h: number) => PAD_L + (Math.min(h, 168) / 168) * (W - PAD_L - PAD_R);
+  const y = (v: number) => (H - PAD_B) - (v / axisMax) * (H - PAD_B - PAD_T);
+  const yTicks = [0, axisMax / 2, axisMax];
   const lineExp = f.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(c.exp).toFixed(1)}`).join(' ');
   const band =
     f.curve.map((c, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(c.high).toFixed(1)}`).join(' ') +
@@ -2506,6 +2518,14 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
       <div className="text-[12px] text-[#999] mb-2">Likely range {fmt(f.low)}–{fmt(f.high)} · from {f.basisCount} recent reels (typically {fmt(f.avgLikes)} likes)</div>
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
+        {/* Y-axis: horizontal gridlines + view-count labels */}
+        {yTicks.map((t, i) => (
+          <g key={`y${i}`}>
+            <line x1={PAD_L} y1={y(t)} x2={W - PAD_R} y2={y(t)} stroke="#efecfb" strokeWidth="1" />
+            <text x={PAD_L - 5} y={y(t) + 3} textAnchor="end" fontSize="8" fill="#bbb">{t === 0 ? '0' : fmt(t)}</text>
+          </g>
+        ))}
+        <text x={9} y={y(axisMax / 2)} textAnchor="middle" fontSize="8" fill="#bbb" transform={`rotate(-90 9 ${y(axisMax / 2)})`}>views</text>
         <path d={band} fill="#ede9fd" opacity="0.7" />
         <path d={lineExp} fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
           pathLength={1} strokeDasharray={1} strokeDashoffset={1} style={{ animation: 'ii-trace 1.1s .15s ease-out forwards' }} />
