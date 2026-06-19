@@ -381,7 +381,9 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string, mode: 'db' | '
 
 // Brands for the two scrolling lines. `slug` maps to /public/logos/<slug>.png —
 // drop those files in and they replace the text wordmark automatically.
-const ROW_A = [
+type Logo = { name: string; slug: string; big?: boolean };
+
+const ROW_A: Logo[] = [
   { name: 'GUESS', slug: 'guess' },
   { name: 'Heineken', slug: 'heineken' },
   { name: 'H&M', slug: 'hm' },
@@ -390,11 +392,11 @@ const ROW_A = [
   { name: 'Marriott', slug: 'marriott' },
   { name: 'Nykaa', slug: 'nykaa' },
   { name: 'PHILIPS', slug: 'philips' },
-  { name: 'Myntra', slug: 'myntra' },
-  { name: 'Unilever', slug: 'unilever' },
+  { name: 'Myntra', slug: 'myntra', big: true },
+  { name: 'Unilever', slug: 'unilever', big: true },
 ];
 
-const ROW_B = [
+const ROW_B: Logo[] = [
   { name: 'Nike', slug: 'nike' },
   { name: 'adidas', slug: 'adidas' },
   { name: 'Samsung', slug: 'samsung' },
@@ -423,7 +425,7 @@ function LogoMarquee() {
           <div key={ri} className="flex overflow-hidden">
             <div className={`flex items-center gap-20 pr-20 ${row.dir}`} style={{ width: 'max-content' }}>
               {[...row.items, ...row.items].map((b, i) => (
-                <LogoItem key={`${b.slug}-${i}`} name={b.name} slug={b.slug} />
+                <LogoItem key={`${b.slug}-${i}`} name={b.name} slug={b.slug} big={b.big} />
               ))}
             </div>
           </div>
@@ -437,7 +439,7 @@ function LogoMarquee() {
   );
 }
 
-function LogoItem({ name, slug }: { name: string; slug: string }) {
+function LogoItem({ name, slug, big }: { name: string; slug: string; big?: boolean }) {
   const [err, setErr] = useState(false);
   if (err) {
     return (
@@ -452,7 +454,7 @@ function LogoItem({ name, slug }: { name: string; slug: string }) {
       src={`/logos/${slug}.png`}
       alt={name}
       onError={() => setErr(true)}
-      className="h-6 md:h-7 w-auto object-contain hover:scale-105 transition select-none"
+      className={`${big ? 'h-10 md:h-12' : 'h-6 md:h-7'} w-auto object-contain hover:scale-105 transition select-none`}
     />
   );
 }
