@@ -442,6 +442,8 @@ export function LiveSearch({
   const [activeIdx, setActiveIdx] = useState(-1);
   // result filters / sort
   const [minFollowers, setMinFollowers] = useState(0);
+  const [maxFollowers, setMaxFollowers] = useState(0);
+  const [minER, setMinER] = useState(0);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement'>('relevance');
@@ -897,6 +899,8 @@ export function LiveSearch({
     const filtered = run.results.filter(
       (p) =>
         p.followers >= minFollowers &&
+        (maxFollowers === 0 || p.followers <= maxFollowers) &&
+        (p.engagement ?? 0) >= minER &&
         (!verifiedOnly || p.is_verified) &&
         (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low') &&
         (!hideContacted || !isContacted(p.username)),
@@ -1234,6 +1238,32 @@ export function LiveSearch({
               <option value={10000}>10K+</option>
               <option value={100000}>100K+</option>
               <option value={1000000}>1M+</option>
+            </select>
+            <select
+              value={maxFollowers}
+              onChange={(e) => setMaxFollowers(Number(e.target.value))}
+              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
+              title="Cap follower count — useful for finding micro / nano creators"
+            >
+              <option value={0}>No max</option>
+              <option value={10000}>Under 10K</option>
+              <option value={50000}>Under 50K</option>
+              <option value={100000}>Under 100K</option>
+              <option value={500000}>Under 500K</option>
+              <option value={1000000}>Under 1M</option>
+            </select>
+            <select
+              value={minER}
+              onChange={(e) => setMinER(Number(e.target.value))}
+              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
+              title="Minimum engagement rate"
+            >
+              <option value={0}>Any ER</option>
+              <option value={1}>1%+ ER</option>
+              <option value={2}>2%+ ER</option>
+              <option value={3}>3%+ ER</option>
+              <option value={5}>5%+ ER</option>
+              <option value={8}>8%+ ER</option>
             </select>
             <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white cursor-pointer select-none">
               <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="accent-[#6C4DF6]" />

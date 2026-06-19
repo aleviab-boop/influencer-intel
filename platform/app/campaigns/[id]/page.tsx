@@ -282,6 +282,9 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [addingAll, setAddingAll] = useState(false);
+  const [minFollowers, setMinFollowers] = useState(0);
+  const [maxFollowers, setMaxFollowers] = useState(0);
+  const [minER, setMinER] = useState(0);
 
   async function run() {
     const p = prompt.trim();
@@ -319,10 +322,17 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
     }
   }
 
+  const shown = results.filter(
+    (r) =>
+      r.followers >= minFollowers &&
+      (maxFollowers === 0 || r.followers <= maxFollowers) &&
+      (r.engagement ?? 0) >= minER,
+  );
+
   async function addAll() {
     setAddingAll(true);
     try {
-      for (const r of results) {
+      for (const r of shown) {
         if (r.creator_id && !existing.has(r.creator_id) && !added.has(r.creator_id)) await add(r);
       }
     } finally {
@@ -330,7 +340,7 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
     }
   }
 
-  const addableCount = results.filter((r) => r.creator_id && !existing.has(r.creator_id) && !added.has(r.creator_id)).length;
+  const addableCount = shown.filter((r) => r.creator_id && !existing.has(r.creator_id) && !added.has(r.creator_id)).length;
 
   return (
     <div className="mt-6 p-4 rounded-2xl bg-white border border-border shadow-card">
@@ -350,14 +360,39 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
 
       {results.length > 0 && (
         <div className="mt-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
+            <select value={minFollowers} onChange={(e) => setMinFollowers(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900">
+              <option value={0}>Any followers</option>
+              <option value={1000}>1K+</option>
+              <option value={10000}>10K+</option>
+              <option value={100000}>100K+</option>
+              <option value={1000000}>1M+</option>
+            </select>
+            <select value={maxFollowers} onChange={(e) => setMaxFollowers(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900" title="Cap follower count — useful for micro / nano creators">
+              <option value={0}>No max</option>
+              <option value={10000}>Under 10K</option>
+              <option value={50000}>Under 50K</option>
+              <option value={100000}>Under 100K</option>
+              <option value={500000}>Under 500K</option>
+              <option value={1000000}>Under 1M</option>
+            </select>
+            <select value={minER} onChange={(e) => setMinER(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900" title="Minimum engagement rate">
+              <option value={0}>Any ER</option>
+              <option value={1}>1%+ ER</option>
+              <option value={2}>2%+ ER</option>
+              <option value={3}>3%+ ER</option>
+              <option value={5}>5%+ ER</option>
+              <option value={8}>8%+ ER</option>
+            </select>
+          </div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[12px] text-ink-500">{results.length} matches · {addableCount} new</span>
+            <span className="text-[12px] text-ink-500">{shown.length} of {results.length} matches · {addableCount} new</span>
             <button onClick={addAll} disabled={addingAll || addableCount === 0} className="text-[12px] font-semibold disabled:opacity-50" style={{ color: ACCENT }}>
               {addingAll ? 'Adding…' : `+ Add all (${addableCount})`}
             </button>
           </div>
           <div className="max-h-[320px] overflow-auto rounded-xl border border-border-soft divide-y divide-border-soft">
-            {results.map((r) => {
+            {shown.map((r) => {
               const isAdded = (r.creator_id && (existing.has(r.creator_id) || added.has(r.creator_id))) || false;
               const canAdd = Boolean(r.creator_id) && !isAdded;
               return (
@@ -382,6 +417,9 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
                 </div>
               );
             })}
+            {shown.length === 0 && (
+              <div className="px-3 py-4 text-[12px] text-ink-400 text-center">No matches fit these filters — loosen the follower range or ER.</div>
+            )}
           </div>
         </div>
       )}
