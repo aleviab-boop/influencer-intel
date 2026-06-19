@@ -2481,7 +2481,7 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
       </div>
     );
   }
-  const W = 320, H = 124, PAD_L = 34, PAD_R = 10, PAD_T = 8, PAD_B = 16;
+  const W = 320, H = 134, PAD_L = 34, PAD_R = 10, PAD_T = 8, PAD_B = 26;
   const n = f.curve.length;
   const liveCount = f.actuals.filter((a) => a.live).length;
   // Y-scale must contain the projection AND any real reel that overshot it,
@@ -2541,11 +2541,17 @@ function ReelForecast({ profile }: { profile: ProfileData }) {
             <title>{`${fmt(a.views)} est. views · ${a.live ? `${Math.round(a.ageH)}h old (still gaining)` : 'settled'}`}</title>
           </circle>
         ))}
+        {/* X-axis: baseline, tick marks, time labels + caption */}
+        <line x1={PAD_L} y1={y(0)} x2={W - PAD_R} y2={y(0)} stroke="#d9d3f2" strokeWidth="1" />
         {f.curve.map((c, i) => (
           (i === 0 || i === 4 || i === 6 || i === n - 1) ? (
-            <text key={`t${i}`} x={x(i)} y={H - 4} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize="9" fill="#aaa">{hLabel(c.h)}</text>
+            <g key={`t${i}`}>
+              <line x1={x(i)} y1={y(0)} x2={x(i)} y2={y(0) + 4} stroke="#c9c2e8" strokeWidth="1" />
+              <text x={x(i)} y={y(0) + 14} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'} fontSize="9" fill="#888">{hLabel(c.h)}</text>
+            </g>
           ) : null
         ))}
+        <text x={PAD_L + (W - PAD_L - PAD_R) / 2} y={H - 2} textAnchor="middle" fontSize="8" fill="#bbb">time after posting</text>
       </svg>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[10px] text-[#999]">
