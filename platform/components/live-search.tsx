@@ -627,6 +627,17 @@ export function LiveSearch({
   // outreach "contacted" tracking (localStorage) — handle -> first-contacted ms
   const [contacted, setContacted] = useState<Record<string, number>>({});
   const [hideContacted, setHideContacted] = useState(false);
+  // When an ER-based filter is active, eagerly enrich every result (not just the
+  // rows scrolled into view) so the filter has real engagement to act on. ER
+  // isn't returned at search time, so without this the filter would see mostly
+  // zeros. enrichRow de-dupes via enrichingRef, so this is safe to re-run.
+  useEffect(() => {
+    if (!run || (minER === 0 && !healthyOnly)) return;
+    for (const p of run.results.slice(0, 60)) {
+      if (!(p.username in liveStats)) void enrichRow(p.username);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, minER, healthyOnly]);
   // follow-up nudges: handles marked as done/replied, + the queue panel
   const [followupDone, setFollowupDone] = useState<string[]>([]);
   const [showFollowups, setShowFollowups] = useState(false);
@@ -988,15 +999,24 @@ export function LiveSearch({
 
   const shown = (() => {
     if (!run) return [] as LiveProfile[];
-    const filtered = run.results.filter(
-      (p) =>
-        p.followers >= minFollowers &&
-        (maxFollowers === 0 || p.followers <= maxFollowers) &&
-        (p.engagement ?? 0) >= minER &&
+    const filtered = run.results.filter((p) => {
+      // Filter on the live-enriched stats where available, falling back to the
+      // search-time values. ER arrives lazily, so treat unknown ER as "keep"
+      // (don't hide a creator just because we haven't scraped them yet) — the
+      // list converges as enrichment streams in.
+      const ls = liveStats[p.username];
+      const followers = ls?.followers ?? p.followers;
+      const er = ls?.engagement ?? p.engagement;
+      const erKnown = er != null && er > 0;
+      return (
+        followers >= minFollowers &&
+        (maxFollowers === 0 || followers <= maxFollowers) &&
+        (minER === 0 || !erKnown || er >= minER) &&
         (!verifiedOnly || p.is_verified) &&
-        (!healthyOnly || authenticityFlag(p.followers, p.engagement) !== 'low') &&
-        (!hideContacted || !isContacted(p.username)),
-    );
+        (!healthyOnly || authenticityFlag(followers, er ?? undefined) !== 'low') &&
+        (!hideContacted || !isContacted(p.username))
+      );
+    });
     const sorted = [...filtered];
     if (sortBy === 'followers_desc') sorted.sort((a, b) => b.followers - a.followers);
     else if (sortBy === 'followers_asc') sorted.sort((a, b) => a.followers - b.followers);
