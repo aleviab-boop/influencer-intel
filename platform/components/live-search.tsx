@@ -2409,18 +2409,18 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
           </div>
         )}
 
-        <div className="mt-auto pt-5 flex gap-2">
-          <button onClick={onDraft} className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+        <div className="mt-auto pt-5 grid grid-cols-2 gap-2">
+          <button onClick={onDraft} className="min-h-[44px] px-3 py-2 rounded-lg text-white text-[13px] font-semibold flex items-center justify-center text-center leading-tight transition-all hover:-translate-y-0.5 hover:shadow-lg hover:brightness-105" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
             ✦ Draft outreach
           </button>
-          <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
+          <a href={`https://instagram.com/${profile.handle}`} target="_blank" rel="noreferrer" className="min-h-[44px] px-3 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] flex items-center justify-center text-center leading-tight transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
             Open Instagram ↗
           </a>
-          <button onClick={copySummary} className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: copied ? '#059669' : ACCENT, borderColor: copied ? '#a7f3d0' : undefined }}>
+          <button onClick={copySummary} className="min-h-[44px] px-3 py-2 rounded-lg text-[13px] font-semibold border flex items-center justify-center text-center leading-tight transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: copied ? '#059669' : ACCENT, borderColor: copied ? '#a7f3d0' : '#e3def9' }}>
             {copied ? '✓ Copied' : '⧉ Copy summary'}
           </button>
           {onRefresh && (
-            <button onClick={onRefresh} disabled={refreshing} title="Re-fetch live followers & engagement from Instagram now" className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff] disabled:opacity-60" style={{ color: ACCENT }}>
+            <button onClick={onRefresh} disabled={refreshing} title="Re-fetch live followers & engagement from Instagram now" className="min-h-[44px] px-3 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] flex items-center justify-center text-center leading-tight gap-1 transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff] disabled:opacity-60" style={{ color: ACCENT }}>
               <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>⟳</span> {refreshing ? 'Refreshing…' : 'Refresh live'}
             </button>
           )}
