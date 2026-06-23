@@ -48,15 +48,6 @@ interface SavedCreator {
   engagement?: number | null;
 }
 
-interface Lookalike {
-  handle: string;
-  full_name: string;
-  is_verified: boolean;
-  profile_pic_url: string | null;
-  count: number; // how many saved creators suggested this account
-  from: string[]; // which saved creators suggested it
-}
-
 interface ProfileData {
   handle: string;
   full_name: string;
@@ -654,34 +645,6 @@ export function LiveSearch({
   const [compareFor, setCompareFor] = useState<string[] | null>(null);
   const [compareData, setCompareData] = useState<Record<string, ProfileData | null>>({});
   const [compareLoading, setCompareLoading] = useState(false);
-  // lookalike expansion: fan out from saved creators to similar accounts
-  const [showLookalikes, setShowLookalikes] = useState(false);
-  const [lookalikes, setLookalikes] = useState<Lookalike[]>([]);
-  const [lookalikesLoading, setLookalikesLoading] = useState(false);
-  const [lookalikesReached, setLookalikesReached] = useState<{ reached: number; total: number } | null>(null);
-
-  async function findLookalikes() {
-    const handles = savedCreators.map((s) => s.username);
-    if (handles.length === 0) return;
-    setShowSaved(false);
-    setShowLookalikes(true);
-    setLookalikesLoading(true);
-    setLookalikes([]);
-    setLookalikesReached(null);
-    try {
-      const d = await fetch('/api/lookalikes', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ handles }),
-      }).then((r) => r.json());
-      if (d && !d.error) {
-        setLookalikes((d.lookalikes ?? []) as Lookalike[]);
-        setLookalikesReached({ reached: d.seeds_reached ?? 0, total: (d.seeds ?? []).length });
-      }
-    } catch { /* ignore */ } finally {
-      setLookalikesLoading(false);
-    }
-  }
 
   function toggleCompare(handle: string) {
     setCompareSel((s) => {
@@ -1987,16 +1950,6 @@ export function LiveSearch({
                 ⚖ Compare {compareSel.size} {compareSel.size < 2 ? '(pick 2+)' : 'side by side'}
               </button>
             )}
-            {savedCreators.length > 0 && (
-              <button
-                onClick={() => void findLookalikes()}
-                className="mx-5 mt-3 px-4 py-2.5 rounded-xl text-[13px] font-semibold border-2 hover:bg-[#faf9ff]"
-                style={{ color: ACCENT, borderColor: ACCENT }}
-                title="Find more creators like the ones you've saved"
-              >
-                ✨ Find {savedCreators.length === 1 ? 'lookalikes' : 'lookalikes from all'}
-              </button>
-            )}
             <div className="px-5 py-4 border-t border-[#eee] flex items-center gap-2">
               <button
                 onClick={() => void runBulkDraft(savedCreators, 'dm')}
@@ -2020,64 +1973,6 @@ export function LiveSearch({
           onClose={() => setCompareFor(null)}
           onDraft={(h) => { setCompareFor(null); void openDraft({ username: h } as LiveProfile); }}
         />
-      )}
-
-      {showLookalikes && (
-        <div className="fixed inset-0 z-[55] flex justify-end bg-black/30" onClick={() => setShowLookalikes(false)}>
-          <div className="w-full max-w-md h-full bg-white shadow-2xl flex flex-col" style={{ animation: 'ii-slidein .25s both' }} onClick={(e) => e.stopPropagation()}>
-            <style>{`@keyframes ii-slidein{from{transform:translateX(100%)}to{transform:none}}`}</style>
-            <div className="px-5 py-4 flex items-center justify-between text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
-              <div>
-                <div className="text-[15px] font-semibold">Lookalikes</div>
-                <div className="text-[12px] text-white/80">More creators like the ones you saved</div>
-              </div>
-              <button onClick={() => setShowLookalikes(false)} className="text-white/80 hover:text-white text-xl leading-none">×</button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {lookalikesLoading && (
-                <div className="px-5 py-10 text-center text-[13px] text-[#999]">Finding lookalikes from your saved creators…</div>
-              )}
-              {!lookalikesLoading && lookalikes.length === 0 && (
-                <div className="px-5 py-10 text-center text-[13px] text-[#999]">
-                  No lookalikes found.
-                  {lookalikesReached && lookalikesReached.reached === 0 && (
-                    <div className="mt-2 text-[12px]">The live crawl couldn’t reach Instagram right now — try again in a moment.</div>
-                  )}
-                </div>
-              )}
-              {!lookalikesLoading && lookalikes.length > 0 && (
-                <div className="divide-y divide-[#f3f3f3]">
-                  {lookalikesReached && (
-                    <div className="px-5 py-2.5 text-[12px] text-[#999] bg-[#faf9ff]">
-                      {lookalikes.length} creators · from {lookalikesReached.reached}/{lookalikesReached.total} saved
-                    </div>
-                  )}
-                  {lookalikes.map((l) => (
-                    <div key={l.handle} className="flex items-center gap-3 px-5 py-3">
-                      <Avatar name={l.full_name || l.handle} url={l.profile_pic_url} handle={l.handle} />
-                      <div className="min-w-0 flex-1">
-                        <button onClick={() => { setShowLookalikes(false); void openProfile(l.handle); }} className="flex items-center gap-1 text-[14px] font-semibold text-[#111] truncate hover:underline">
-                          @{l.handle}{l.is_verified && <span style={{ color: ACCENT }}>✓</span>}
-                        </button>
-                        <div className="text-[12px] text-[#999] truncate">
-                          {l.full_name ? `${l.full_name} · ` : ''}{l.count > 1 ? `suggested by ${l.count} of your creators` : `via @${l.from[0]}`}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => toggleSaved({ username: l.handle, full_name: l.full_name, followers: 0, profile_pic_url: l.profile_pic_url } as LiveProfile)}
-                        title={isSaved(l.handle) ? 'Saved — click to remove' : 'Save creator'}
-                        className="w-8 h-8 grid place-items-center rounded-lg border transition-colors shrink-0"
-                        style={{ color: ACCENT, borderColor: isSaved(l.handle) ? ACCENT : '#e3def9', background: isSaved(l.handle) ? '#f4f0ff' : undefined }}
-                      >
-                        {isSaved(l.handle) ? '✓' : '+'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       )}
 
     </div>
