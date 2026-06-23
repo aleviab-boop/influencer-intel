@@ -14,7 +14,7 @@ async function dbProfileOr404(handle: string): Promise<NextResponse> {
     const rows = await getBolticClient().query<Record<string, unknown>>(
       `SELECT handle, display_name, bio, primary_category, niche, follower_count,
               following_count, posts_count, engagement_rate, profile_photo_url,
-              profile_url, is_verified, primary_city
+              profile_url, is_verified, primary_city, raw_metadata
        FROM creators WHERE handle = $1 LIMIT 1`,
       [handle.toLowerCase()],
     );
@@ -23,6 +23,12 @@ async function dbProfileOr404(handle: string): Promise<NextResponse> {
     const bio = (c.bio as string) ?? '';
     const contact = extractContact(bio, { externalUrl: (c.profile_url as string) ?? null });
     const er = c.engagement_rate != null ? Math.round(Number(c.engagement_rate) * 1000) / 10 : null;
+    // Serve the recent posts / collabs cached on the last successful live crawl,
+    // so the snapshot's analytics still work while Instagram is throttling us.
+    const meta = (c.raw_metadata as Record<string, unknown> | null) ?? {};
+    const cachedRecent = Array.isArray(meta.recent_posts) ? meta.recent_posts : [];
+    const cachedCollabs = Array.isArray(meta.collabs) ? meta.collabs : [];
+    const cachedSponsored = typeof meta.sponsored_posts === 'number' ? meta.sponsored_posts : 0;
     return NextResponse.json({
       handle: c.handle,
       full_name: (c.display_name as string) ?? '',
@@ -37,12 +43,12 @@ async function dbProfileOr404(handle: string): Promise<NextResponse> {
       external_url: contact.link,
       email: contact.email,
       phone: contact.phone,
-      recent: [],
+      recent: cachedRecent,
       related: [],
-      collabs: [],
-      sponsored_posts: 0,
+      collabs: cachedCollabs,
+      sponsored_posts: cachedSponsored,
       engagement: er,
-      source: 'db',
+      source: cachedRecent.length > 0 ? 'db_cached' : 'db',
     });
   } catch {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
@@ -53,20 +59,28 @@ async function dbProfileOr404(handle: string): Promise<NextResponse> {
 // creator into raw_metadata, merging without clobbering other keys (e.g.
 // vision). Powers the competitor "who works with whom" tool for any creator
 // whose profile has been viewed. Failures are swallowed — never block the read.
-async function persistCollabs(
+async function persistProfileCache(
   handle: string,
   collabs: { handle: string; count: number }[],
   sponsored: number,
+  recent: unknown[],
 ): Promise<void> {
   if (!handle) return;
   try {
+    // Cache the recent posts too (only when we actually got some — never clobber
+    // a good cache with an empty crawl), so the DB fallback can serve real posts
+    // when a later live fetch is throttled.
+    const setRecent = recent.length > 0;
     await getBolticClient().query(
       `UPDATE creators
          SET raw_metadata = COALESCE(raw_metadata, '{}'::jsonb)
-               || jsonb_build_object('collabs', $2::jsonb, 'sponsored_posts', $3::int),
+               || jsonb_build_object('collabs', $2::jsonb, 'sponsored_posts', $3::int)
+               ${setRecent ? `|| jsonb_build_object('recent_posts', $4::jsonb, 'recent_cached_at', $5::text)` : ''},
              updated_at = now()
        WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
-      [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored],
+      setRecent
+        ? [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored, JSON.stringify(recent), new Date().toISOString()]
+        : [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored],
     );
   } catch {
     /* non-fatal */
@@ -148,10 +162,9 @@ export async function GET(req: NextRequest) {
       .slice(0, 12)
       .map(([handle, count]) => ({ handle, count }));
 
-    // Persist the detected collabs so the competitor tool ("who works with
-    // whom") can match against them later — best-effort, never blocks the
-    // response.
-    void persistCollabs(u.username, collabs, sponsoredPosts);
+    // Persist the detected collabs + recent posts so the competitor tool and
+    // the DB fallback can use them later — best-effort, never blocks the response.
+    void persistProfileCache(u.username, collabs, sponsoredPosts, recent);
 
     const contact = extractContact(u.biography, {
       businessEmail: u.business_email,
