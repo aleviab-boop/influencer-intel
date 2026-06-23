@@ -23,7 +23,8 @@
     "db:fix": "npm --workspace shared run db:fix",
     "db:check-session": "npm --workspace shared run db:check-session",
     "typecheck": "npm --workspace shared run typecheck && npm --workspace scraper run typecheck && npm --workspace platform run typecheck",
-    "relay": "node tools/ig-relay.mjs"
+    "relay": "node tools/ig-relay.mjs",
+    "warm": "node scripts/warm-cache.mjs"
   },
   "engines": {
     "node": ">=20"
