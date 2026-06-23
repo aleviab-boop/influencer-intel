@@ -2322,6 +2322,9 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
               <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>⟳</span> {refreshing ? 'Refreshing…' : 'Refresh live'}
             </button>
           )}
+          <a href={`/report/${encodeURIComponent(profile.handle)}${initialBrief ? `?brief=${encodeURIComponent(initialBrief)}` : ''}`} target="_blank" rel="noreferrer" title="Open a print-ready one-page report for this creator" className="col-span-2 min-h-[44px] px-3 py-2 rounded-lg text-[13px] font-semibold border border-[#e3def9] flex items-center justify-center text-center leading-tight transition-all hover:-translate-y-0.5 hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
+            ⤓ Export one-pager
+          </a>
         </div>
       </div>
 
