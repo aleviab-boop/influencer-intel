@@ -128,6 +128,11 @@ export async function POST(req: NextRequest) {
   // network so the searched creator surfaces, then the database fills below.
   const results = Array.from(byUser.values())
     .sort((a, b) => {
+      // Location-matched creators lead, so a real local creator outranks a
+      // bigger non-local one on a "...in <place>" query.
+      const am = a.loc_match ? 0 : 1;
+      const bm = b.loc_match ? 0 : 1;
+      if (am !== bm) return am - bm;
       const al = a.from === 'live' ? 0 : 1;
       const bl = b.from === 'live' ? 0 : 1;
       if (al !== bl) return al - bl;

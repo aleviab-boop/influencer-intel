@@ -60,6 +60,7 @@ export interface LiveProfile {
   link?: string | null;
   creator_id?: string; // creators.id, once known (DB rows + persisted live rows)
   from?: 'db' | 'live';
+  loc_match?: boolean; // matched a place token in the location field (DB search)
 }
 
 export interface LiveDiscoveryResult {

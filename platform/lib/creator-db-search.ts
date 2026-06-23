@@ -42,6 +42,7 @@ interface Row {
   is_verified: boolean | null;
   profile_photo_url: string | null;
   score: number | string;
+  loc_match: boolean | null;
 }
 
 export async function searchCreatorsInDb(
@@ -53,15 +54,24 @@ export async function searchCreatorsInDb(
   const params = tokens.map((t) => `%${t.toLowerCase()}%`);
   const scoreExpr = tokens.map((_, i) => tokenScore(`$${i + 1}`)).join(' + ');
   const whereAny = tokens.map((_, i) => tokenMatches(`$${i + 1}`)).join(' or ');
+  // Does any token hit the LOCATION field? When a query names a place
+  // ("...in pune"), a creator actually based there must outrank a bigger but
+  // non-local account — otherwise reach drags mega-celebs to the top of a local
+  // search. Only real place tokens match the location field, so this is inert
+  // for queries without a location, and degrades gracefully when the DB has no
+  // local creators (everyone is loc_hit=false → falls back to relevance).
+  const locExpr = tokens.map((_, i) => `${LOC_TXT} like $${i + 1}`).join(' or ');
 
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
-           engagement_rate, is_verified, profile_photo_url, (${scoreExpr}) as score
+           engagement_rate, is_verified, profile_photo_url,
+           (${scoreExpr}) as score, (${locExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
-    -- Relevance first; then prioritise the user's own curated/imported list
-    -- (source='manual') over scraped creators; reach only as a final tiebreak.
-    order by score desc,
+    -- Location match first (honour "in <place>"), then weighted relevance, then
+    -- the user's own curated/imported list (source='manual'), reach last.
+    order by (${locExpr}) desc,
+             score desc,
              coalesce(source = 'manual', false) desc,
              follower_count desc nulls last
     limit $${tokens.length + 1}
@@ -95,6 +105,7 @@ export async function searchCreatorsInDb(
       link: contact.link,
       creator_id: r.id,
       from: 'db' as const,
+      loc_match: Boolean(r.loc_match),
       };
     })
     .filter((p) => p.username && p.score > 0);
