@@ -1496,7 +1496,7 @@ export function LiveSearch({
             </div>
           ) : (
             <div ref={tableWrapRef} className="overflow-x-auto rounded-xl border border-[#eee]">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse [&_th]:px-2 [&_td]:px-2">
                 <thead>
                   <tr className="bg-[#faf9ff] text-[12px] uppercase tracking-wider text-[#888]">
                     <th className="px-3 py-2.5 w-8">
@@ -1633,7 +1633,7 @@ export function LiveSearch({
                           <button
                             onClick={() => toggleSaved(p)}
                             title={isSaved(p.username) ? 'Saved — click to remove' : 'Save creator'}
-                            className="w-8 h-8 grid place-items-center rounded-lg border transition-colors"
+                            className="w-7 h-7 grid place-items-center rounded-lg border transition-colors"
                             style={{ color: ACCENT, borderColor: isSaved(p.username) ? ACCENT : '#e3def9', background: isSaved(p.username) ? '#f4f0ff' : undefined }}
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill={isSaved(p.username) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
@@ -1645,7 +1645,7 @@ export function LiveSearch({
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>
                           </IconBtn>
                           {p.creator_id && (recruited[p.creator_id] ? (
-                            <span className="w-8 h-8 grid place-items-center rounded-lg text-emerald-600" title="Added to campaign">
+                            <span className="w-7 h-7 grid place-items-center rounded-lg text-emerald-600" title="Added to campaign">
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10" /></svg>
                             </span>
                           ) : (
@@ -1662,7 +1662,7 @@ export function LiveSearch({
                             target="_blank"
                             rel="noreferrer"
                             title="Open on Instagram"
-                            className="w-8 h-8 grid place-items-center rounded-lg border border-[#e3def9] hover:bg-[#faf9ff]"
+                            className="w-7 h-7 grid place-items-center rounded-lg border border-[#e3def9] hover:bg-[#faf9ff]"
                             style={{ color: ACCENT }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M9 7h8v8" /></svg>
@@ -3016,7 +3016,7 @@ function IconBtn({ children, onClick, title, disabled }: { children: React.React
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="w-8 h-8 grid place-items-center rounded-lg border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50 transition-colors"
+      className="w-7 h-7 grid place-items-center rounded-lg border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50 transition-colors"
       style={{ color: ACCENT }}
     >
       {children}
