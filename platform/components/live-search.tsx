@@ -24,6 +24,8 @@ interface LiveProfile {
   link?: string | null;
   creator_id?: string;
   from?: 'db' | 'live';
+  loc_match?: boolean;
+  curated?: boolean;
 }
 
 interface Program {
@@ -1042,11 +1044,20 @@ export function LiveSearch({
     else if (sortBy === 'engagement') sorted.sort((a, b) => erOf(b) - erOf(a));
     else if (sortBy === 'fit') sorted.sort((a, b) => fitOf(b) - fitOf(a));
     else {
-      // 'relevance' — quality-aware: text-relevance score blended with an ER
-      // nudge, with the server's original order (curated list first, then
-      // followers) preserved as a stable tiebreak when adjusted scores tie.
+      // 'relevance' — mirror the server's ranking hierarchy so the quality nudge
+      // can't cross the important boundaries: location matches lead, then the
+      // user's curated creators (within the location bucket), and ONLY inside
+      // that bucket do we apply the ER nudge + text score. Without this, a
+      // curated local creator with low live ER would get demoted below a
+      // healthy-ER mega-celeb, undoing the location/curated ranking.
       const baseOrder = new Map(run.results.map((p, i) => [p.username, i]));
       sorted.sort((a, b) => {
+        const am = a.loc_match ? 0 : 1, bm = b.loc_match ? 0 : 1;
+        if (am !== bm) return am - bm;
+        if (a.loc_match && b.loc_match) {
+          const ac = a.curated ? 0 : 1, bc = b.curated ? 0 : 1;
+          if (ac !== bc) return ac - bc;
+        }
         const d = (b.score + qualityAdjust(b)) - (a.score + qualityAdjust(a));
         if (Math.abs(d) > 0.001) return d;
         return (baseOrder.get(a.username) ?? 0) - (baseOrder.get(b.username) ?? 0);
