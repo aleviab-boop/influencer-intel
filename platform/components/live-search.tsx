@@ -1562,7 +1562,7 @@ export function LiveSearch({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[12px] text-[#999] truncate max-w-[260px]">
+                            <div className="text-[12px] text-[#999] truncate max-w-[180px]">
                               {p.full_name || '—'}
                             </div>
                             {(p.email || p.phone || p.link) && (
@@ -1581,7 +1581,7 @@ export function LiveSearch({
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-[13px] text-[#666]">{p.category || '—'}</td>
+                      <td className="px-3 py-3 text-[13px] text-[#666]"><span className="block max-w-[130px] truncate" title={p.category || undefined}>{p.category || '—'}</span></td>
                       <td className="px-3 py-3 text-[14px] text-[#111] text-right tabular-nums">
                         {fmt(p.followers)}
                       </td>
