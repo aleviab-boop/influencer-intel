@@ -1515,7 +1515,6 @@ export function LiveSearch({
                     <th className="px-3 py-2.5 font-medium text-right">Followers</th>
                     <th className="px-3 py-2.5 font-medium text-right">Eng.</th>
                     <th className="px-3 py-2.5 font-medium text-center" title="How well each creator matches your search brief — relevance + engagement. Open a profile for the full breakdown.">Fit</th>
-                    <th className="px-3 py-2.5 font-medium text-center">Relevance</th>
                     <th className="px-3 py-2.5 font-medium"></th>
                   </tr>
                 </thead>
@@ -1620,14 +1619,6 @@ export function LiveSearch({
                           );
                         })()}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        <span
-                          className="inline-block text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums"
-                          style={{ background: ACCENT_SOFT, color: ACCENT }}
-                        >
-                          {p.score}
-                        </span>
-                      </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -1672,7 +1663,7 @@ export function LiveSearch({
                     </tr>
                     {profileFor === p.username && (
                       <tr>
-                        <td colSpan={9} className="p-0 bg-[#faf9ff]">
+                        <td colSpan={8} className="p-0 bg-[#faf9ff]">
                           {/* Pin the drawer to the left edge and size it to the
                               visible width so it stays fully on screen even when
                               the table scrolls horizontally. */}
