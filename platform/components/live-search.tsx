@@ -2240,10 +2240,10 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
     window.setTimeout(() => setCopied(false), 1600);
   };
   return (
-    <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[1fr_1.7fr] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
-      <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
+    <div className="relative rounded-2xl border border-[#e3def9] bg-white p-5 grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] gap-6 transition-shadow hover:shadow-[0_12px_44px_rgba(108,77,246,0.1)]" style={{ animation: 'ii-fadeup .3s both' }}>
+      <button onClick={onClose} className="absolute top-3 right-3.5 z-10 w-7 h-7 grid place-items-center rounded-full bg-white border border-[#eee] shadow-sm text-[#999] hover:text-[#111] hover:bg-[#f3f3f3] text-lg leading-none" title="Close">×</button>
       {/* left: details, vertically balanced */}
-      <div className="flex flex-col">
+      <div className="flex flex-col min-w-0">
         <div className="flex items-center gap-3">
           <Avatar name={profile.full_name || profile.handle} url={profile.profile_pic_url} handle={profile.handle} />
           <div className="min-w-0">
@@ -2429,7 +2429,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
 
       {/* analytics + media — masonry so cards fill the space evenly instead of
           leaving a tall column beside short ones */}
-      <div className="lg:columns-2 [column-gap:1rem]">
+      <div className="min-w-0 lg:columns-2 [column-gap:1rem]">
         <div className="break-inside-avoid mb-4">
           <BrandFitCard profile={profile} engagement={engagement} blacklistHits={blacklistHits} initialBrief={initialBrief} />
         </div>
