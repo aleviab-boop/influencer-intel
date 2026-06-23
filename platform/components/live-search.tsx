@@ -996,6 +996,24 @@ export function LiveSearch({
   // Score against the row merged with any lazily-scraped live stats, so Fit
   // sharpens as engagement streams in.
   const fitOf = (p: LiveProfile) => listFit({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws) ?? -1;
+  const erOf = (p: LiveProfile) => liveStats[p.username]?.engagement ?? p.engagement ?? 0;
+  // Quality nudge for the default Relevance sort: demote creators whose live ER
+  // is below the healthy floor for their size, lift those above it — so a
+  // perfectly keyword-matched but low-engagement account doesn't top the list.
+  // Bounded to ±~1.5 so relevance stays the dominant signal. ER ≈ 0 only counts
+  // as a (hard) penalty once we've actually scraped the creator — an enriched
+  // 0% ER is a real dead-audience signal; an un-scraped 0 is just unknown, so it
+  // gets no adjustment and first paint stays in pure relevance order.
+  const qualityAdjust = (p: LiveProfile) => {
+    const ls = liveStats[p.username];
+    const scraped = ls?.engagement != null; // we've pulled live stats for them
+    const er = ls?.engagement ?? p.engagement ?? 0;
+    const known = scraped || er > 0;
+    if (!known) return 0; // ER unknown — don't move them
+    if (er <= 0) return -1.5; // scraped and ~0% ER → fake/dead audience, demote hard
+    const ratio = er / expectedErFloor(p.followers);
+    return ratio >= 1 ? clamp((ratio - 1) * 0.8, 0, 0.8) : clamp((ratio - 1) * 1.5, -1.5, 0);
+  };
 
   const shown = (() => {
     if (!run) return [] as LiveProfile[];
@@ -1020,9 +1038,19 @@ export function LiveSearch({
     const sorted = [...filtered];
     if (sortBy === 'followers_desc') sorted.sort((a, b) => b.followers - a.followers);
     else if (sortBy === 'followers_asc') sorted.sort((a, b) => a.followers - b.followers);
-    else if (sortBy === 'engagement') sorted.sort((a, b) => (b.engagement ?? 0) - (a.engagement ?? 0));
+    else if (sortBy === 'engagement') sorted.sort((a, b) => erOf(b) - erOf(a));
     else if (sortBy === 'fit') sorted.sort((a, b) => fitOf(b) - fitOf(a));
-    // 'relevance' keeps the server order (score, then followers)
+    else {
+      // 'relevance' — quality-aware: text-relevance score blended with an ER
+      // nudge, with the server's original order (curated list first, then
+      // followers) preserved as a stable tiebreak when adjusted scores tie.
+      const baseOrder = new Map(run.results.map((p, i) => [p.username, i]));
+      sorted.sort((a, b) => {
+        const d = (b.score + qualityAdjust(b)) - (a.score + qualityAdjust(a));
+        if (Math.abs(d) > 0.001) return d;
+        return (baseOrder.get(a.username) ?? 0) - (baseOrder.get(b.username) ?? 0);
+      });
+    }
     return sorted;
   })();
 
