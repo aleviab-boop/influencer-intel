@@ -997,13 +997,14 @@ export function LiveSearch({
   // sharpens as engagement streams in.
   const fitOf = (p: LiveProfile) => listFit({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws) ?? -1;
   const erOf = (p: LiveProfile) => liveStats[p.username]?.engagement ?? p.engagement ?? 0;
-  // Quality nudge for the default Relevance sort: demote creators whose live ER
-  // is below the healthy floor for their size, lift those above it — so a
-  // perfectly keyword-matched but low-engagement account doesn't top the list.
-  // Bounded to ±~1.5 so relevance stays the dominant signal. ER ≈ 0 only counts
-  // as a (hard) penalty once we've actually scraped the creator — an enriched
-  // 0% ER is a real dead-audience signal; an un-scraped 0 is just unknown, so it
-  // gets no adjustment and first paint stays in pure relevance order.
+  // Quality nudge for the default Relevance sort: DEMOTE creators whose live ER
+  // is below the healthy floor for their size — so a perfectly keyword-matched
+  // but dead-engagement account doesn't top the list. It only ever pushes down,
+  // never up: boosting healthy accounts would let a big high-ER profile jump
+  // over the server's location/curated ranking (e.g. a 17M celeb leaping above
+  // genuine local creators). ER ≈ 0 only penalises once we've actually scraped
+  // the creator — an enriched 0% ER is a real dead-audience signal; an un-scraped
+  // 0 is just unknown, so it gets no adjustment and first paint stays in order.
   const qualityAdjust = (p: LiveProfile) => {
     const ls = liveStats[p.username];
     const scraped = ls?.engagement != null; // we've pulled live stats for them
@@ -1012,7 +1013,7 @@ export function LiveSearch({
     if (!known) return 0; // ER unknown — don't move them
     if (er <= 0) return -1.5; // scraped and ~0% ER → fake/dead audience, demote hard
     const ratio = er / expectedErFloor(p.followers);
-    return ratio >= 1 ? clamp((ratio - 1) * 0.8, 0, 0.8) : clamp((ratio - 1) * 1.5, -1.5, 0);
+    return ratio >= 1 ? 0 : clamp((ratio - 1) * 1.5, -1.5, 0); // healthy → no boost; low → demote
   };
 
   const shown = (() => {
