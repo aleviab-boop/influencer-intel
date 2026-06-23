@@ -133,6 +133,15 @@ export async function POST(req: NextRequest) {
       const am = a.loc_match ? 0 : 1;
       const bm = b.loc_match ? 0 : 1;
       if (am !== bm) return am - bm;
+      // Among location matches, the user's own curated/imported creators lead —
+      // otherwise reach alone drags scraped mega-celebs above curated locals.
+      // (Only applied within the location bucket so plain username crawls, which
+      // have no location intent, still surface the crawled network first.)
+      if (a.loc_match && b.loc_match) {
+        const ac = a.curated ? 0 : 1;
+        const bc = b.curated ? 0 : 1;
+        if (ac !== bc) return ac - bc;
+      }
       const al = a.from === 'live' ? 0 : 1;
       const bl = b.from === 'live' ? 0 : 1;
       if (al !== bl) return al - bl;

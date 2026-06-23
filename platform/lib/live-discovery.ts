@@ -61,6 +61,7 @@ export interface LiveProfile {
   creator_id?: string; // creators.id, once known (DB rows + persisted live rows)
   from?: 'db' | 'live';
   loc_match?: boolean; // matched a place token in the location field (DB search)
+  curated?: boolean; // from the user's own curated/imported list (source='manual')
 }
 
 export interface LiveDiscoveryResult {
