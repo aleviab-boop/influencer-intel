@@ -14,6 +14,29 @@ import { ProxyAgent } from 'undici';
 const RELAY = process.env.IG_RELAY?.trim();
 const RELAY_KEY = process.env.IG_RELAY_KEY?.trim() ?? '';
 
+// Instagram now requires a logged-in session for its data endpoints (web_
+// profile_info returns 401 anonymously). Rather than a bot login (which IG
+// blocks), we reuse a real browser session: paste the sessionid cookie (and
+// optionally ds_user_id / csrftoken) from a logged-in burner account into env.
+// When present, every igFetch carries it, turning the 401 into a 200.
+const SESSIONID = process.env.IG_SESSIONID?.trim();
+const DS_USER_ID = process.env.IG_DS_USER_ID?.trim();
+const CSRFTOKEN = process.env.IG_CSRFTOKEN?.trim();
+
+function withAuth(headers: Record<string, string>): Record<string, string> {
+  if (!SESSIONID) return headers;
+  const cookie = [
+    `sessionid=${SESSIONID}`,
+    DS_USER_ID ? `ds_user_id=${DS_USER_ID}` : '',
+    CSRFTOKEN ? `csrftoken=${CSRFTOKEN}` : '',
+  ].filter(Boolean).join('; ');
+  return {
+    ...headers,
+    Cookie: headers.Cookie ? `${headers.Cookie}; ${cookie}` : cookie,
+    ...(CSRFTOKEN ? { 'x-csrftoken': CSRFTOKEN } : {}),
+  };
+}
+
 let cached: ProxyAgent | null | undefined;
 function dispatcher(): ProxyAgent | null {
   if (cached !== undefined) return cached;
@@ -30,6 +53,8 @@ function headersToObject(h: HeadersInit | undefined): Record<string, string> {
 }
 
 export function igFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const authedHeaders = withAuth(headersToObject(init.headers));
+
   // Relay takes priority: send the request to the home-IP relay, which fetches
   // Instagram and streams the (status-preserving) response back.
   if (RELAY) {
@@ -40,11 +65,11 @@ export function igFetch(url: string, init: RequestInit = {}): Promise<Response> 
         'ngrok-skip-browser-warning': 'true', // harmless if not ngrok
         ...(RELAY_KEY ? { 'x-relay-key': RELAY_KEY } : {}),
       },
-      body: JSON.stringify({ url, headers: headersToObject(init.headers) }),
+      body: JSON.stringify({ url, headers: authedHeaders }),
     });
   }
 
   const d = dispatcher();
   // `dispatcher` isn't in the standard RequestInit type but Node's fetch accepts it.
-  return fetch(url, d ? ({ ...init, dispatcher: d } as RequestInit) : init);
+  return fetch(url, { ...init, headers: authedHeaders, ...(d ? { dispatcher: d } : {}) } as RequestInit);
 }

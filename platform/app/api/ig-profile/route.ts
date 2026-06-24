@@ -102,6 +102,39 @@ const HEADERS: Record<string, string> = {
   'Sec-Fetch-Dest': 'empty',
 };
 
+// Instagram's web_profile_info no longer includes recent posts in many cases —
+// even with a logged-in session it returns the profile but an empty timeline.
+// Fall back to the dedicated user-feed endpoint and normalise each item to the
+// same shape web_profile_info used, so the parsing below works unchanged.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchUserFeed(pk: string): Promise<any[]> {
+  try {
+    const res = await igFetch(`https://www.instagram.com/api/v1/feed/user/${pk}/?count=12`, { headers: HEADERS });
+    if (!res.ok) return [];
+    const j = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items: any[] = j?.items ?? [];
+    return items.map((it) => {
+      const thumb = it.image_versions2?.candidates?.[0]?.url
+        ?? it.carousel_media?.[0]?.image_versions2?.candidates?.[0]?.url ?? null;
+      return {
+        node: {
+          shortcode: it.code ?? '',
+          thumbnail_src: thumb,
+          display_url: thumb,
+          edge_liked_by: { count: it.like_count ?? 0 },
+          edge_media_to_comment: { count: it.comment_count ?? 0 },
+          is_video: it.media_type === 2,
+          taken_at_timestamp: it.taken_at ?? null,
+          edge_media_to_caption: { edges: it.caption?.text ? [{ node: { text: it.caption.text } }] : [] },
+        },
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(req: NextRequest) {
   const handle = (req.nextUrl.searchParams.get('handle') ?? '').trim().replace(/^@/, '');
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
@@ -127,7 +160,9 @@ export async function GET(req: NextRequest) {
   if (!u) return dbProfileOr404(handle);
 
   try {
-    const media = u.edge_owner_to_timeline_media?.edges ?? [];
+    let media = u.edge_owner_to_timeline_media?.edges ?? [];
+    // Profile came back without posts → pull them from the user-feed endpoint.
+    if (media.length === 0 && u.id) media = await fetchUserFeed(String(u.id));
     // Brand-conflict signals: who the creator tags/mentions in recent captions
     // and whether posts look sponsored — so you can spot competitor collabs
     // before reaching out. Computed from the FULL caption (before truncation).
