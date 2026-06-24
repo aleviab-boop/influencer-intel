@@ -36,6 +36,22 @@ export async function GET(req: NextRequest) {
 
     const followers: number | null = u.edge_followed_by?.count ?? null;
     const recent = (u.edge_owner_to_timeline_media?.edges ?? []).slice(0, 9);
+    // web_profile_info no longer returns posts — pull likes/comments from the
+    // user-feed endpoint so the ER (and the ER filter) still work.
+    let feedSum: number | null = null;
+    let feedCount = 0;
+    if (recent.length === 0 && u.id) {
+      try {
+        const fr = await igFetch(`https://www.instagram.com/api/v1/feed/user/${u.id}/?count=12`, { headers: HEADERS });
+        if (fr.ok) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const items: any[] = (await fr.json())?.items ?? [];
+          const slice = items.slice(0, 9);
+          feedCount = slice.length;
+          feedSum = slice.reduce((s, it) => s + (it.like_count ?? 0) + (it.comment_count ?? 0), 0);
+        }
+      } catch { /* fall through */ }
+    }
     let engagement: number | null = null;
     if (followers && recent.length) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +60,8 @@ export async function GET(req: NextRequest) {
         return s + (n.edge_liked_by?.count ?? 0) + (n.edge_media_to_comment?.count ?? 0);
       }, 0);
       engagement = Math.round((sum / recent.length / followers) * 1000) / 10;
+    } else if (followers && feedCount > 0 && feedSum != null) {
+      engagement = Math.round((feedSum / feedCount / followers) * 1000) / 10;
     }
     return NextResponse.json({
       handle: u.username ?? handle,
