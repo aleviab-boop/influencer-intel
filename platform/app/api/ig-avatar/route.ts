@@ -1,17 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igFetch } from '@/lib/ig-fetch';
+import { getBolticClient } from '@influencer-intel/shared/db';
 
 export const runtime = 'nodejs';
 
 // GET /api/ig-avatar?handle=<username>
-//   Resolves a creator's profile photo by handle: looks up the public profile,
-//   then streams the (otherwise hotlink-blocked) CDN image back. 404 when the
-//   handle doesn't resolve, so the client can fall back to an initial.
+//   Streams a creator's profile photo (otherwise hotlink-blocked). Prefers the
+//   photo URL cached in the DB (set on the last profile crawl) so we DON'T spend
+//   a rate-limited profile API call just for an avatar; only falls back to a
+//   live profile lookup when there's no cached URL or it has expired. 404 when
+//   the handle doesn't resolve, so the client can fall back to an initial.
 const APP_ID = '936619743392459';
 const ALLOWED_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// Fetch a CDN image URL and return a streaming image response, or null if the
+// URL is invalid / blocked / expired.
+async function streamImage(picUrl: string): Promise<NextResponse | null> {
+  let url: URL;
+  try { url = new URL(picUrl); } catch { return null; }
+  if (url.protocol !== 'https:' || !ALLOWED_HOST.test(url.hostname)) return null;
+  try {
+    const imgRes = await igFetch(url.toString(), {
+      headers: { Referer: 'https://www.instagram.com/', 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' },
+    });
+    if (!imgRes.ok || !imgRes.body) return null;
+    return new NextResponse(imgRes.body, {
+      status: 200,
+      headers: {
+        'Content-Type': imgRes.headers.get('content-type') ?? 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400, immutable',
+      },
+    });
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(req: NextRequest) {
   const handle = (req.nextUrl.searchParams.get('handle') ?? '').trim().replace(/^@/, '');
@@ -19,6 +45,23 @@ export async function GET(req: NextRequest) {
     return new NextResponse('bad handle', { status: 400 });
   }
 
+  // 1) Cached photo URL — no profile API call needed.
+  try {
+    const rows = await getBolticClient().query<{ profile_photo_url: string | null }>(
+      `SELECT profile_photo_url FROM creators WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
+      [handle],
+    );
+    const cached = rows[0]?.profile_photo_url;
+    if (cached) {
+      const streamed = await streamImage(cached);
+      if (streamed) return streamed; // cached URL still valid
+      // else: URL expired → fall through to a fresh lookup
+    }
+  } catch {
+    /* DB unreachable — fall through to the live lookup */
+  }
+
+  // 2) Live lookup (also refreshes the cached URL via the crawl path elsewhere).
   try {
     const infoRes = await igFetch(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
@@ -39,23 +82,13 @@ export async function GET(req: NextRequest) {
     const picUrl = json?.data?.user?.profile_pic_url;
     if (!picUrl) return new NextResponse('no photo', { status: 404 });
 
-    const url = new URL(picUrl);
-    if (url.protocol !== 'https:' || !ALLOWED_HOST.test(url.hostname)) {
-      return new NextResponse('host not allowed', { status: 400 });
-    }
+    // Cache the fresh URL for next time (best-effort).
+    void getBolticClient()
+      .query(`UPDATE creators SET profile_photo_url = $2, updated_at = now() WHERE platform = 'instagram' AND lower(handle) = lower($1)`, [handle, picUrl])
+      .catch(() => {});
 
-    const imgRes = await igFetch(url.toString(), {
-      headers: { Referer: 'https://www.instagram.com/', 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' },
-    });
-    if (!imgRes.ok || !imgRes.body) return new NextResponse('image error', { status: 502 });
-
-    return new NextResponse(imgRes.body, {
-      status: 200,
-      headers: {
-        'Content-Type': imgRes.headers.get('content-type') ?? 'image/jpeg',
-        'Cache-Control': 'public, max-age=86400, immutable',
-      },
-    });
+    const streamed = await streamImage(picUrl);
+    return streamed ?? new NextResponse('image error', { status: 502 });
   } catch {
     return new NextResponse('fetch failed', { status: 502 });
   }

@@ -64,23 +64,30 @@ async function persistProfileCache(
   collabs: { handle: string; count: number }[],
   sponsored: number,
   recent: unknown[],
+  picUrl: string | null,
 ): Promise<void> {
   if (!handle) return;
   try {
     // Cache the recent posts too (only when we actually got some — never clobber
     // a good cache with an empty crawl), so the DB fallback can serve real posts
-    // when a later live fetch is throttled.
-    const setRecent = recent.length > 0;
+    // when a later live fetch is throttled. Also store the profile photo URL so
+    // the avatar endpoint can skip the rate-limited profile API call.
+    const params: unknown[] = [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored];
+    let recentClause = '';
+    if (recent.length > 0) {
+      params.push(JSON.stringify(recent), new Date().toISOString());
+      recentClause = `|| jsonb_build_object('recent_posts', $4::jsonb, 'recent_cached_at', $5::text)`;
+    }
+    let picClause = '';
+    if (picUrl) { params.push(picUrl); picClause = `, profile_photo_url = $${params.length}`; }
     await getBolticClient().query(
       `UPDATE creators
          SET raw_metadata = COALESCE(raw_metadata, '{}'::jsonb)
                || jsonb_build_object('collabs', $2::jsonb, 'sponsored_posts', $3::int)
-               ${setRecent ? `|| jsonb_build_object('recent_posts', $4::jsonb, 'recent_cached_at', $5::text)` : ''},
-             updated_at = now()
+               ${recentClause},
+             updated_at = now()${picClause}
        WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
-      setRecent
-        ? [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored, JSON.stringify(recent), new Date().toISOString()]
-        : [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored],
+      params,
     );
   } catch {
     /* non-fatal */
@@ -199,7 +206,7 @@ export async function GET(req: NextRequest) {
 
     // Persist the detected collabs + recent posts so the competitor tool and
     // the DB fallback can use them later — best-effort, never blocks the response.
-    void persistProfileCache(u.username, collabs, sponsoredPosts, recent);
+    void persistProfileCache(u.username, collabs, sponsoredPosts, recent, u.profile_pic_url ?? null);
 
     const contact = extractContact(u.biography, {
       businessEmail: u.business_email,
