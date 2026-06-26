@@ -4,9 +4,9 @@ import { igFetch } from '@/lib/ig-fetch';
 export const runtime = 'nodejs';
 
 // GET /api/ig-image?u=<instagram cdn url>
-//   Proxies an Instagram profile photo. The IG CDN blocks hotlinking from the
-//   browser (403 / CORS), so we fetch it server-side with a Referer and stream
-//   it back. Host is allowlisted to Instagram CDNs to prevent SSRF.
+//   Proxies an Instagram post thumbnail / image. The IG CDN blocks hotlinking
+//   from the browser (403 / CORS), so we fetch it server-side with a Referer and
+//   stream it back. Host is allowlisted to Instagram CDNs to prevent SSRF.
 const ALLOWED_HOST = /(^|\.)(cdninstagram\.com|fbcdn\.net)$/i;
 
 export async function GET(req: NextRequest) {

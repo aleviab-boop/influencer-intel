@@ -121,9 +121,18 @@ async function fetchUserFeed(pk: string): Promise<any[]> {
     const j = await res.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items: any[] = j?.items ?? [];
+    // Pick a SMALL image candidate (~320px) for the grid thumbnail instead of
+    // the full-res version (candidates[0] can be 1-2MB) — far lighter to load.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const smallThumb = (cands: any): string | null => {
+      if (!Array.isArray(cands) || cands.length === 0) return null;
+      const sorted = [...cands].sort((a, b) => (a?.width ?? 0) - (b?.width ?? 0));
+      const pick = sorted.find((c) => (c?.width ?? 0) >= 240) ?? sorted[sorted.length - 1];
+      return pick?.url ?? null;
+    };
     return items.map((it) => {
-      const thumb = it.image_versions2?.candidates?.[0]?.url
-        ?? it.carousel_media?.[0]?.image_versions2?.candidates?.[0]?.url ?? null;
+      const thumb = smallThumb(it.image_versions2?.candidates)
+        ?? smallThumb(it.carousel_media?.[0]?.image_versions2?.candidates) ?? null;
       return {
         node: {
           shortcode: it.code ?? '',
