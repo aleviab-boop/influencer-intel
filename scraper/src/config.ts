@@ -35,7 +35,7 @@ export const config = {
   maxActionsPerHour: Number(process.env.MAX_ACTIONS_PER_HOUR ?? 300),
   serviceAccountHandle: process.env.SERVICE_ACCOUNT_HANDLE ?? '',
   platformCallbackUrl:
-    process.env.PLATFORM_CALLBACK_URL ?? 'http://localhost:3000/api/scrape-callback',
+    process.env.PLATFORM_CALLBACK_URL ?? 'http://localhost:3030/api/scrape-callback',
   callbackSecret: process.env.SCRAPER_CALLBACK_SECRET ?? '',
 };
 

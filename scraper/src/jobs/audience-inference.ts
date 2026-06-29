@@ -12,7 +12,7 @@
 import type { AudienceDemographics, ScrapeJob } from '@influencer-intel/shared/types';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient } from '@influencer-intel/shared/llm';
-import { humanDelay, type DriverHandle } from '../playwright-driver.js';
+import { humanDelay, navigateHumanly, type DriverHandle } from '../playwright-driver.js';
 import type { JobQueue } from '../queue/worker.js';
 
 const FOLLOWER_SAMPLE_SIZE = 80;       // followers to fetch
@@ -57,6 +57,11 @@ export async function handleAudienceInference(
     console.warn(`[audience-inference] no creator row for ${handle}, skipping`);
     return;
   }
+
+  // Navigate to an instagram.com page FIRST so the in-page relative fetches
+  // (/api/v1/...) have a valid base URL — without this every audience job fails
+  // with "not a valid URL".
+  await navigateHumanly(driver.page, `https://www.instagram.com/${handle}/`);
 
   // 1. Fetch a sample of followers from the authenticated session.
   console.log(`[audience-inference] sampling followers for ${handle}…`);
