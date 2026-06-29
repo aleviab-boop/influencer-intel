@@ -1044,12 +1044,35 @@ export function LiveSearch({
     else void search({ seedOverride: '', mode: 'db' });
   }
 
-  // "More like this" — re-seed the search from one creator's network.
-  function findSimilar(p: LiveProfile) {
-    setSeedText(p.username);
+  // "More like this" — AI lookalikes. Uses the creator's content embedding (or
+  // one generated from their bio/niche/captions) to find the most semantically
+  // similar creators in the database via vector search.
+  async function findSimilar(p: LiveProfile) {
+    setSeedText('');
     setSelected(new Set());
-    void search({ promptOverride: prompt.trim(), seedOverride: p.username, mode: 'live' });
+    setLoading(true);
+    setError(null);
+    setNeedSeed(false);
+    setProfileFor(null);
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+    try {
+      const r = await fetch(`/api/similar?handle=${encodeURIComponent(p.username)}&max=30`);
+      const d = await r.json();
+      if (!r.ok) {
+        setError(d.message ?? d.error ?? 'Could not find similar creators.');
+        setRun(null);
+      } else {
+        setRun({
+          prompt: `Similar to @${p.username}`,
+          tokens: [], seeds: [], results: (d.results ?? []) as LiveProfile[],
+          persisted: 0, resolved_from_names: [], auto_seeds: [],
+        } as RunResponse);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Arriving from the home page with a prompt → run once (seed optional; the
@@ -1593,7 +1616,7 @@ export function LiveSearch({
                           >
                             <svg width="15" height="15" viewBox="0 0 24 24" fill={isSaved(p.username) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
                           </button>
-                          <IconBtn onClick={() => findSimilar(p)} title="Find similar creators">
+                          <IconBtn onClick={() => void findSimilar(p)} title="AI lookalikes — find semantically similar creators">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><circle cx="17.5" cy="9.5" r="2" /><path d="M16 19a4 4 0 0 1 6-3" /></svg>
                           </IconBtn>
                           <IconBtn onClick={() => void openDraft(p)} title="AI outreach draft">
