@@ -77,6 +77,12 @@ export interface LiveDiscoveryOptions {
   budgetMs?: number;    // overall time budget so the request never hangs (default 25s)
 }
 
+// Words that frame an age/count constraint but aren't searchable themselves —
+// e.g. "genz creator in delhi age 18-23". Their numbers (18, 23) would otherwise
+// match any handle/bio containing those digits (jazzkaur18, vidhi1923, …) and
+// flood the results with noise, so we drop age words AND bare numbers entirely.
+const AGE_NOISE = new Set(['age', 'aged', 'ages', 'year', 'years', 'yr', 'yrs', 'yo', 'old']);
+
 export function tokenize(prompt: string): string[] {
   return Array.from(
     new Set(
@@ -85,7 +91,7 @@ export function tokenize(prompt: string): string[] {
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
         .map((t) => t.trim())
-        .filter((t) => t.length > 1 && !STOPWORDS.has(t)),
+        .filter((t) => t.length > 1 && !STOPWORDS.has(t) && !AGE_NOISE.has(t) && !/^\d+$/.test(t)),
     ),
   );
 }

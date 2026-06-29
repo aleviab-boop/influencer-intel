@@ -23,7 +23,10 @@ const GENRES = [
   'streetwear', 'thrift', 'home', 'decor', 'business', 'startup', 'motivation', 'books', 'reading',
 ];
 
-const STOP = new Set(['in', 'on', 'the', 'a', 'an', 'of', 'and', 'for', 'creators', 'creator', 'influencers', 'influencer', 'from', 'near', 'around', 'based']);
+const STOP = new Set(['in', 'on', 'the', 'a', 'an', 'of', 'and', 'for', 'creators', 'creator', 'influencers', 'influencer', 'from', 'near', 'around', 'based',
+  // age-framing words — their numbers (e.g. "age 18-23") aren't searchable and
+  // would match random handle digits, so drop the words and the bare numbers.
+  'age', 'aged', 'ages', 'year', 'years', 'yr', 'yrs', 'yo', 'old']);
 
 export interface ParsedQuery {
   raw: string;
@@ -37,7 +40,7 @@ export interface ParsedQuery {
 export function parseInstagramQuery(prompt: string): ParsedQuery {
   const raw = prompt.trim();
   const lower = raw.toLowerCase();
-  const tokens = lower.split(/[\s,]+/).filter((t) => t && !STOP.has(t));
+  const tokens = lower.split(/[\s,]+/).filter((t) => t && !STOP.has(t) && !/^\d+$/.test(t));
 
   // location — prefer a two-word city ("new delhi") then single tokens
   let location: string | null = null;
