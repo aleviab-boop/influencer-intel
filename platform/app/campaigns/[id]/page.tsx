@@ -364,6 +364,7 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
             <select value={minFollowers} onChange={(e) => setMinFollowers(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900">
               <option value={0}>Any followers</option>
               <option value={1000}>1K+</option>
+              <option value={5000}>5K+</option>
               <option value={10000}>10K+</option>
               <option value={100000}>100K+</option>
               <option value={1000000}>1M+</option>
