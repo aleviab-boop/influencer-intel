@@ -67,7 +67,7 @@ interface ProfileData {
   collabs?: { handle: string; count: number }[];
   sponsored_posts?: number;
   engagement?: number | null;
-  source?: 'db' | 'live';
+  source?: 'db' | 'live' | 'db_cached';
 }
 
 interface RunResponse {
@@ -552,6 +552,20 @@ export function LiveSearch({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  // Scraper health — surfaced when a live fetch falls back, so the user knows
+  // WHY (expired cookie vs rate-limit) and how to fix it.
+  const [igHealth, setIgHealth] = useState<'ok' | 'expired' | 'throttled' | 'down' | null>(null);
+  const [healthDismissed, setHealthDismissed] = useState(false);
+  const healthCheckingRef = useRef(false);
+  async function checkIgHealth() {
+    if (healthCheckingRef.current) return;
+    healthCheckingRef.current = true;
+    try {
+      const d = await fetch('/api/ig-health').then((r) => r.json());
+      setIgHealth(d.status ?? null);
+      if (d.status && d.status !== 'ok') setHealthDismissed(false);
+    } catch { /* ignore */ } finally { healthCheckingRef.current = false; }
+  }
   // Measure the results-table viewport so the inline profile drawer can be
   // pinned to the left and sized to the visible width — keeping it fully on
   // screen instead of clipped inside the table's horizontal scroll.
@@ -757,8 +771,11 @@ export function LiveSearch({
     setProfileLoading(true);
     try {
       const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}`).then((r) => r.json());
-      if (d && !d.error) setProfile(d as ProfileData);
-      else setProfileError('live');
+      if (d && !d.error) {
+        setProfile(d as ProfileData);
+        // Fell back to cached/DB → check why (expired cookie vs throttle).
+        if (d.source === 'db' || d.source === 'db_cached') void checkIgHealth();
+      } else setProfileError('live');
     } catch {
       setProfileError('live');
     } finally {
@@ -1335,6 +1352,25 @@ export function LiveSearch({
           <div className="mt-3 text-[13px] text-[#888]">Finding starting points & crawling Instagram…</div>
         </div>
       )}
+
+      {/* scraper health banner — only when something's off */}
+      {igHealth && igHealth !== 'ok' && !healthDismissed && (() => {
+        const cfg = igHealth === 'expired'
+          ? { bg: '#fef2f2', bd: '#fecaca', fg: '#b91c1c', title: 'Instagram session expired', body: 'The login cookie is stale, so live photos/posts aren’t loading. Grab a fresh sessionid from the burner account (DevTools → Cookies → instagram.com) and update IG_SESSIONID in your env + Vercel.' }
+          : igHealth === 'throttled'
+            ? { bg: '#fff7ed', bd: '#fed7aa', fg: '#b45309', title: 'Instagram is rate-limiting right now', body: 'Live fetches are temporarily blocked, so cached data is shown. Slow down / wait a few minutes and it’ll recover — already-warmed creators still display.' }
+            : { bg: '#fff7ed', bd: '#fed7aa', fg: '#b45309', title: 'Can’t reach Instagram', body: 'The live fetch failed (relay or network). Showing cached/database data. Check the relay is running.' };
+        return (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border px-4 py-3" style={{ background: cfg.bg, borderColor: cfg.bd }}>
+            <span className="text-[16px] leading-none mt-0.5" style={{ color: cfg.fg }}>⚠</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold" style={{ color: cfg.fg }}>{cfg.title}</div>
+              <p className="text-[12px] text-[#555] leading-snug mt-0.5">{cfg.body}</p>
+            </div>
+            <button onClick={() => setHealthDismissed(true)} className="text-[#999] hover:text-[#555] text-lg leading-none shrink-0" title="Dismiss">×</button>
+          </div>
+        );
+      })()}
 
       {/* results table */}
       {run && !loading && (
@@ -2177,6 +2213,19 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
                   ⭐ Rising star
                 </span>
               )}
+              {(() => {
+                const src = profile.source;
+                const cfg = src === 'db_cached'
+                  ? { label: 'Cached', bg: '#fff7ed', fg: '#b45309', bd: '#fed7aa', tip: 'Live fetch unavailable — showing cached data. Hit “Refresh live” to re-pull.' }
+                  : src === 'db'
+                    ? { label: 'Database', bg: '#f3f4f6', fg: '#6b7280', bd: '#e5e7eb', tip: 'From your database only — couldn’t fetch live posts/photos right now.' }
+                    : { label: 'Live', bg: '#ecfdf5', fg: '#059669', bd: '#a7f3d0', tip: 'Fetched live from Instagram just now.' };
+                return (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ background: cfg.bg, color: cfg.fg, borderColor: cfg.bd }} title={cfg.tip}>
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.fg }} />{cfg.label}
+                  </span>
+                );
+              })()}
             </div>
             <div className="text-[12px] text-[#999] truncate">
               {profile.full_name}{profile.category ? ` · ${profile.category}` : ''}
