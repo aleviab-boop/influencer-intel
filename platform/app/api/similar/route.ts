@@ -1,13 +1,12 @@
-// AI "find similar creators" — semantic lookalikes.
+// "Find similar creators" — comparable REACH, not lookalike faces or content.
 //
-// Given a creator, we use their content embedding (or generate one on the fly
-// from bio + niche + cached captions) and run a vector-similarity search over
-// the creators directory to surface the most *semantically* similar accounts —
-// matched on what they're actually about, not just keyword/handle overlap.
+// Given a creator, surface others with a similar follower count and engagement
+// rate (same performance bracket), so an agency can find swappable / comparable
+// creators. Ranked by follower-tier closeness (log scale) + ER closeness, with
+// a small same-niche tiebreak to keep results relevant.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { getOpenAIClient } from '@influencer-intel/shared/llm';
 import { extractContact, type LiveProfile } from '@/lib/live-discovery';
 
 export const runtime = 'nodejs';
@@ -20,20 +19,17 @@ interface CreatorRow {
   bio: string | null;
   primary_category: string | null;
   niche: string | null;
-  genre: string | null;
   follower_count: number | string | null;
   engagement_rate: number | string | null;
   is_verified: boolean | null;
   profile_photo_url: string | null;
   profile_url: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  content_embedding: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   raw_metadata: any;
-  similarity?: number;
+  dist?: number | string;
 }
 
-function toLiveProfile(r: CreatorRow): LiveProfile {
+function toLiveProfile(r: CreatorRow, score: number): LiveProfile {
   const bio = r.bio ?? '';
   const contact = extractContact(bio, { externalUrl: r.profile_url ?? null });
   return {
@@ -45,8 +41,7 @@ function toLiveProfile(r: CreatorRow): LiveProfile {
     is_private: false,
     is_verified: Boolean(r.is_verified),
     profile_pic_url: r.profile_photo_url ?? null,
-    // similarity (0-1) → a 0-100-ish relevance score for the results header.
-    score: Math.round((r.similarity ?? 0) * 100),
+    score,
     engagement: r.engagement_rate != null ? Math.round(Number(r.engagement_rate) * 1000) / 10 : 0,
     email: contact.email,
     phone: contact.phone,
@@ -54,6 +49,18 @@ function toLiveProfile(r: CreatorRow): LiveProfile {
     creator_id: r.id,
     from: 'db' as const,
   };
+}
+
+// Engagement rate (%) for the source — prefer the stored rate, else derive from
+// the cached recent posts (likes+comments / followers).
+function sourceER(r: CreatorRow, followers: number): number {
+  if (r.engagement_rate != null) return Number(r.engagement_rate) * 100;
+  const posts = Array.isArray(r.raw_metadata?.recent_posts) ? r.raw_metadata.recent_posts : [];
+  if (followers > 0 && posts.length > 0) {
+    const sum = posts.reduce((s: number, p: { likes?: number; comments?: number }) => s + (p.likes ?? 0) + (p.comments ?? 0), 0);
+    return (sum / posts.length / followers) * 100;
+  }
+  return 0;
 }
 
 export async function GET(req: NextRequest) {
@@ -67,8 +74,8 @@ export async function GET(req: NextRequest) {
   let src: CreatorRow | undefined;
   try {
     const rows = await db.query<CreatorRow>(
-      `SELECT id, handle, display_name, bio, primary_category, niche, genre,
-              follower_count, content_embedding, raw_metadata
+      `SELECT id, handle, display_name, bio, primary_category, niche, follower_count,
+              engagement_rate, raw_metadata
        FROM creators WHERE platform = 'instagram' AND lower(handle) = $1 LIMIT 1`,
       [handle],
     );
@@ -78,36 +85,39 @@ export async function GET(req: NextRequest) {
   }
   if (!src) return NextResponse.json({ error: 'not_found', message: 'Creator not in your database.' }, { status: 404 });
 
-  // 1. Source embedding — reuse the stored one, else build text and embed.
-  let embedding: number[] | null = Array.isArray(src.content_embedding) ? (src.content_embedding as number[]) : null;
-  if (!embedding) {
-    const captions: string[] = Array.isArray(src.raw_metadata?.recent_posts)
-      ? src.raw_metadata.recent_posts.map((p: { caption?: string }) => p.caption ?? '').filter(Boolean).slice(0, 8)
-      : [];
-    const text = [src.display_name, src.primary_category, src.niche, src.genre, src.bio, ...captions]
-      .filter(Boolean).join(' ').trim();
-    if (!text) return NextResponse.json({ error: 'no_signal', message: 'Not enough info on this creator to find lookalikes — open their profile first.' }, { status: 422 });
-    try {
-      embedding = await getOpenAIClient().embed(text);
-    } catch {
-      return NextResponse.json({ error: 'embed_failed' }, { status: 502 });
-    }
-  }
+  const srcFollowers = Number(src.follower_count ?? 0);
+  if (srcFollowers <= 0) return NextResponse.json({ error: 'no_followers', message: 'No follower data for this creator yet.' }, { status: 422 });
+  const lnF = Math.log(srcFollowers);
+  const srcEr = sourceER(src, srcFollowers); // %
+  const cat = (src.primary_category ?? src.niche ?? '').toLowerCase();
 
-  // 2. Vector-similarity search over the directory, excluding the source.
+  // Rank candidates by: follower-tier distance (log) + ER distance (where known,
+  // normalised by 5 points) + a 0.4 penalty for a different niche.
   let results: LiveProfile[];
   try {
-    const rows = await db.vectorSearch<CreatorRow>(
-      'creators',
-      'content_embedding',
-      embedding,
-      max + 1,
-      { sql: `is_active = true AND content_embedding IS NOT NULL AND lower(handle) <> $1`, params: [handle] },
+    const rows = await db.query<CreatorRow>(
+      `SELECT *,
+         ( abs(ln(greatest(follower_count, 1)::float8) - $2::float8)
+           + CASE WHEN engagement_rate IS NOT NULL AND $3::float8 > 0
+                  THEN abs(engagement_rate * 100 - $3::float8) / 5.0 ELSE 0 END
+           -- niche relevance dominates: a same-space creator within ~3x the
+           -- followers beats a different-space exact size match.
+           + CASE WHEN $4 <> '' AND lower(coalesce(primary_category, niche, '')) = $4 THEN 0 ELSE 1.2 END
+         ) AS dist
+       FROM creators
+       WHERE platform = 'instagram' AND is_active = true
+         AND lower(handle) <> $1 AND follower_count > 0
+         AND (is_indian = true OR is_indian IS NULL)
+       ORDER BY dist ASC
+       LIMIT $5::int`,
+      [handle, lnF, srcEr, cat, max],
     );
-    results = rows
-      .filter((r) => r.handle && r.handle.toLowerCase() !== handle)
-      .slice(0, max)
-      .map(toLiveProfile);
+    results = rows.map((r) => {
+      // Turn the distance into a 0-100 "match" score (closer = higher).
+      const d = Number(r.dist ?? 0);
+      const score = Math.max(0, Math.min(100, Math.round(100 - d * 22)));
+      return toLiveProfile(r, score);
+    });
   } catch {
     return NextResponse.json({ error: 'search_failed' }, { status: 500 });
   }
