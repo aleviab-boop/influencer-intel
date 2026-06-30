@@ -1574,8 +1574,13 @@ export function LiveSearch({
 
           {shown.length === 0 ? (
             <div className="px-4 py-10 text-center text-[14px] text-[#888] border border-[#eee] rounded-xl">
-              {run.results.length === 0
-                ? 'No profiles found from that seed. Try a different starting @handle.'
+              {crawling ? (
+                <span className="inline-flex items-center gap-2 text-[#9b7bff]">
+                  <span className="w-4 h-4 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
+                  Crawling Instagram for fresh creators… new profiles appear here as the worker finds them.
+                </span>
+              ) : run.results.length === 0
+                ? 'No creators found for that yet. Make sure the worker is running, or try a broader prompt.'
                 : 'No profiles match these filters. Loosen them to see more.'}
             </div>
           ) : (

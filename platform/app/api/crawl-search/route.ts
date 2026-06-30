@@ -1,23 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { tokenize, type LiveProfile } from '@/lib/live-discovery';
-import { searchCreatorsInDb } from '@/lib/creator-db-search';
+import { tokenize } from '@/lib/live-discovery';
 
 export const runtime = 'nodejs';
 
 // POST /api/crawl-search
 //   { prompt }
-//   → { job_id, prompt, tokens, results }
+//   → { job_id, prompt, tokens }
 //
-// Worker-backed discovery. Unlike the old synchronous /api/discover-live crawl
-// (which runs inside Vercel and is throttled by IG's data-center IP blocking),
-// this enqueues a `search_query` job into the shared DB. The browser worker
-// running on a real machine claims it, crawls Instagram with an authenticated
-// session, and tags every creator it finds with `search:<job_id>` — which the
-// client then polls for via /api/crawl-search/status.
+// Live worker-backed discovery. Enqueues a `search_query` job into the shared
+// DB; the browser worker running on a real machine claims it, crawls Instagram
+// with an authenticated session, and tags every creator it finds with
+// `search:<job_id>` — which the client polls for via /api/crawl-search/status.
 //
-// We also return instant DB matches so the user sees results immediately while
-// the live worker crawl streams in behind them.
+// This endpoint intentionally returns NO database results — the front screen
+// shows the live crawl only. (The DB-backed instant search still lives at
+// /api/discover-live mode:'db' for other surfaces.)
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
@@ -46,14 +44,6 @@ export async function POST(req: NextRequest) {
     console.error('[crawl-search] enqueue failed:', err);
   }
 
-  // Instant DB matches so the user sees something immediately.
   const tokens = tokenize(prompt);
-  let results: LiveProfile[] = [];
-  try {
-    results = await searchCreatorsInDb(tokens, 60);
-  } catch (err) {
-    console.error('[crawl-search] db search failed:', err);
-  }
-
-  return NextResponse.json({ job_id: jobId, prompt, tokens, results });
+  return NextResponse.json({ job_id: jobId, prompt, tokens, results: [] });
 }

@@ -38,7 +38,7 @@ interface DiscoveryCandidate {
   source: 'topsearch_user' | 'hashtag_top_media';
 }
 
-const HASHTAGS_TO_EXPLORE_PER_QUERY = 3;
+const HASHTAGS_TO_EXPLORE_PER_QUERY = 5;
 const SEEDS_TO_EXPAND_PER_QUERY = 3;          // top N strong seeds to chain from
 const SEED_MIN_FOLLOWERS = 10_000;            // chain from any real creator (tier-2 cities have smaller seeds)
 const CHAIN_LIMIT_PER_SEED = 40;              // candidates per chaining call
@@ -114,9 +114,26 @@ export async function handleSearchQuery(
         });
       };
 
+      // Pull the MEANINGFUL keywords out of a natural-language prompt
+      // ("fashion creator in pune" → ["fashion","pune"]) so topsearch and the
+      // hashtag harvest hit real niche/location terms instead of the literal
+      // sentence (which returns generic mega-accounts like @instagram).
+      const STOP = new Set([
+        'creator', 'creators', 'influencer', 'influencers', 'content', 'page', 'pages',
+        'account', 'accounts', 'profile', 'profiles', 'top', 'best', 'find', 'looking',
+        'based', 'from', 'near', 'around', 'the', 'and', 'for', 'with', 'who', 'that',
+        'india', 'indian', 'instagram', 'insta', 'reels', 'reel',
+      ]);
+      const words = q
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 3 && !STOP.has(w));
+      const qClean = words.length > 0 ? words.join(' ') : q;
+
       try {
-        // 1. Topsearch — users + hashtags
-        const ts = await fetch(`/web/search/topsearch/?query=${encodeURIComponent(q)}`, {
+        // 1. Topsearch — users + hashtags, on the cleaned keywords.
+        const ts = await fetch(`/web/search/topsearch/?query=${encodeURIComponent(qClean)}`, {
           headers,
           credentials: 'include',
         });
@@ -127,27 +144,20 @@ export async function handleSearchQuery(
           if (e?.user?.username) addCandidate(e.user, 'topsearch_user');
         }
 
-        // 2. Hashtag exploration — IG topsearch sometimes returns a hashtags
-        // array, sometimes not. Build candidate tags from BOTH:
+        // 2. Hashtag exploration. Build REAL candidate tags from:
         //   (a) topsearch.hashtags (when present)
-        //   (b) query-word permutations (e.g. "mumbai skincare" → mumbaiskincare,
-        //       skincaremumbai, mumbaibeauty)
+        //   (b) each keyword on its own (#pune, #fashion)
+        //   (c) pairwise concatenations, both orders (#punefashion, #fashionpune)
         const tsHashtags = (tj?.hashtags ?? []) as Array<{ hashtag?: { name?: string } }>;
         const fromTopsearch = tsHashtags
           .map((h) => h?.hashtag?.name)
           .filter((n): n is string => typeof n === 'string');
 
-        const cleanWords = q
-          .toLowerCase()
-          .replace(/[^a-z0-9\s]/g, '')
-          .split(/\s+/)
-          .filter((w) => w.length >= 3 && w !== 'india' && w !== 'indian');
         const fromQuery: string[] = [];
-        if (cleanWords.length > 0) {
-          fromQuery.push(cleanWords.join(''));               // "mumbaiskincare"
-          fromQuery.push(`${cleanWords.join('')}india`);     // "mumbaiskincareindia"
-          if (cleanWords.length >= 2) {
-            fromQuery.push([...cleanWords].reverse().join('')); // "skincaremumbai"
+        for (const w of words) fromQuery.push(w);
+        for (let i = 0; i < words.length; i++) {
+          for (let j = 0; j < words.length; j++) {
+            if (i !== j) fromQuery.push(words[i]! + words[j]!);
           }
         }
 
