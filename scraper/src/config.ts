@@ -32,7 +32,7 @@ export const config = {
   chromeProfilePath: resolvePath(process.env.CHROME_PROFILE_PATH, './.chrome-profile'),
   proxyUrl: process.env.SCRAPER_PROXY_URL || undefined,
   pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000),
-  maxActionsPerHour: Number(process.env.MAX_ACTIONS_PER_HOUR ?? 300),
+  maxActionsPerHour: Number(process.env.MAX_ACTIONS_PER_HOUR ?? 90),
   serviceAccountHandle: process.env.SERVICE_ACCOUNT_HANDLE ?? '',
   platformCallbackUrl:
     process.env.PLATFORM_CALLBACK_URL ?? 'http://localhost:3030/api/scrape-callback',

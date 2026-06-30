@@ -103,10 +103,15 @@ export async function handleProfileScrape(
   await fastDelay();
 }
 
-/** Tight delay between scrape jobs — 0.5-2s instead of the original 3-15s. */
+/**
+ * Human-paced delay between scrape jobs — ~6-18s, with an occasional longer
+ * "break" (like someone stepping away). Keeps the request cadence looking like a
+ * person browsing rather than a bot hammering the API.
+ */
 function fastDelay(): Promise<void> {
-  const ms = 500 + Math.random() * 1_500;
-  return new Promise((r) => setTimeout(r, ms));
+  const base = 6_000 + Math.random() * 12_000;
+  const longBreak = Math.random() < 0.12 ? 20_000 + Math.random() * 40_000 : 0;
+  return new Promise((r) => setTimeout(r, base + longBreak));
 }
 
 /** Thin persist for sub-5K creators — minimal embedding, no vision/geo. */

@@ -114,7 +114,17 @@ export async function launchDriver(opts: {
 export async function navigateHumanly(page: Page, url: string): Promise<boolean> {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await page.waitForTimeout(1_000 + Math.random() * 1_000);
+    // Dwell on the page like a real visitor reading it, then scroll a little.
+    await page.waitForTimeout(2_500 + Math.random() * 3_500);
+    try {
+      const steps = 1 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < steps; i++) {
+        await page.mouse.wheel(0, 250 + Math.random() * 600);
+        await page.waitForTimeout(700 + Math.random() * 1_600);
+      }
+    } catch {
+      /* scrolling is best-effort */
+    }
     return true;
   } catch (err) {
     console.error(`[driver] nav failed: ${url}`, err);
@@ -122,8 +132,8 @@ export async function navigateHumanly(page: Page, url: string): Promise<boolean>
   }
 }
 
-/** Tight inter-action delay — 0.5-2s. */
+/** Human inter-action pause — 4-12s, like a person clicking around. */
 export function humanDelay(): Promise<void> {
-  const ms = 500 + Math.random() * 1_500;
+  const ms = 4_000 + Math.random() * 8_000;
   return new Promise((r) => setTimeout(r, ms));
 }
