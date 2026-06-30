@@ -503,11 +503,11 @@ function parseSeedInput(raw: string): { seeds: string[]; names: string[] } {
 export function LiveSearch({
   initialPrompt = '',
   initialSeed = '',
-  initialMode = 'live',
+  initialMode = 'crawl',
 }: {
   initialPrompt?: string;
   initialSeed?: string;
-  initialMode?: 'db' | 'live';
+  initialMode?: 'db' | 'live' | 'crawl';
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [seedText, setSeedText] = useState(initialSeed);
@@ -515,6 +515,9 @@ export function LiveSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<RunResponse | null>(null);
+  // worker live-crawl: true while we poll the search_query job for new creators
+  const [crawling, setCrawling] = useState(false);
+  const crawlRun = useRef(0); // bumped per search so stale polls self-cancel
   const [exporting, setExporting] = useState(false);
   const [showSug, setShowSug] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -1056,9 +1059,9 @@ export function LiveSearch({
   function runSearch() {
     setShowSug(false); // close the autocomplete dropdown on every search
     setActiveIdx(-1);
-    const u = seedText.trim();
-    if (u.length >= 2) void search({ seedOverride: seedText, mode: 'live' });
-    else void search({ seedOverride: '', mode: 'db' });
+    // Single search box → always drive the browser worker (authenticated IG
+    // crawl). DB matches return instantly; the worker streams in fresh finds.
+    void search({ mode: 'crawl' });
   }
 
   // "More like this" — AI lookalikes. Uses the creator's content embedding (or
@@ -1103,14 +1106,52 @@ export function LiveSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' }) {
+  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl' }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
-    const mode = opts?.mode ?? 'live';
+    const mode = opts?.mode ?? 'crawl';
     // The server needs a prompt for ranking; for a bare username crawl, fall back
     // to the handle/name so we never invent a keyword the user didn't type.
     const p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
     if (p.length < 2) return;
+
+    // Worker-backed crawl: enqueue a search_query job, show instant DB matches,
+    // then poll for the creators the worker tags as it crawls Instagram.
+    if (mode === 'crawl') {
+      crawlRun.current += 1; // cancel any in-flight poll from a previous search
+      setLoading(true);
+      setError(null);
+      setNeedSeed(false);
+      try {
+        const r = await fetch('/api/crawl-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: p }),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          setError(d.message ?? d.error ?? 'Search failed');
+          setRun(null);
+          return;
+        }
+        const initial = (d.results ?? []) as LiveProfile[];
+        setRun({
+          prompt: p,
+          tokens: (d.tokens ?? []) as string[],
+          seeds: [],
+          results: initial,
+          persisted: 0,
+          resolved_from_names: [],
+          auto_seeds: [],
+        } as RunResponse);
+        if (d.job_id) void pollCrawl(d.job_id as string, initial);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -1133,6 +1174,44 @@ export function LiveSearch({
       setError((err as Error).message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Poll the worker search job, merging newly-tagged creators into the results
+  // as they're discovered. Self-cancels when a newer search starts (crawlRun) or
+  // when the job finishes / a time budget is hit.
+  async function pollCrawl(jobId: string, initial: LiveProfile[]) {
+    const my = crawlRun.current;
+    setCrawling(true);
+    const seen = new Set(initial.map((x) => x.username.toLowerCase()));
+    const merged = [...initial];
+    try {
+      for (let i = 0; i < 40; i++) {
+        await new Promise((res) => setTimeout(res, 2500));
+        if (crawlRun.current !== my) return; // a newer search superseded us
+        let d: { status?: string; done?: boolean; results?: LiveProfile[] };
+        try {
+          const r = await fetch(`/api/crawl-search/status?id=${encodeURIComponent(jobId)}`);
+          d = await r.json();
+        } catch {
+          continue;
+        }
+        let changed = false;
+        for (const c of d.results ?? []) {
+          const k = c.username.toLowerCase();
+          if (!seen.has(k)) {
+            seen.add(k);
+            merged.push(c);
+            changed = true;
+          }
+        }
+        if (changed && crawlRun.current === my) {
+          setRun((prev) => (prev ? { ...prev, results: [...merged] } : prev));
+        }
+        if (d.done) break;
+      }
+    } finally {
+      if (crawlRun.current === my) setCrawling(false);
     }
   }
 
@@ -1242,25 +1321,6 @@ export function LiveSearch({
               </div>
             )}
           </div>
-        </div>
-
-        {/* one search: username → Instagram crawl, else database */}
-        <div className="mt-3 flex items-center gap-2 border-t border-[#f0eefc] pt-3">
-          <span className="text-[#9b7bff] shrink-0" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" /></svg>
-          </span>
-          <input
-            value={seedText}
-            onChange={(e) => setSeedText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                runSearch();
-              }
-            }}
-            placeholder="Optional — add a @username to crawl Instagram, or leave blank to search your database"
-            className="flex-1 min-w-0 text-[14px] text-[#222] placeholder-[#aaa] focus:outline-none bg-transparent"
-          />
           <button
             onClick={runSearch}
             disabled={loading || prompt.trim().length < 2}
@@ -1380,6 +1440,12 @@ export function LiveSearch({
               <span className="font-semibold text-[#111]">{shown.length}</span>
               {shown.length !== run.results.length && <span className="text-[#999]">/{run.results.length}</span>} profiles for{' '}
               <span className="font-medium text-[#111]">“{run.prompt}”</span>
+              {crawling && (
+                <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-[#9b7bff]">
+                  <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
+                  crawling Instagram…
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button

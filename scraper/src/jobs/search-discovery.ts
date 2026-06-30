@@ -400,6 +400,21 @@ export async function handleSearchQuery(
     );
     added++;
 
+    // Tag this creator with the originating search job so the platform can
+    // fetch "the creators this search produced" by polling. Append-only (never
+    // clobbers a creator's existing tags), deduped.
+    try {
+      await db.query(
+        `UPDATE creators
+           SET tags = (SELECT array_agg(DISTINCT t)
+                       FROM unnest(coalesce(tags, '{}'::text[]) || ARRAY[$1]::text[]) AS t)
+         WHERE platform = 'instagram' AND handle = $2`,
+        [`search:${job.id}`, handle],
+      );
+    } catch {
+      /* tagging is best-effort; don't fail the whole search on one row */
+    }
+
     // Queue deep scrape (priority 2 — behind brand-driven on_demand at 1).
     await queue.enqueueBackground({
       job_type: 'on_demand',

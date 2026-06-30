@@ -84,13 +84,15 @@ function LanderContent() {
   // View is driven by the URL so "Home" (→ /lander) always resets to the hero.
   const query = params.get('prompt');
   const seed = params.get('seed') ?? '';
-  const mode: 'db' | 'live' = params.get('mode') === 'live' ? 'live' : 'db';
-  // Show results when there's a prompt OR just a username seed (bare crawl).
+  // Default to the worker-backed live crawl; 'db'/'live' still honoured for any
+  // existing deep links.
+  const mode: 'db' | 'live' | 'crawl' =
+    params.get('mode') === 'live' ? 'live' : params.get('mode') === 'db' ? 'db' : 'crawl';
+  // Show results when there's a prompt OR a username seed (legacy bare crawl).
   const showResults = query !== null || seed.trim().length >= 2;
-  const runSearch = (q: string, s: string, m: 'db' | 'live') => {
-    const qs = new URLSearchParams({ mode: m });
-    if (q) qs.set('prompt', q); // only carry a prompt the user actually typed
-    if (s) qs.set('seed', s);
+  const runSearch = (q: string) => {
+    const qs = new URLSearchParams({ mode: 'crawl' });
+    if (q) qs.set('prompt', q);
     router.push(`/lander?${qs.toString()}`);
   };
   return (
@@ -114,7 +116,7 @@ function LanderContent() {
           </div>
         ) : (
           <>
-            <Hero onSearch={runSearch} />
+            <Hero onSearch={(q) => runSearch(q)} />
             <LogoMarquee />
             <Showcase />
             <DatabaseSection />
@@ -224,21 +226,19 @@ function useTypewriter(words: string[]) {
   return text;
 }
 
-function Hero({ onSearch }: { onSearch: (q: string, seed: string, mode: 'db' | 'live') => void }) {
+function Hero({ onSearch }: { onSearch: (q: string) => void }) {
   const [value, setValue] = useState('');
-  const [seed, setSeed] = useState('');
   const [showSug, setShowSug] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
   const typed = useTypewriter(SUGGESTIONS);
   const suggestions = buildSuggestions(value);
   const sugOpen = showSug && suggestions.length > 0;
 
-  // One search: a username crawls Instagram live; otherwise search the database.
+  // One search box → the prompt drives the browser worker's authenticated
+  // Instagram crawl (DB matches show instantly while live finds stream in).
   const go = () => {
     const q = value.trim();
-    const u = seed.trim();
-    if (u.length >= 2) onSearch(q, u, 'live'); // username crawl; prompt only if typed
-    else if (q.length >= 2) onSearch(q, '', 'db');
+    if (q.length >= 2) onSearch(q);
   };
 
   const pick = (s: string) => {
@@ -332,23 +332,8 @@ function Hero({ onSearch }: { onSearch: (q: string, seed: string, mode: 'db' | '
                   </div>
                 )}
               </div>
-            {/* one search: username → Instagram crawl, else database */}
-            <div className="mt-2 flex items-center gap-2 border-t border-[#f0eefc] pt-3">
-              <span className="text-[#9b7bff] shrink-0" aria-hidden>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" /></svg>
-              </span>
-              <input
-                value={seed}
-                onChange={(e) => setSeed(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    go();
-                  }
-                }}
-                placeholder="Optional — add a @username to crawl Instagram, or leave blank to search your database"
-                className="flex-1 min-w-0 text-[14px] text-[#222] placeholder-[#aaa] focus:outline-none bg-transparent"
-              />
+            {/* one search: the prompt crawls Instagram via the worker */}
+            <div className="mt-3 flex items-center justify-end border-t border-[#f0eefc] pt-3">
               <button
                 onClick={go}
                 aria-label="Search"
