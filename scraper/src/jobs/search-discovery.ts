@@ -366,6 +366,12 @@ export async function handleSearchQuery(
   const BLOCK_RE =
     /(news|tvnews|\btv\b|times|jagran|dainik|bhaskar|aajtak|abplive|samachar|patrika|reporter|magazine|\bmedia\b|\bpress\b|gazette|tribune|herald|headlines|breaking|bulletin|newspaper|\bnews\d)/i;
 
+  // Shops / wholesalers / brands / events post heavily on hashtags to sell, so
+  // they flood the harvest — but they're businesses, not creators. Hard-drop the
+  // obvious commerce/brand/event accounts by name.
+  const SHOP_RE =
+    /(wholesale|whole_sale|\bstore\b|\bshop\b|\bshops\b|shopping|boutique|\bmart\b|collections?|couture|\bbuy\b|\bsale\b|\bsales\b|\bdeals?\b|\boffers?\b|export|exports|manufactur|supplier|wholesaler|retail|\btrader\b|emporium|bazaar|\bmall\b|clothing|garments?|textiles?|fabrics?|sarees?|kurtis?|lehenga|fashionweek|fashion_week|outlet|enterprises?|\bpvt\b|\bltd\b|\binc\b|industries|\bco\b|\bhub\b|\bworld\b|\bbazar\b|jewellery|jewelry|footwear)/i;
+
   const qualified = candidates.filter((c) => {
     // Drop KNOWN sub-5K (nano) — keep unknowns, let the profile-scraper decide.
     if (typeof c.follower_count === 'number' && c.follower_count < 5_000) return false;
@@ -374,11 +380,12 @@ export async function handleSearchQuery(
     if (typeof c.follower_count === 'number' && c.follower_count > 3_000_000) return false;
     const id = `${c.username} ${c.full_name ?? ''}`.toLowerCase();
     if (BLOCK_RE.test(id)) return false;
+    if (SHOP_RE.test(id)) return false;
     return true;
   });
   const droppedCount = candidates.length - qualified.length;
   if (droppedCount > 0) {
-    console.log(`[search] "${query}": dropped ${droppedCount} off-target candidates (nano / mega / news-media)`);
+    console.log(`[search] "${query}": dropped ${droppedCount} off-target candidates (nano / mega / news / shops)`);
   }
 
   // Relevance score: a prompt keyword in the handle/name is the strongest signal
