@@ -397,10 +397,13 @@ export async function handleSearchQuery(
     let s = 0;
     for (const k of keywords) if (id.includes(k)) s += 3;
     s += Math.min(c.sources.length, 4);
+    // Favour bigger creators (within the <3M cap) so higher-reach names rank up.
     const f = c.follower_count ?? 0;
-    if (f >= 10_000 && f <= 500_000) s += 2;
-    else if (f > 500_000 && f <= 1_000_000) s += 1;
-    else if (f > 1_000_000) s -= 1;
+    if (f > 1_000_000) s += 4;
+    else if (f > 500_000) s += 3;
+    else if (f > 100_000) s += 2.5;
+    else if (f > 50_000) s += 2;
+    else if (f > 10_000) s += 1;
     return s;
   };
   qualified.sort((a, b) => {

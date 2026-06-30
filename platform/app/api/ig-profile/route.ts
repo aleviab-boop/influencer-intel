@@ -91,7 +91,8 @@ export async function GET(req: NextRequest) {
     rows = await getBolticClient().query<Record<string, unknown>>(
       `SELECT handle, display_name, bio, primary_category, niche, follower_count,
               following_count, posts_count, engagement_rate, profile_photo_url,
-              profile_url, is_verified, primary_city, raw_metadata, last_scraped_at
+              profile_url, is_verified, primary_city, raw_metadata, recent_posts,
+              last_scraped_at
        FROM creators WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
       [handle],
     );
@@ -134,8 +135,58 @@ export async function GET(req: NextRequest) {
   const contact = extractContact(bio, { externalUrl: (c.profile_url as string) ?? null });
   const er = c.engagement_rate != null ? Math.round(Number(c.engagement_rate) * 1000) / 10 : null;
   const meta = (c.raw_metadata as Record<string, unknown> | null) ?? {};
-  const recent = Array.isArray(meta.recent_posts) ? meta.recent_posts : [];
-  const collabs = Array.isArray(meta.collabs) ? meta.collabs : [];
+  const geo = (meta.geo as Record<string, unknown> | null) ?? {};
+
+  // The worker stores per-post metrics (likes/comments/views/media_type) in
+  // raw_metadata.geo.posts, and grid thumbnails in the recent_posts column.
+  // Merge them by shortcode into the shape the drawer's posts grid + reel
+  // forecast expect (the forecast derives views from likes).
+  const geoPosts = Array.isArray(geo.posts) ? (geo.posts as Array<Record<string, unknown>>) : [];
+  const gridPosts = Array.isArray(c.recent_posts) ? (c.recent_posts as Array<Record<string, unknown>>) : [];
+  const thumbByCode = new Map<string, string>();
+  for (const g of gridPosts) {
+    const url = typeof g.post_url === 'string' ? g.post_url : '';
+    const code = (g.platform_post_id as string) || url.match(/\/(?:p|reel|tv)\/([^/?#]+)/)?.[1] || '';
+    const thumb = (g.thumbnail_url as string) || (g.thumbnail as string) || '';
+    if (code && thumb) thumbByCode.set(code, thumb);
+  }
+  let recent = geoPosts.map((p) => {
+    const ts = typeof p.timestamp === 'string' && p.timestamp ? Math.floor(Date.parse(p.timestamp as string) / 1000) : null;
+    const code = (p.code as string) ?? '';
+    return {
+      shortcode: code,
+      thumbnail: thumbByCode.get(code) ?? null,
+      likes: typeof p.likes === 'number' ? p.likes : 0,
+      comments: typeof p.comments === 'number' ? p.comments : 0,
+      is_video: p.media_type === 'video',
+      taken_at: Number.isFinite(ts) ? ts : null,
+      caption: (p.caption_excerpt as string) ?? '',
+    };
+  });
+  // Fallback: no feed metrics yet → show the grid posts (thumbnails only) so the
+  // drawer at least renders the post wall while a deep scrape fills metrics.
+  if (recent.length === 0 && gridPosts.length > 0) {
+    recent = gridPosts.map((g) => {
+      const url = typeof g.post_url === 'string' ? g.post_url : '';
+      const code = (g.platform_post_id as string) || url.match(/\/(?:p|reel|tv)\/([^/?#]+)/)?.[1] || '';
+      return {
+        shortcode: code,
+        thumbnail: (g.thumbnail_url as string) || (g.thumbnail as string) || null,
+        likes: typeof g.like_count === 'number' ? g.like_count : 0,
+        comments: typeof g.comment_count === 'number' ? g.comment_count : 0,
+        is_video: g.post_type === 'reel',
+        taken_at: null,
+        caption: (g.caption as string) ?? '',
+      };
+    });
+  }
+
+  // Collabs / brand mentions for the "brands worked with" panel.
+  const collabs = Array.isArray(geo.brand_mentions)
+    ? (geo.brand_mentions as string[]).slice(0, 12).map((h) => ({ handle: h, count: 1 }))
+    : Array.isArray(meta.collabs)
+      ? (meta.collabs as Array<{ handle: string; count: number }>)
+      : [];
   const sponsored = typeof meta.sponsored_posts === 'number' ? meta.sponsored_posts : 0;
   const niche = ((c.primary_category as string) || (c.niche as string)) ?? '';
   const followers = Number(c.follower_count ?? 0);
