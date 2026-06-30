@@ -49,8 +49,8 @@ async function main(): Promise<void> {
     await queue.complete(job.id, { ok: true, test: true });
     console.log(`[test-one-job] DONE job ${job.id} completed`);
     // Show what persisted.
-    const rows = await db.query<{ handle: string; follower_count: number | null; posts_count: number | null; last_scraped_at: string | null; tier: string | null }>(
-      `SELECT handle, follower_count, posts_count, last_scraped_at, tier
+    const rows = await db.query<{ handle: string; follower_count: number | null; posts_count: number | null; last_scraped_at: string | null; engagement_rate: number | null; primary_category: string | null }>(
+      `SELECT handle, follower_count, posts_count, last_scraped_at, engagement_rate, primary_category
          FROM creators WHERE platform = 'instagram' AND lower(handle) = $1 LIMIT 1`,
       [handle],
     );
