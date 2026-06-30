@@ -1309,8 +1309,8 @@ export function LiveSearch({
                 }
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  if (sugOpen && activeIdx >= 0) pickSuggestion(suggestions[activeIdx]!);
-                  else runSearch();
+                  setShowSug(false);
+                  runSearch();
                 }
               }}
               rows={1}

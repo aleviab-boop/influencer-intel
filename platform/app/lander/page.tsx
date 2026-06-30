@@ -272,8 +272,9 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
         {/* Animated search box */}
         <div className="mt-9 relative max-w-3xl mx-auto text-left">
           <div className="rounded-2xl bg-white border-2 transition-colors p-4 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] border-[#e3def9]">
-            {/* prompt (above the line) */}
-            <div className="relative">
+            {/* single search: prompt + button on one row, press Enter to search */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
                 <textarea
                   value={value}
                   onChange={(e) => {
@@ -298,8 +299,8 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
                     }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      if (sugOpen && activeIdx >= 0) pick(suggestions[activeIdx]!);
-                      else go();
+                      setShowSug(false);
+                      go();
                     }
                   }}
                   rows={1}
@@ -332,8 +333,6 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
                   </div>
                 )}
               </div>
-            {/* one search: the prompt crawls Instagram via the worker */}
-            <div className="mt-3 flex items-center justify-end border-t border-[#f0eefc] pt-3">
               <button
                 onClick={go}
                 aria-label="Search"
