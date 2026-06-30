@@ -263,12 +263,11 @@ export async function handleSearchQuery(
         }
 
         // 4. Enrich follower counts for candidates that don't have them.
-        // Light follower signal for the first ranking pass — the relevance-based
-        // inline enrichment (in Node, below) does the real lookups for the top
-        // candidates. Keeping this small avoids hammering web_profile_info (too
-        // many calls in one job gets the whole batch rate-limited).
+        // Follower signal for ranking. Capped so one search doesn't fire so many
+        // web_profile_info calls that the account gets rate-limited (429) — the
+        // per-creator deep scrape queued afterwards fills real stats anyway.
         const list = Array.from(candidatesByHandle.values());
-        const needsEnrich = list.filter((c) => c.follower_count == null).slice(0, 8);
+        const needsEnrich = list.filter((c) => c.follower_count == null).slice(0, 25);
         for (let i = 0; i < needsEnrich.length; i += 5) {
           const batch = needsEnrich.slice(i, i + 5);
           await Promise.all(
@@ -416,84 +415,19 @@ export async function handleSearchQuery(
     return (b.follower_count ?? 0) - (a.follower_count ?? 0);
   });
 
-  // Inline enrichment: pull real profile stats for the top candidates so a
-  // freshly-discovered creator never shows "0 followers / no posts" in the
-  // drawer, AND so we can reliably drop businesses (IG's is_business flag) and
-  // private accounts — far more accurate than guessing from the handle. The deep
-  // on_demand scrape (queued below) still fills recent posts + the reel forecast.
-  const TOP_TO_ENRICH = 35;
-  const topHandles = qualified.slice(0, TOP_TO_ENRICH).map((c) => c.username);
-  interface Enriched {
-    followers: number | null; following: number | null; posts: number | null;
-    full_name: string | null; bio: string | null; pic: string | null;
-    is_private: boolean; is_business: boolean; category: string | null; is_verified: boolean;
-  }
-  const enriched = (await driver.page.evaluate(async (handles: string[]) => {
-    const g: any = globalThis;
-    if (typeof g.__name !== 'function') g.__name = (fn: unknown) => fn;
-    const headers = { 'X-Requested-With': 'XMLHttpRequest', 'X-IG-App-ID': '936619743392459' };
-    const out: Record<string, any> = {};
-    for (let i = 0; i < handles.length; i += 5) {
-      const batch = handles.slice(i, i + 5);
-      await Promise.all(batch.map(async (h) => {
-        try {
-          const r = await fetch(`/api/v1/users/web_profile_info/?username=${encodeURIComponent(h)}`, { headers, credentials: 'include' });
-          if (!r.ok) return;
-          const u = (await r.json())?.data?.user;
-          if (!u) return;
-          out[h.toLowerCase()] = {
-            followers: u.edge_followed_by?.count ?? null,
-            following: u.edge_follow?.count ?? null,
-            posts: u.edge_owner_to_timeline_media?.count ?? null,
-            full_name: u.full_name ?? null,
-            bio: u.biography ?? null,
-            pic: u.profile_pic_url ?? null,
-            is_private: !!u.is_private,
-            is_business: !!(u.is_business_account ?? u.is_professional_account),
-            category: u.category_name ?? null,
-            is_verified: !!u.is_verified,
-          };
-        } catch {}
-      }));
-      await new Promise((res) => setTimeout(res, 500 + Math.random() * 800));
-    }
-    return out;
-  }, topHandles)) as Record<string, Enriched>;
-  console.log(`[search] "${query}": enriched ${Object.keys(enriched ?? {}).length}/${topHandles.length} candidates inline`);
-
-  // Apply enrichment, drop private/business/now-known-off-target, re-rank.
-  let droppedBiz = 0;
-  const finalists = qualified.slice(0, TOP_TO_ENRICH).filter((c) => {
-    const e = enriched[c.username.toLowerCase()];
-    if (!e) return true; // couldn't fetch — keep, the deep scrape will decide
-    if (e.is_private || e.is_business) { droppedBiz++; return false; }
-    if (typeof e.followers === 'number') {
-      if (e.followers < 5_000 || e.followers > 3_000_000) return false;
-      c.follower_count = e.followers;
-    }
-    if (e.full_name && !c.full_name) c.full_name = e.full_name;
-    if (e.pic && !c.profile_pic_url) c.profile_pic_url = e.pic;
-    c.is_verified = c.is_verified || e.is_verified;
-    return true;
-  });
-  if (droppedBiz > 0) console.log(`[search] "${query}": dropped ${droppedBiz} business/private accounts (is_business)`);
-  finalists.sort((a, b) => {
-    const ra = relScore(a);
-    const rb = relScore(b);
-    if (ra !== rb) return rb - ra;
-    return (b.follower_count ?? 0) - (a.follower_count ?? 0);
-  });
-
   const db = getBolticClient();
   const llm = getOpenAIClient();
   let added = 0;
-  // Cap deep-scrape queueing per query.
+  // Cap deep-scrape queueing per query. Each upserted creator gets an on_demand
+  // deep scrape queued below, which fills real followers / posts / engagement /
+  // recent reels (the reel forecast) at a human pace — we deliberately do NOT
+  // burst-fetch profiles inline here, which just gets the account rate-limited
+  // (429) and starves those deep scrapes of data.
   const CAP_PER_QUERY = 30;
 
-  for (const c of finalists.slice(0, CAP_PER_QUERY)) {
+  for (const c of qualified.slice(0, CAP_PER_QUERY)) {
     const handle = c.username;
     if (!/^[a-z0-9._]+$/i.test(handle)) continue;
-    const e = enriched[handle.toLowerCase()];
 
     // Light embedding: mixes the query (intent) with the candidate's name
     // so future briefs can semantically match these creators immediately.
@@ -510,13 +444,9 @@ export async function handleSearchQuery(
         handle,
         profile_url: `https://www.instagram.com/${handle}/`,
         display_name: c.full_name ?? null,
-        bio: e?.bio ?? null,
-        primary_category: e?.category ?? null,
         profile_photo_url: c.profile_pic_url ?? null,
         is_verified: c.is_verified ?? false,
         follower_count: c.follower_count ?? null,
-        following_count: e?.following ?? null,
-        posts_count: e?.posts ?? null,
         data_tier: 'tier_c',
         is_active: true,
         ...(embedding ? { content_embedding: embedding } : {}),
