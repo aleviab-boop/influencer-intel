@@ -347,28 +347,60 @@ export async function handleSearchQuery(
     `[search] "${query}": ${candidates.length} unique candidates (${harvest?.tagsExplored ?? 0} hashtags explored)`,
   );
 
-  // Quality filter: drop candidates with KNOWN sub-5K follower counts (the
-  // chaining + followings expansion brings in lots of nano accounts that
-  // would just waste deep-scrape time only to be deactivated by the quality
-  // gate). Keep candidates with unknown counts — let profile-scraper decide.
+  // Keywords from the prompt (same cleaning as the in-page harvest) so we can
+  // score how relevant each candidate's handle/name is to what was searched.
+  const STOP = new Set([
+    'creator', 'creators', 'influencer', 'influencers', 'content', 'page', 'pages',
+    'account', 'accounts', 'profile', 'profiles', 'top', 'best', 'find', 'looking',
+    'based', 'from', 'near', 'around', 'the', 'and', 'for', 'with', 'who', 'that',
+    'india', 'indian', 'instagram', 'insta', 'reels', 'reel',
+  ]);
+  const keywords = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !STOP.has(w));
+
+  // News / TV / magazine / agency accounts blanket every hashtag and dominate by
+  // reach — they're never the niche creator you searched for. Hard-drop them.
+  const BLOCK_RE =
+    /(news|tvnews|\btv\b|times|jagran|dainik|bhaskar|aajtak|abplive|samachar|patrika|reporter|magazine|\bmedia\b|\bpress\b|gazette|tribune|herald|headlines|breaking|bulletin|newspaper|\bnews\d)/i;
+
   const qualified = candidates.filter((c) => {
+    // Drop KNOWN sub-5K (nano) — keep unknowns, let the profile-scraper decide.
     if (typeof c.follower_count === 'number' && c.follower_count < 5_000) return false;
+    // Drop mega accounts (>3M) — for a niche/local search these are brands,
+    // celebs or news outlets, not the creator you want.
+    if (typeof c.follower_count === 'number' && c.follower_count > 3_000_000) return false;
+    const id = `${c.username} ${c.full_name ?? ''}`.toLowerCase();
+    if (BLOCK_RE.test(id)) return false;
     return true;
   });
   const droppedCount = candidates.length - qualified.length;
   if (droppedCount > 0) {
-    console.log(`[search] "${query}": dropped ${droppedCount} sub-5K candidates upfront`);
+    console.log(`[search] "${query}": dropped ${droppedCount} off-target candidates (nano / mega / news-media)`);
   }
 
-  // Multi-source candidates rank higher: surfaced by both topsearch + hashtag
-  // → strong signal. Sort by source count desc, then follower_count desc.
+  // Relevance score: a prompt keyword in the handle/name is the strongest signal
+  // (a real "pune fashion" creator usually says so), then multi-source surfacing,
+  // then a mid-tier follower sweet spot (10K-500K) — so shortlist-grade creators
+  // beat both nano noise and mega generic accounts. Raw reach is only a tiebreak.
+  const relScore = (c: { username: string; full_name: string | null; follower_count: number | null; sources: string[] }): number => {
+    const id = `${c.username} ${c.full_name ?? ''}`.toLowerCase();
+    let s = 0;
+    for (const k of keywords) if (id.includes(k)) s += 3;
+    s += Math.min(c.sources.length, 4);
+    const f = c.follower_count ?? 0;
+    if (f >= 10_000 && f <= 500_000) s += 2;
+    else if (f > 500_000 && f <= 1_000_000) s += 1;
+    else if (f > 1_000_000) s -= 1;
+    return s;
+  };
   qualified.sort((a, b) => {
-    const sa = a.sources.length;
-    const sb = b.sources.length;
-    if (sa !== sb) return sb - sa;
-    const fa = a.follower_count ?? 0;
-    const fb = b.follower_count ?? 0;
-    return fb - fa;
+    const ra = relScore(a);
+    const rb = relScore(b);
+    if (ra !== rb) return rb - ra;
+    return (b.follower_count ?? 0) - (a.follower_count ?? 0);
   });
 
   const db = getBolticClient();
