@@ -263,9 +263,12 @@ export async function handleSearchQuery(
         }
 
         // 4. Enrich follower counts for candidates that don't have them.
-        // Cap to 40 enrichment lookups (chaining brought in many candidates).
+        // Light follower signal for the first ranking pass — the relevance-based
+        // inline enrichment (in Node, below) does the real lookups for the top
+        // candidates. Keeping this small avoids hammering web_profile_info (too
+        // many calls in one job gets the whole batch rate-limited).
         const list = Array.from(candidatesByHandle.values());
-        const needsEnrich = list.filter((c) => c.follower_count == null).slice(0, 40);
+        const needsEnrich = list.filter((c) => c.follower_count == null).slice(0, 8);
         for (let i = 0; i < needsEnrich.length; i += 5) {
           const batch = needsEnrich.slice(i, i + 5);
           await Promise.all(
@@ -418,7 +421,7 @@ export async function handleSearchQuery(
   // drawer, AND so we can reliably drop businesses (IG's is_business flag) and
   // private accounts — far more accurate than guessing from the handle. The deep
   // on_demand scrape (queued below) still fills recent posts + the reel forecast.
-  const TOP_TO_ENRICH = 45;
+  const TOP_TO_ENRICH = 35;
   const topHandles = qualified.slice(0, TOP_TO_ENRICH).map((c) => c.username);
   interface Enriched {
     followers: number | null; following: number | null; posts: number | null;
@@ -456,6 +459,7 @@ export async function handleSearchQuery(
     }
     return out;
   }, topHandles)) as Record<string, Enriched>;
+  console.log(`[search] "${query}": enriched ${Object.keys(enriched ?? {}).length}/${topHandles.length} candidates inline`);
 
   // Apply enrichment, drop private/business/now-known-off-target, re-rank.
   let droppedBiz = 0;
