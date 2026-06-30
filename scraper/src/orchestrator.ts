@@ -2,10 +2,11 @@
 // Orchestrator — main scraper loop.
 // ============================================================
 
-import { getBolticClient } from '@influencer-intel/shared/db';
-import type { ScrapeJob, ServiceAccount } from '@influencer-intel/shared/types';
+import type { Page } from 'playwright-core';
+import type { ScrapeJob } from '@influencer-intel/shared/types';
 import { config, assertConfig } from './config.js';
 import { JobQueue } from './queue/worker.js';
+import { AccountPool } from './queue/account-pool.js';
 import { launchDriver, type DriverHandle } from './playwright-driver.js';
 import { handleProfileScrape } from './jobs/profile-scraper.js';
 import { handleDiscoveryCrawl } from './jobs/discovery-scraper.js';
@@ -14,37 +15,46 @@ import { handleCredibilityRecompute } from './jobs/credibility-scorer.js';
 import { handleSearchQuery } from './jobs/search-discovery.js';
 import { notifyPlatform } from './platform-notify.js';
 
-async function loadServiceAccount(): Promise<ServiceAccount> {
-  const db = getBolticClient();
-  const rows = await db.query<ServiceAccount>(
-    `SELECT * FROM service_accounts
-     WHERE platform = 'instagram' AND handle = $1 AND status = 'active'
-     ORDER BY storage_captured_at DESC NULLS LAST
-     LIMIT 1`,
-    [config.serviceAccountHandle],
-  );
-  if (rows.length === 0) {
-    throw new Error(
-      `No active service account found for handle "${config.serviceAccountHandle}". Run \`npm run capture-session\` first.`,
-    );
+// One cheap authenticated probe to see if the active account is being
+// rate-limited (429). Run between jobs so we can rotate off a throttled account.
+async function probeThrottled(page: Page): Promise<boolean> {
+  try {
+    const status = await page.evaluate(async () => {
+      const g = globalThis as unknown as { __name?: (fn: unknown) => unknown };
+      if (typeof g.__name !== 'function') g.__name = (fn: unknown) => fn;
+      try {
+        const r = await fetch('/api/v1/users/web_profile_info/?username=instagram', {
+          headers: { 'X-IG-App-ID': '936619743392459' },
+          credentials: 'include',
+        });
+        return r.status;
+      } catch {
+        return 0;
+      }
+    });
+    return status === 429;
+  } catch {
+    return false;
   }
-  return rows[0]!;
 }
 
 export async function run(): Promise<void> {
   assertConfig();
 
   console.log('[orchestrator] starting…');
-  const serviceAccount = await loadServiceAccount();
-  console.log(`[orchestrator] using service account @${serviceAccount.handle}`);
+  const pool = await AccountPool.load();
+  if (pool.size === 0) {
+    throw new Error(
+      'No active service accounts with a captured session. Run `npm run capture-session` first.',
+    );
+  }
+  console.log(`[orchestrator] account pool: ${pool.size} account(s) — ${pool.status()}`);
 
-  const driver = await launchDriver({
-    headless: false,
-    storageStateJson: serviceAccount.storage_state,
-  });
-  console.log('[orchestrator] Camoufox Firefox ready');
+  let driver = await launchDriver({ headless: false, storageStateJson: pool.current().storage_state });
+  let activeHandle = pool.current().handle;
+  console.log(`[orchestrator] Camoufox ready — using @${activeHandle}`);
 
-  const queue = new JobQueue();
+  const queue = new JobQueue(pool);
 
   let stopping = false;
   const stop = async (signal: string) => {
@@ -57,7 +67,26 @@ export async function run(): Promise<void> {
   process.on('SIGINT', () => stop('SIGINT'));
   process.on('SIGTERM', () => stop('SIGTERM'));
 
+  let jobsSinceProbe = 0;
+
   while (!stopping) {
+    // Rotate accounts when the active one is over its hourly cap or cooling down.
+    if (pool.dueForRotation()) {
+      const next = pool.pickNext();
+      if (!next) {
+        const waitMs = Math.min(pool.nextAvailableInMs() + 1_000, 5 * 60 * 1000);
+        console.log(`[pool] all accounts at their limit — waiting ${Math.round(waitMs / 1000)}s  [${pool.status()}]`);
+        await sleep(waitMs);
+        continue;
+      }
+      if (next.handle !== activeHandle) {
+        console.log(`[pool] switching @${activeHandle} → @${next.handle}  [${pool.status()}]`);
+        await driver.close().catch(() => {});
+        driver = await launchDriver({ headless: false, storageStateJson: next.storage_state });
+        activeHandle = next.handle;
+      }
+    }
+
     const job = (await queue.claimNext()) ?? (await queue.pickIdleWork());
     if (!job) {
       await sleep(config.pollIntervalMs);
@@ -66,7 +95,7 @@ export async function run(): Promise<void> {
 
     try {
       console.log(
-        `[orchestrator] picked job ${job.id} type=${job.job_type} target=${job.target_handle} priority=${job.priority}`,
+        `[orchestrator] picked job ${job.id} type=${job.job_type} target=${job.target_handle} priority=${job.priority} via @${activeHandle}`,
       );
       await dispatch(job, driver, queue);
       await queue.complete(job.id, { ok: true });
@@ -95,6 +124,12 @@ export async function run(): Promise<void> {
           error_message: msg,
         });
       }
+    }
+
+    // Every few jobs, probe for a 429 → cool down + rotate off this account.
+    if (++jobsSinceProbe >= 6) {
+      jobsSinceProbe = 0;
+      if (await probeThrottled(driver.page)) pool.penalizeCurrent();
     }
   }
 }

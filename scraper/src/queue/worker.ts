@@ -7,18 +7,26 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import type { ScrapeJob } from '@influencer-intel/shared/types';
 import { config } from '../config.js';
+import type { AccountPool } from './account-pool.js';
 
 export class JobQueue {
   private readonly db = getBolticClient();
   private actionsThisHour = 0;
   private hourReset = Date.now() + 3_600_000;
 
+  // When a multi-account pool is supplied, per-account rate accounting + the
+  // hourly cap live in the pool (the orchestrator rotates accounts). Without
+  // one, the queue throttles itself on the single account (legacy behaviour).
+  constructor(private readonly pool?: AccountPool) {}
+
   /** Claim the next available job (priority order). Marks it in_progress. */
   async claimNext(): Promise<ScrapeJob | null> {
-    this.maybeResetActions();
-    if (this.actionsThisHour >= config.maxActionsPerHour) {
-      // Rate-limit hit: wait out the hour
-      return null;
+    if (!this.pool) {
+      this.maybeResetActions();
+      if (this.actionsThisHour >= config.maxActionsPerHour) {
+        // Rate-limit hit: wait out the hour
+        return null;
+      }
     }
 
     const rows = await this.db.query<ScrapeJob>(
@@ -114,6 +122,10 @@ export class JobQueue {
   }
 
   bumpActions(n = 1): void {
+    if (this.pool) {
+      this.pool.note(n);
+      return;
+    }
     this.maybeResetActions();
     this.actionsThisHour += n;
   }
