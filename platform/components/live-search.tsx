@@ -1198,8 +1198,10 @@ export function LiveSearch({
     const seen = new Set(initial.map((x) => x.username.toLowerCase()));
     const merged = [...initial];
     try {
-      for (let i = 0; i < 40; i++) {
-        await new Promise((res) => setTimeout(res, 2500));
+      // ~4 min budget — the worker scrapes at a human pace, so results land over
+      // a minute or two rather than instantly.
+      for (let i = 0; i < 80; i++) {
+        await new Promise((res) => setTimeout(res, 3000));
         if (crawlRun.current !== my) return; // a newer search superseded us
         let d: { status?: string; done?: boolean; results?: LiveProfile[] };
         try {
