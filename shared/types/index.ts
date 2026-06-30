@@ -513,6 +513,7 @@ export interface ExtensionExtractionResult {
   bio: string | null;
   profile_photo_url: string | null;
   is_verified: boolean;
+  is_private?: boolean;
   follower_count: number | null;
   following_count: number | null;
   posts_count: number | null;

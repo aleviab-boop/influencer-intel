@@ -163,6 +163,11 @@ export async function extractProfileInPage(
     const isVerified = (): boolean =>
       !!document.querySelector('header section svg[aria-label*="Verified"]');
 
+    const isPrivate = (): boolean => {
+      const t = document.body.innerText.slice(0, 6000);
+      return /This (Account|account) is Private|This account is private/.test(t);
+    };
+
     const extractAccountType = (): string | null => {
       const text = document.body.innerText.slice(0, 4000);
       if (text.includes('Public figure')) return 'public_figure';
@@ -236,6 +241,7 @@ export async function extractProfileInPage(
     const externalLink = extractExternalLink();
     const category = extractCategory();
     const verified = isVerified();
+    const priv = isPrivate();
     const accountType = extractAccountType();
     const recentPosts = extractRecentPosts();
     const highlightsCount = extractHighlightsCount();
@@ -259,6 +265,7 @@ export async function extractProfileInPage(
       bio,
       profile_photo_url: ogImage,
       is_verified: verified,
+      is_private: priv,
       follower_count: followerCount,
       following_count: followingCount,
       posts_count: postsCount,

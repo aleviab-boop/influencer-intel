@@ -67,7 +67,9 @@ interface ProfileData {
   collabs?: { handle: string; count: number }[];
   sponsored_posts?: number;
   engagement?: number | null;
-  source?: 'db' | 'live' | 'db_cached';
+  source?: 'db' | 'live' | 'db_cached' | 'pending';
+  refreshing?: boolean;
+  last_scraped_at?: string | null;
 }
 
 interface RunResponse {
@@ -555,20 +557,6 @@ export function LiveSearch({
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
-  // Scraper health — surfaced when a live fetch falls back, so the user knows
-  // WHY (expired cookie vs rate-limit) and how to fix it.
-  const [igHealth, setIgHealth] = useState<'ok' | 'expired' | 'throttled' | 'down' | null>(null);
-  const [healthDismissed, setHealthDismissed] = useState(false);
-  const healthCheckingRef = useRef(false);
-  async function checkIgHealth() {
-    if (healthCheckingRef.current) return;
-    healthCheckingRef.current = true;
-    try {
-      const d = await fetch('/api/ig-health').then((r) => r.json());
-      setIgHealth(d.status ?? null);
-      if (d.status && d.status !== 'ok') setHealthDismissed(false);
-    } catch { /* ignore */ } finally { healthCheckingRef.current = false; }
-  }
   // Measure the results-table viewport so the inline profile drawer can be
   // pinned to the left and sized to the visible width — keeping it fully on
   // screen instead of clipped inside the table's horizontal scroll.
@@ -776,8 +764,9 @@ export function LiveSearch({
       const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}`).then((r) => r.json());
       if (d && !d.error) {
         setProfile(d as ProfileData);
-        // Fell back to cached/DB → check why (expired cookie vs throttle).
-        if (d.source === 'db' || d.source === 'db_cached') void checkIgHealth();
+        // Data is stale/missing → the worker was queued to (re)scrape it. Poll
+        // the DB until the worker writes fresh data, then swap it in.
+        if (d.refreshing) void pollWorkerRefresh(handle, d.last_scraped_at ?? null);
       } else setProfileError('live');
     } catch {
       setProfileError('live');
@@ -786,15 +775,38 @@ export function LiveSearch({
     }
   }
 
-  // Re-pull the open profile live (cache-busted) so followers / engagement /
-  // posts reflect the real numbers right now — without closing the drawer.
+  // After the worker is queued to scrape a handle, poll /api/ig-profile until
+  // last_scraped_at advances (the worker wrote fresh data), then update the open
+  // drawer in place. Self-cancels if the user opens a different profile.
+  async function pollWorkerRefresh(handle: string, since: string | null) {
+    const sinceT = since ? new Date(since).getTime() : 0;
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      if (profileFor !== handle) return; // user moved on
+      try {
+        const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}&_t=${Date.now()}`).then((r) => r.json());
+        const t = d?.last_scraped_at ? new Date(d.last_scraped_at).getTime() : 0;
+        if (d && !d.error && t > sinceT) {
+          if (profileFor === handle) setProfile(d as ProfileData);
+          return;
+        }
+      } catch {
+        /* keep polling */
+      }
+    }
+  }
+
+  // Force the browser worker to re-scrape this profile, then poll until it
+  // writes fresh data and swap it into the open drawer (no live IG call from the
+  // server). Needs the worker running on the laptop.
   async function refreshProfile() {
     const handle = profileFor;
     if (!handle || profileRefreshing) return;
     setProfileRefreshing(true);
     try {
-      const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}&_t=${Date.now()}`).then((r) => r.json());
+      const d = await fetch(`/api/ig-profile?handle=${encodeURIComponent(handle)}&force=1&_t=${Date.now()}`).then((r) => r.json());
       if (d && !d.error) { setProfile(d as ProfileData); setProfileError(null); }
+      void pollWorkerRefresh(handle, d?.last_scraped_at ?? null);
     } catch {
       /* keep the existing data on a failed refresh */
     } finally {
@@ -1412,25 +1424,6 @@ export function LiveSearch({
           <div className="mt-3 text-[13px] text-[#888]">Finding starting points & crawling Instagram…</div>
         </div>
       )}
-
-      {/* scraper health banner — only when something's off */}
-      {igHealth && igHealth !== 'ok' && !healthDismissed && (() => {
-        const cfg = igHealth === 'expired'
-          ? { bg: '#fef2f2', bd: '#fecaca', fg: '#b91c1c', title: 'Instagram session expired', body: 'The login cookie is stale, so live photos/posts aren’t loading. Grab a fresh sessionid from the burner account (DevTools → Cookies → instagram.com) and update IG_SESSIONID in your env + Vercel.' }
-          : igHealth === 'throttled'
-            ? { bg: '#fff7ed', bd: '#fed7aa', fg: '#b45309', title: 'Instagram is rate-limiting right now', body: 'Live fetches are temporarily blocked, so cached data is shown. Slow down / wait a few minutes and it’ll recover — already-warmed creators still display.' }
-            : { bg: '#fff7ed', bd: '#fed7aa', fg: '#b45309', title: 'Can’t reach Instagram', body: 'The live fetch failed (relay or network). Showing cached/database data. Check the relay is running.' };
-        return (
-          <div className="mt-4 flex items-start gap-3 rounded-xl border px-4 py-3" style={{ background: cfg.bg, borderColor: cfg.bd }}>
-            <span className="text-[16px] leading-none mt-0.5" style={{ color: cfg.fg }}>⚠</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold" style={{ color: cfg.fg }}>{cfg.title}</div>
-              <p className="text-[12px] text-[#555] leading-snug mt-0.5">{cfg.body}</p>
-            </div>
-            <button onClick={() => setHealthDismissed(true)} className="text-[#999] hover:text-[#555] text-lg leading-none shrink-0" title="Dismiss">×</button>
-          </div>
-        );
-      })()}
 
       {/* results table */}
       {run && !loading && (
@@ -2220,9 +2213,9 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 text-center" style={{ animation: 'ii-fadeup .3s both' }}>
         <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
-        <div className="text-[14px] font-medium text-[#444]">Couldn&apos;t load the live profile</div>
+        <div className="text-[14px] font-medium text-[#444]">Couldn&apos;t load this profile</div>
         <p className="mt-1.5 text-[12px] text-[#888] max-w-md mx-auto leading-relaxed">
-          Live profile details are fetched from Instagram, which blocks requests from cloud servers. This works on localhost, or on the server once a proxy is configured.
+          This creator hasn&apos;t been scraped yet. It&apos;s been queued for the Instagram worker — try again in a moment.
         </p>
       </div>
     );
@@ -2281,11 +2274,11 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
               )}
               {(() => {
                 const src = profile.source;
-                const cfg = src === 'db_cached'
-                  ? { label: 'Cached', bg: '#fff7ed', fg: '#b45309', bd: '#fed7aa', tip: 'Live fetch unavailable — showing cached data. Hit “Refresh live” to re-pull.' }
-                  : src === 'db'
-                    ? { label: 'Database', bg: '#f3f4f6', fg: '#6b7280', bd: '#e5e7eb', tip: 'From your database only — couldn’t fetch live posts/photos right now.' }
-                    : { label: 'Live', bg: '#ecfdf5', fg: '#059669', bd: '#a7f3d0', tip: 'Fetched live from Instagram just now.' };
+                const cfg = src === 'pending'
+                  ? { label: 'Scraping…', bg: '#fff7ed', fg: '#b45309', bd: '#fed7aa', tip: 'Queued for the Instagram worker — fresh data will appear shortly.' }
+                  : profile.refreshing
+                    ? { label: 'Refreshing…', bg: '#eff6ff', fg: '#2563eb', bd: '#bfdbfe', tip: 'The worker is re-scraping this profile for fresh data.' }
+                    : { label: 'Worker data', bg: '#ecfdf5', fg: '#059669', bd: '#a7f3d0', tip: 'Scraped from Instagram by the browser worker.' };
                 return (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border" style={{ background: cfg.bg, color: cfg.fg, borderColor: cfg.bd }} title={cfg.tip}>
                     <span className="w-1.5 h-1.5 rounded-full" style={{ background: cfg.fg }} />{cfg.label}

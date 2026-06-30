@@ -38,16 +38,17 @@ export async function handleProfileScrape(
     `${extraction.posts_count ?? 'N/A'} posts, tier=${extraction.tier ?? 'N/A'}`,
   );
 
-  // Quality gate — under-5K accounts are not shortlist-worthy. Persist a thin
-  // row marked inactive so we don't keep re-scraping them, and skip vision
-  // (saves OpenAI tokens) + audience_inference (saves scraper time).
+  // Quality gate — we only keep PUBLIC accounts with 5K+ followers. Private
+  // accounts (no usable public data) and sub-5K nanos are persisted as a thin
+  // inactive row so they won't appear in shortlists or get re-scraped by idle
+  // work, and we skip vision (saves OpenAI tokens) + audience_inference.
   const tooSmall =
     typeof extraction.follower_count === 'number' && extraction.follower_count < 5_000;
+  const isPrivate = extraction.is_private === true;
 
-  // Fast-path nano: persist thin row, no vision/geo/embed/audience inference.
-  // Saves ~25-40s per nano (was ~30% of all jobs).
-  if (tooSmall) {
-    console.log(`[profile-scraper] ${handle}: skipping enrichment (only ${extraction.follower_count} followers)`);
+  if (tooSmall || isPrivate) {
+    const reason = isPrivate ? 'private account' : `only ${extraction.follower_count} followers`;
+    console.log(`[profile-scraper] ${handle}: skipping enrichment (${reason})`);
     await persistCreatorThin(extraction);
     await fastDelay();
     return;

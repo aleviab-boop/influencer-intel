@@ -1,151 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractContact } from '@/lib/live-discovery';
-import { igFetch } from '@/lib/ig-fetch';
 import { getBolticClient } from '@influencer-intel/shared/db';
 
 export const runtime = 'nodejs';
 export const maxDuration = 20;
 
-// Fallback when the live Instagram fetch is unavailable (e.g. blocked from a
-// cloud server): serve the creator's stored profile from the database so the
-// snapshot still shows real stats. Returns a 404 response if not in the DB.
-async function dbProfileOr404(handle: string): Promise<NextResponse> {
-  try {
-    const rows = await getBolticClient().query<Record<string, unknown>>(
-      `SELECT handle, display_name, bio, primary_category, niche, follower_count,
-              following_count, posts_count, engagement_rate, profile_photo_url,
-              profile_url, is_verified, primary_city, raw_metadata
-       FROM creators WHERE handle = $1 LIMIT 1`,
-      [handle.toLowerCase()],
-    );
-    const c = rows[0];
-    if (!c) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-    const bio = (c.bio as string) ?? '';
-    const contact = extractContact(bio, { externalUrl: (c.profile_url as string) ?? null });
-    const er = c.engagement_rate != null ? Math.round(Number(c.engagement_rate) * 1000) / 10 : null;
-    // Serve the recent posts / collabs cached on the last successful live crawl,
-    // so the snapshot's analytics still work while Instagram is throttling us.
-    const meta = (c.raw_metadata as Record<string, unknown> | null) ?? {};
-    const cachedRecent = Array.isArray(meta.recent_posts) ? meta.recent_posts : [];
-    const cachedCollabs = Array.isArray(meta.collabs) ? meta.collabs : [];
-    const cachedSponsored = typeof meta.sponsored_posts === 'number' ? meta.sponsored_posts : 0;
-    return NextResponse.json({
-      handle: c.handle,
-      full_name: (c.display_name as string) ?? '',
-      biography: bio,
-      category: ((c.primary_category as string) || (c.niche as string)) ?? '',
-      followers: Number(c.follower_count ?? 0),
-      following: Number(c.following_count ?? 0),
-      posts: Number(c.posts_count ?? 0),
-      is_verified: Boolean(c.is_verified),
-      is_private: false,
-      profile_pic_url: (c.profile_photo_url as string) ?? null,
-      external_url: contact.link,
-      email: contact.email,
-      phone: contact.phone,
-      recent: cachedRecent,
-      related: [],
-      collabs: cachedCollabs,
-      sponsored_posts: cachedSponsored,
-      engagement: er,
-      source: cachedRecent.length > 0 ? 'db_cached' : 'db',
-    });
-  } catch {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 });
-  }
-}
-
-// Best-effort: store the @-tagged accounts (collabs) we detected on this
-// creator into raw_metadata, merging without clobbering other keys (e.g.
-// vision). Powers the competitor "who works with whom" tool for any creator
-// whose profile has been viewed. Failures are swallowed — never block the read.
-async function persistProfileCache(
-  handle: string,
-  collabs: { handle: string; count: number }[],
-  sponsored: number,
-  recent: unknown[],
-  picUrl: string | null,
-): Promise<void> {
-  if (!handle) return;
-  try {
-    // Cache the recent posts too (only when we actually got some — never clobber
-    // a good cache with an empty crawl), so the DB fallback can serve real posts
-    // when a later live fetch is throttled. Also store the profile photo URL so
-    // the avatar endpoint can skip the rate-limited profile API call.
-    const params: unknown[] = [handle.replace(/^@/, ''), JSON.stringify(collabs), sponsored];
-    let recentClause = '';
-    if (recent.length > 0) {
-      params.push(JSON.stringify(recent), new Date().toISOString());
-      recentClause = `|| jsonb_build_object('recent_posts', $4::jsonb, 'recent_cached_at', $5::text)`;
-    }
-    let picClause = '';
-    if (picUrl) { params.push(picUrl); picClause = `, profile_photo_url = $${params.length}`; }
-    await getBolticClient().query(
-      `UPDATE creators
-         SET raw_metadata = COALESCE(raw_metadata, '{}'::jsonb)
-               || jsonb_build_object('collabs', $2::jsonb, 'sponsored_posts', $3::int)
-               ${recentClause},
-             updated_at = now()${picClause}
-       WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
-      params,
-    );
-  } catch {
-    /* non-fatal */
-  }
-}
-
 // GET /api/ig-profile?handle=X
-//   Full public profile + recent posts (login-free). Powers the profile drawer.
-const APP_ID = '936619743392459';
-const HEADERS: Record<string, string> = {
-  'x-ig-app-id': APP_ID,
-  'User-Agent':
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  Accept: '*/*',
-  Referer: 'https://www.instagram.com/',
-  'Sec-Fetch-Site': 'same-origin',
-  'Sec-Fetch-Mode': 'cors',
-  'Sec-Fetch-Dest': 'empty',
-};
+//   Powers the profile drawer. DB-backed: the browser worker (scraper workspace)
+//   crawls Instagram with an authenticated session and persists rich profile data
+//   (followers, engagement, recent posts, collabs, vision fields) into `creators`.
+//   This endpoint serves that worker-built data — it does NOT fetch Instagram from
+//   the Vercel server (cloud IPs are blocked by IG; the old cookie/relay path
+//   always failed here and fell back to stale "cached" data). When the stored data
+//   is missing or stale we enqueue an on_demand worker refresh so the laptop worker
+//   re-scrapes and the drawer can poll for the update.
 
-// Instagram's web_profile_info no longer includes recent posts in many cases —
-// even with a logged-in session it returns the profile but an empty timeline.
-// Fall back to the dedicated user-feed endpoint and normalise each item to the
-// same shape web_profile_info used, so the parsing below works unchanged.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchUserFeed(pk: string): Promise<any[]> {
+const STALE_MS = 3 * 24 * 60 * 60 * 1000; // re-scrape if older than 3 days
+
+// Enqueue an on_demand worker scrape for this handle, unless one is already
+// queued/running (so repeated drawer opens don't flood the queue).
+async function enqueueRefresh(handle: string, priority: number): Promise<boolean> {
+  const db = getBolticClient();
   try {
-    const res = await igFetch(`https://www.instagram.com/api/v1/feed/user/${pk}/?count=12`, { headers: HEADERS });
-    if (!res.ok) return [];
-    const j = await res.json();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const items: any[] = j?.items ?? [];
-    // Pick a SMALL image candidate (~320px) for the grid thumbnail instead of
-    // the full-res version (candidates[0] can be 1-2MB) — far lighter to load.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const smallThumb = (cands: any): string | null => {
-      if (!Array.isArray(cands) || cands.length === 0) return null;
-      const sorted = [...cands].sort((a, b) => (a?.width ?? 0) - (b?.width ?? 0));
-      const pick = sorted.find((c) => (c?.width ?? 0) >= 240) ?? sorted[sorted.length - 1];
-      return pick?.url ?? null;
-    };
-    return items.map((it) => {
-      const thumb = smallThumb(it.image_versions2?.candidates)
-        ?? smallThumb(it.carousel_media?.[0]?.image_versions2?.candidates) ?? null;
-      return {
-        node: {
-          shortcode: it.code ?? '',
-          thumbnail_src: thumb,
-          display_url: thumb,
-          edge_liked_by: { count: it.like_count ?? 0 },
-          edge_media_to_comment: { count: it.comment_count ?? 0 },
-          is_video: it.media_type === 2,
-          taken_at_timestamp: it.taken_at ?? null,
-          edge_media_to_caption: { edges: it.caption?.text ? [{ node: { text: it.caption.text } }] : [] },
-        },
-      };
+    const existing = await db.query(
+      `SELECT 1 FROM scrape_jobs
+       WHERE job_type = 'on_demand' AND lower(target_handle) = lower($1)
+         AND status IN ('queued', 'in_progress') LIMIT 1`,
+      [handle],
+    );
+    if (existing.length > 0) return true; // already in flight
+    await db.insert('scrape_jobs', {
+      job_type: 'on_demand',
+      target_platform: 'instagram',
+      target_handle: handle,
+      priority,
+      status: 'queued',
+      attempts: 0,
+      queued_at: new Date().toISOString(),
     });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Worker-discovered "similar" creators from the DB (same niche, nearby reach) so
+// the drawer's SIMILAR CREATORS panel stays populated without any live IG call.
+interface RelatedRow {
+  handle: string;
+  display_name: string | null;
+  is_verified: boolean | null;
+  profile_photo_url: string | null;
+}
+async function dbRelated(handle: string, niche: string, followers: number) {
+  if (!niche) return [];
+  try {
+    const rows = await getBolticClient().query<RelatedRow>(
+      `SELECT handle, display_name, is_verified, profile_photo_url
+       FROM creators
+       WHERE platform = 'instagram' AND is_active = true
+         AND lower(handle) <> lower($1)
+         AND lower(coalesce(primary_category, niche, '')) = lower($2)
+       ORDER BY abs(coalesce(follower_count, 0) - $3) ASC
+       LIMIT 8`,
+      [handle, niche, followers],
+    );
+    return rows
+      .map((r) => ({
+        handle: r.handle,
+        full_name: r.display_name ?? '',
+        is_verified: Boolean(r.is_verified),
+        profile_pic_url: r.profile_photo_url ?? null,
+      }))
+      .filter((r) => r.handle);
   } catch {
     return [];
   }
@@ -156,108 +83,90 @@ export async function GET(req: NextRequest) {
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
-  // Instagram throttles login-free requests sporadically (a 429 or an empty
-  // body here and there). A couple of quick retries turns most of those
-  // transient blips into a successful live fetch, instead of dropping straight
-  // to the DB fallback — which has no recent posts, so the profile preview
-  // would otherwise flicker to "0 posts / no images".
-  const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let u: any = null;
-  for (let attempt = 0; attempt < 3 && !u; attempt++) {
-    try {
-      const res = await igFetch(url, { headers: HEADERS });
-      if (res.ok) u = (await res.json())?.data?.user ?? null;
-    } catch {
-      /* transient network error — fall through to retry */
-    }
-    if (!u && attempt < 2) await new Promise((r) => setTimeout(r, 300 + attempt * 500));
-  }
-  if (!u) return dbProfileOr404(handle);
+  // ?force=1 → user hit "Refresh": always queue a worker re-scrape.
+  const force = req.nextUrl.searchParams.get('force') === '1';
 
+  let rows: Record<string, unknown>[] = [];
   try {
-    let media = u.edge_owner_to_timeline_media?.edges ?? [];
-    // Profile came back without posts → pull them from the user-feed endpoint.
-    if (media.length === 0 && u.id) media = await fetchUserFeed(String(u.id));
-    // Brand-conflict signals: who the creator tags/mentions in recent captions
-    // and whether posts look sponsored — so you can spot competitor collabs
-    // before reaching out. Computed from the FULL caption (before truncation).
-    const SPONSOR_RE = /#(ad|sponsored|paid|paidpartnership|collab|collaboration|partner|brandpartner|sponsoredpost)\b|paid partnership/i;
-    const MENTION_RE = /@([A-Za-z0-9_.]{2,30})/g;
-    const self = (u.username ?? '').toLowerCase();
-    const mentionCounts = new Map<string, number>();
-    let sponsoredPosts = 0;
-
-    const recent = media.slice(0, 9).map((e: { node?: Record<string, unknown> }) => {
-      const n = (e.node ?? {}) as Record<string, unknown>;
-      const caption =
-        ((n.edge_media_to_caption as { edges?: { node?: { text?: string } }[] })?.edges?.[0]?.node?.text) ?? '';
-      if (SPONSOR_RE.test(caption)) sponsoredPosts++;
-      for (const m of caption.matchAll(MENTION_RE)) {
-        const h = (m[1] ?? '').toLowerCase().replace(/\.+$/, '');
-        if (h && h !== self) mentionCounts.set(h, (mentionCounts.get(h) ?? 0) + 1);
-      }
-      return {
-        shortcode: n.shortcode ?? '',
-        thumbnail: (n.thumbnail_src as string) ?? (n.display_url as string) ?? null,
-        likes: (n.edge_liked_by as { count?: number })?.count ?? 0,
-        comments: (n.edge_media_to_comment as { count?: number })?.count ?? 0,
-        is_video: Boolean(n.is_video),
-        taken_at: (n.taken_at_timestamp as number) ?? null,
-        caption: caption.slice(0, 140),
-      };
-    });
-
-    const collabs = [...mentionCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 12)
-      .map(([handle, count]) => ({ handle, count }));
-
-    // Persist the detected collabs + recent posts so the competitor tool and
-    // the DB fallback can use them later — best-effort, never blocks the response.
-    void persistProfileCache(u.username, collabs, sponsoredPosts, recent, u.profile_pic_url ?? null);
-
-    const contact = extractContact(u.biography, {
-      businessEmail: u.business_email,
-      publicEmail: u.public_email,
-      externalUrl: u.external_url,
-    });
-
-    // Instagram's own "related profiles" — real, login-free similar-creator seeds.
-    const relatedEdges = u.edge_related_profiles?.edges ?? [];
-    const related = relatedEdges
-      .slice(0, 12)
-      .map((e: { node?: Record<string, unknown> }) => {
-        const n = (e.node ?? {}) as Record<string, unknown>;
-        return {
-          handle: (n.username as string) ?? '',
-          full_name: (n.full_name as string) ?? '',
-          is_verified: Boolean(n.is_verified),
-          profile_pic_url: (n.profile_pic_url as string) ?? null,
-        };
-      })
-      .filter((r: { handle: string }) => r.handle);
-
-    return NextResponse.json({
-      handle: u.username,
-      full_name: u.full_name ?? '',
-      biography: u.biography ?? '',
-      category: u.category_name ?? '',
-      followers: u.edge_followed_by?.count ?? 0,
-      following: u.edge_follow?.count ?? 0,
-      posts: u.edge_owner_to_timeline_media?.count ?? 0,
-      is_verified: Boolean(u.is_verified),
-      is_private: Boolean(u.is_private),
-      profile_pic_url: u.profile_pic_url ?? null,
-      external_url: u.external_url ?? null,
-      email: contact.email,
-      phone: contact.phone,
-      recent,
-      related,
-      collabs,
-      sponsored_posts: sponsoredPosts,
-    });
+    rows = await getBolticClient().query<Record<string, unknown>>(
+      `SELECT handle, display_name, bio, primary_category, niche, follower_count,
+              following_count, posts_count, engagement_rate, profile_photo_url,
+              profile_url, is_verified, primary_city, raw_metadata, last_scraped_at
+       FROM creators WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
+      [handle],
+    );
   } catch {
-    return dbProfileOr404(handle);
+    rows = [];
   }
+
+  const c = rows[0];
+
+  // Not in the DB yet → queue the worker to scrape it, return a pending shell so
+  // the drawer can show "scraping…" and poll.
+  if (!c) {
+    const refreshing = await enqueueRefresh(handle, 1);
+    return NextResponse.json({
+      handle,
+      full_name: '',
+      biography: '',
+      category: '',
+      followers: 0,
+      following: 0,
+      posts: 0,
+      is_verified: false,
+      is_private: false,
+      profile_pic_url: null,
+      external_url: null,
+      email: null,
+      phone: null,
+      recent: [],
+      related: [],
+      collabs: [],
+      sponsored_posts: 0,
+      engagement: null,
+      source: 'pending',
+      refreshing,
+      last_scraped_at: null,
+    });
+  }
+
+  const bio = (c.bio as string) ?? '';
+  const contact = extractContact(bio, { externalUrl: (c.profile_url as string) ?? null });
+  const er = c.engagement_rate != null ? Math.round(Number(c.engagement_rate) * 1000) / 10 : null;
+  const meta = (c.raw_metadata as Record<string, unknown> | null) ?? {};
+  const recent = Array.isArray(meta.recent_posts) ? meta.recent_posts : [];
+  const collabs = Array.isArray(meta.collabs) ? meta.collabs : [];
+  const sponsored = typeof meta.sponsored_posts === 'number' ? meta.sponsored_posts : 0;
+  const niche = ((c.primary_category as string) || (c.niche as string)) ?? '';
+  const followers = Number(c.follower_count ?? 0);
+
+  const last = c.last_scraped_at ? new Date(c.last_scraped_at as string).getTime() : 0;
+  const stale = !last || Date.now() - last > STALE_MS || recent.length === 0;
+  const refreshing = force || stale ? await enqueueRefresh(handle, force ? 1 : 2) : false;
+
+  const related = await dbRelated(handle, niche, followers);
+
+  return NextResponse.json({
+    handle: c.handle,
+    full_name: (c.display_name as string) ?? '',
+    biography: bio,
+    category: niche,
+    followers,
+    following: Number(c.following_count ?? 0),
+    posts: Number(c.posts_count ?? 0),
+    is_verified: Boolean(c.is_verified),
+    is_private: false,
+    profile_pic_url: (c.profile_photo_url as string) ?? null,
+    external_url: contact.link,
+    email: contact.email,
+    phone: contact.phone,
+    recent,
+    related,
+    collabs,
+    sponsored_posts: sponsored,
+    engagement: er,
+    source: 'db',
+    last_scraped_at: (c.last_scraped_at as string) ?? null,
+    refreshing,
+  });
 }
