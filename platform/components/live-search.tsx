@@ -780,7 +780,9 @@ export function LiveSearch({
   // drawer in place. Self-cancels if the user opens a different profile.
   async function pollWorkerRefresh(handle: string, since: string | null) {
     const sinceT = since ? new Date(since).getTime() : 0;
-    for (let i = 0; i < 30; i++) {
+    // ~3 min budget — the worker scrapes at a human pace and may be working
+    // through a queue before it re-scrapes this handle.
+    for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 3000));
       if (profileFor !== handle) return; // user moved on
       try {
