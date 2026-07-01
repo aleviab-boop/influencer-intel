@@ -16,10 +16,10 @@ export const maxDuration = 20;
 //     the drawer renders, and we persist it back into `creators` so the DB stays
 //     warm.
 //   - If the live fetch fails (no relay configured, 401/429, network), we fall
-//     back to whatever the DB already has (source 'db'), and if the handle isn't
-//     in the DB at all we return a pending shell + queue a worker discovery.
+//     back to whatever the DB already has (source 'db'). Deep scraping has been
+//     removed from the browser worker entirely, so we no longer enqueue a worker
+//     refresh here — the cookie scraper IS the deep-scrape path.
 
-const STALE_MS = 3 * 24 * 60 * 60 * 1000; // consider DB data stale after 3 days
 const APP_ID = '936619743392459';
 const PROFILE_URL = (u: string) =>
   `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(u)}`;
@@ -176,36 +176,9 @@ async function dbRelated(handle: string, niche: string, followers: number) {
   }
 }
 
-// Enqueue an on_demand worker DISCOVERY for a handle we've never seen, unless
-// one is already queued/running.
-async function enqueueRefresh(handle: string, priority: number): Promise<boolean> {
-  const db = getBolticClient();
-  try {
-    const existing = await db.query(
-      `SELECT 1 FROM scrape_jobs
-       WHERE job_type = 'on_demand' AND lower(target_handle) = lower($1)
-         AND status IN ('queued', 'in_progress') LIMIT 1`,
-      [handle],
-    );
-    if (existing.length > 0) return true;
-    await db.insert('scrape_jobs', {
-      job_type: 'on_demand',
-      target_platform: 'instagram',
-      target_handle: handle,
-      priority,
-      status: 'queued',
-      attempts: 0,
-      queued_at: new Date().toISOString(),
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // ---- DB fallback (what the worker discovered / a previous live persist) ------
 
-async function dbProfile(handle: string, force: boolean) {
+async function dbProfile(handle: string) {
   let rows: Record<string, unknown>[] = [];
   try {
     rows = await getBolticClient().query<Record<string, unknown>>(
@@ -222,9 +195,10 @@ async function dbProfile(handle: string, force: boolean) {
 
   const c = rows[0];
 
-  // Not in the DB and live fetch already failed → pending shell + queue worker.
+  // Not in the DB and the live cookie fetch already failed (relay/proxy down or
+  // IG throttled). Nothing to deep-scrape any more — the browser worker is
+  // discovery-only. Return an empty shell; the drawer can offer a manual retry.
   if (!c) {
-    const refreshing = await enqueueRefresh(handle, 0);
     return NextResponse.json({
       handle,
       full_name: '',
@@ -245,7 +219,7 @@ async function dbProfile(handle: string, force: boolean) {
       sponsored_posts: 0,
       engagement: null,
       source: 'pending',
-      refreshing,
+      refreshing: false,
       last_scraped_at: null,
     });
   }
@@ -303,10 +277,6 @@ async function dbProfile(handle: string, force: boolean) {
   const niche = ((c.primary_category as string) || (c.niche as string)) ?? '';
   const followers = Number(c.follower_count ?? 0);
 
-  const last = c.last_scraped_at ? new Date(c.last_scraped_at as string).getTime() : 0;
-  const stale = !last || Date.now() - last > STALE_MS || recent.length === 0;
-  const refreshing = force || stale ? await enqueueRefresh(handle, force ? 0 : 1) : false;
-
   const related = await dbRelated(handle, niche, followers);
 
   return NextResponse.json({
@@ -330,7 +300,7 @@ async function dbProfile(handle: string, force: boolean) {
     engagement: er,
     source: 'db',
     last_scraped_at: (c.last_scraped_at as string) ?? null,
-    refreshing,
+    refreshing: false,
   });
 }
 
@@ -339,7 +309,6 @@ export async function GET(req: NextRequest) {
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
-  const force = req.nextUrl.searchParams.get('force') === '1';
 
   // 1) LIVE via the cookie scraper (through the residential relay/proxy). This is
   //    the primary path: real followers, recent posts, live ER, reel-forecast
@@ -439,5 +408,5 @@ export async function GET(req: NextRequest) {
   }
 
   // 2) DB fallback (worker-discovered row or a prior live persist).
-  return dbProfile(handle, force);
+  return dbProfile(handle);
 }

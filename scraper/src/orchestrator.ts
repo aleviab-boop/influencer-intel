@@ -8,7 +8,6 @@ import { config, assertConfig } from './config.js';
 import { JobQueue } from './queue/worker.js';
 import { AccountPool } from './queue/account-pool.js';
 import { launchDriver, type DriverHandle } from './playwright-driver.js';
-import { handleProfileScrape } from './jobs/profile-scraper.js';
 import { handleDiscoveryCrawl } from './jobs/discovery-scraper.js';
 import { handleAudienceInference } from './jobs/audience-inference.js';
 import { handleCredibilityRecompute } from './jobs/credibility-scorer.js';
@@ -143,7 +142,11 @@ async function dispatch(job: ScrapeJob, driver: DriverHandle, queue: JobQueue): 
   switch (job.job_type) {
     case 'on_demand':
     case 'refresh':
-      await handleProfileScrape(job, driver, queue);
+      // Deep per-creator scraping has moved OFF the browser worker. Rich data
+      // (followers, recent posts, live ER, reel-forecast inputs) is now fetched
+      // on demand by the cookie scraper (platform /api/ig-profile). The browser
+      // worker is discovery-only, so we no-op these instead of deep-scraping.
+      console.log(`[orchestrator] skipping ${job.job_type} ${job.target_handle} — deep scraping is handled by the cookie scraper now`);
       return;
     case 'discovery_crawl':
       await handleDiscoveryCrawl(job, driver, queue);
