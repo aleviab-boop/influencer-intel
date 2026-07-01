@@ -1073,9 +1073,9 @@ export function LiveSearch({
   function runSearch() {
     setShowSug(false); // close the autocomplete dropdown on every search
     setActiveIdx(-1);
-    // Single search box → always drive the browser worker (authenticated IG
-    // crawl). DB matches return instantly; the worker streams in fresh finds.
-    void search({ mode: 'crawl' });
+    // Mode is set by the host: the agency lander searches the DB (instant);
+    // the admin Scraper page drives the live browser-worker crawl.
+    void search({ mode: initialMode });
   }
 
   // "More like this" — AI lookalikes. Uses the creator's content embedding (or

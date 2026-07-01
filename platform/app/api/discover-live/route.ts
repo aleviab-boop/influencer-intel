@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
   // mode 'db' → search only the existing creators database (no live crawl).
   if (mode === 'db') {
     const dbMatches = await searchCreatorsInDb(tokens, max);
+    // Log the agency search for the admin Agency activity feed (best-effort).
+    void getBolticClient()
+      .insert('agency_searches', { prompt, result_count: dbMatches.length })
+      .catch(() => {});
     if (dbMatches.length === 0) {
       return NextResponse.json(
         {

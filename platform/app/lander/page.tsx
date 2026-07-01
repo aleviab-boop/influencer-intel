@@ -84,14 +84,13 @@ function LanderContent() {
   // View is driven by the URL so "Home" (→ /lander) always resets to the hero.
   const query = params.get('prompt');
   const seed = params.get('seed') ?? '';
-  // Default to the worker-backed live crawl; 'db'/'live' still honoured for any
-  // existing deep links.
-  const mode: 'db' | 'live' | 'crawl' =
-    params.get('mode') === 'live' ? 'live' : params.get('mode') === 'db' ? 'db' : 'crawl';
-  // Show results when there's a prompt OR a username seed (legacy bare crawl).
+  // The agency lander searches the DATABASE — the admin Scraper page is what
+  // crawls Instagram live and fills that database. So the lander is instant and
+  // never hits Instagram itself.
+  const mode = 'db' as const;
   const showResults = query !== null || seed.trim().length >= 2;
   const runSearch = (q: string) => {
-    const qs = new URLSearchParams({ mode: 'crawl' });
+    const qs = new URLSearchParams();
     if (q) qs.set('prompt', q);
     router.push(`/lander?${qs.toString()}`);
   };
