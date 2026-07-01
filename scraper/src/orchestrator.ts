@@ -99,9 +99,12 @@ export async function run(): Promise<void> {
       console.log(
         `[orchestrator] picked job ${job.id} type=${job.job_type} target=${job.target_handle} priority=${job.priority} via @${activeHandle}`,
       );
-      await dispatch(job, driver, queue);
+      // Fail-fast: never let one job hang the worker (a 429 retry loop or a stuck
+      // navigation would otherwise block every queued search behind it).
+      const budget = job.job_type === 'search_query' ? 150_000 : 75_000;
+      await withTimeout(dispatch(job, driver, queue), budget, `${job.job_type} ${job.target_handle}`);
       await queue.complete(job.id, { ok: true });
-      await notifyPlatform({
+      void notifyPlatform({
         job_id: job.id,
         job_type: job.job_type,
         target_handle: job.target_handle,
@@ -116,7 +119,7 @@ export async function run(): Promise<void> {
       const retry = job.attempts < 3;
       await queue.fail(job.id, msg, retry);
       if (!retry) {
-        await notifyPlatform({
+        void notifyPlatform({
           job_id: job.id,
           job_type: job.job_type,
           target_handle: job.target_handle,
@@ -166,4 +169,13 @@ async function dispatch(job: ScrapeJob, driver: DriverHandle, queue: JobQueue): 
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// Reject if `p` doesn't settle within `ms` — the caller's try/catch then fails
+// the job and the loop moves on instead of hanging on a stuck job.
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timed out after ${Math.round(ms / 1000)}s: ${label}`)), ms)),
+  ]);
 }

@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { tokenize } from '@/lib/live-discovery';
+import { tokenize, type LiveProfile } from '@/lib/live-discovery';
+import { searchCreatorsInDb } from '@/lib/creator-db-search';
 
 export const runtime = 'nodejs';
 
 // POST /api/crawl-search
 //   { prompt }
-//   → { job_id, prompt, tokens }
+//   → { job_id, prompt, tokens, results }
 //
-// Live worker-backed discovery. Enqueues a `search_query` job into the shared
-// DB; the browser worker running on a real machine claims it, crawls Instagram
-// with an authenticated session, and tags every creator it finds with
-// `search:<job_id>` — which the client polls for via /api/crawl-search/status.
-//
-// This endpoint intentionally returns NO database results — the front screen
-// shows the live crawl only. (The DB-backed instant search still lives at
-// /api/discover-live mode:'db' for other surfaces.)
+// Powers the admin Scraper page. Enqueues a `search_query` job the browser
+// worker crawls (tagging finds with `search:<job_id>` for the client to poll),
+// AND returns instant DB matches so the page shows relevant creators immediately
+// while the live crawl streams fresh ones on top — it's never empty even if the
+// worker is busy or the crawl is slow.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
@@ -40,10 +38,16 @@ export async function POST(req: NextRequest) {
     });
     jobId = job.id;
   } catch (err) {
-    // Enqueue failed (DB hiccup) — still return DB results so the UI isn't empty.
     console.error('[crawl-search] enqueue failed:', err);
   }
 
   const tokens = tokenize(prompt);
-  return NextResponse.json({ job_id: jobId, prompt, tokens, results: [] });
+  let results: LiveProfile[] = [];
+  try {
+    results = await searchCreatorsInDb(tokens, 60);
+  } catch (err) {
+    console.error('[crawl-search] db search failed:', err);
+  }
+
+  return NextResponse.json({ job_id: jobId, prompt, tokens, results });
 }
