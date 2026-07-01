@@ -1582,7 +1582,9 @@ export function LiveSearch({
                   Crawling Instagram for fresh creators… new profiles appear here as the worker finds them.
                 </span>
               ) : run.results.length === 0
-                ? 'No creators found for that yet. Make sure the worker is running, or try a broader prompt.'
+                ? initialMode === 'db'
+                  ? 'Nothing in the database matches that yet — try a broader search.'
+                  : 'No creators found for that yet. Make sure the worker is running, or try a broader prompt.'
                 : 'No profiles match these filters. Loosen them to see more.'}
             </div>
           ) : (

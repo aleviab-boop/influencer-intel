@@ -44,6 +44,15 @@ export class JobQueue {
     return rows[0] ?? null;
   }
 
+  /** On startup, requeue jobs a previous (crashed/killed) worker left mid-flight
+   * in `in_progress` — otherwise they're stuck forever and inflate the queue. */
+  async reclaimOrphaned(): Promise<number> {
+    const rows = await this.db.query<{ id: string }>(
+      `UPDATE scrape_jobs SET status = 'queued' WHERE status = 'in_progress' RETURNING id`,
+    );
+    return rows.length;
+  }
+
   /** Mark a job as completed with optional summary. */
   async complete(jobId: string, summary?: unknown): Promise<void> {
     await this.db.update(

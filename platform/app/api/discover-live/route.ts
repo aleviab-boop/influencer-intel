@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: 'no_db',
-          message: 'Nothing in your database for that yet — try "Search Instagram" from a creator username below.',
+          message: 'Nothing in the database for that yet. The scraper is continuously adding creators — try a broader search or check back soon.',
         },
         { status: 422 },
       );

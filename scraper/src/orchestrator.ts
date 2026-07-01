@@ -55,6 +55,8 @@ export async function run(): Promise<void> {
   console.log(`[orchestrator] Camoufox ready — using @${activeHandle}`);
 
   const queue = new JobQueue(pool);
+  const reclaimed = await queue.reclaimOrphaned();
+  if (reclaimed > 0) console.log(`[orchestrator] requeued ${reclaimed} orphaned in-progress job(s)`);
 
   let stopping = false;
   const stop = async (signal: string) => {
