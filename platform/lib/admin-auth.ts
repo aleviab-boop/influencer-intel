@@ -6,12 +6,16 @@
 export const ADMIN_COOKIE = 'ii_admin';
 export const ADMIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
+// Hardcoded superadmin credentials (overridable via env if ever needed).
+export function adminEmail(): string {
+  return process.env.ADMIN_EMAIL ?? 'superadmin@gmail.com';
+}
 export function adminPassword(): string {
-  return process.env.ADMIN_PASSWORD ?? 'admin';
+  return process.env.ADMIN_PASSWORD ?? 'super';
 }
 
 export async function adminToken(): Promise<string> {
-  const secret = `${adminPassword()}:${process.env.SESSION_SECRET ?? 'change-me-in-prod-influencer-intel-dev'}`;
+  const secret = `${adminEmail()}:${adminPassword()}:${process.env.SESSION_SECRET ?? 'change-me-in-prod-influencer-intel-dev'}`;
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }

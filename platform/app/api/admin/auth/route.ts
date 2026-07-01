@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { ADMIN_COOKIE, ADMIN_COOKIE_MAX_AGE, adminPassword, adminToken, isValidAdminToken } from '@/lib/admin-auth';
+import { ADMIN_COOKIE, ADMIN_COOKIE_MAX_AGE, adminEmail, adminPassword, adminToken, isValidAdminToken } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 
-// POST /api/admin/auth  { password }            → sign in (sets the admin cookie)
+// POST /api/admin/auth  { email, password }     → sign in (sets the admin cookie)
 // POST /api/admin/auth  { action: 'sign_out' }  → sign out
 // GET  /api/admin/auth                          → { authenticated }
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => null)) as { password?: string; action?: string } | null;
+  const body = (await req.json().catch(() => null)) as { email?: string; password?: string; action?: string } | null;
   const c = await cookies();
 
   if (body?.action === 'sign_out') {
@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  if (!body?.password || body.password !== adminPassword()) {
-    return NextResponse.json({ error: 'Incorrect password' }, { status: 401 });
+  const emailOk = (body?.email ?? '').trim().toLowerCase() === adminEmail().toLowerCase();
+  if (!emailOk || !body?.password || body.password !== adminPassword()) {
+    return NextResponse.json({ error: 'Incorrect email or password' }, { status: 401 });
   }
 
   c.set(ADMIN_COOKIE, await adminToken(), {

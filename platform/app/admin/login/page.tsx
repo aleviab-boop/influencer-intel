@@ -10,6 +10,7 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get('next') || '/admin';
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ function LoginForm() {
       const r = await fetch('/api/admin/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
       if (r.ok) {
         router.replace(next);
@@ -47,19 +48,28 @@ function LoginForm() {
         </div>
         <form onSubmit={submit} className="rounded-2xl border border-[#ececf3] bg-white p-6 shadow-[0_12px_50px_rgba(108,77,246,0.08)]">
           <h1 className="text-lg font-bold tracking-tight">Admin sign-in</h1>
-          <p className="mt-1 text-[13px] text-[#888]">Enter the admin password to access the panel.</p>
+          <p className="mt-1 text-[13px] text-[#888]">Sign in with your superadmin credentials.</p>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+            placeholder="Email"
+            autoComplete="username"
+            className="mt-4 w-full px-3.5 py-2.5 rounded-xl border border-[#e3def9] text-[14px] focus:outline-none focus:border-[#6C4DF6] transition-colors"
+          />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoFocus
             placeholder="Password"
-            className="mt-4 w-full px-3.5 py-2.5 rounded-xl border border-[#e3def9] text-[14px] focus:outline-none focus:border-[#6C4DF6] transition-colors"
+            autoComplete="current-password"
+            className="mt-2.5 w-full px-3.5 py-2.5 rounded-xl border border-[#e3def9] text-[14px] focus:outline-none focus:border-[#6C4DF6] transition-colors"
           />
           {error && <div className="mt-2 text-[13px] text-rose-600">{error}</div>}
           <button
             type="submit"
-            disabled={loading || password.length === 0}
+            disabled={loading || email.length === 0 || password.length === 0}
             className="mt-4 w-full py-2.5 rounded-xl text-white text-[14px] font-semibold disabled:opacity-50 transition-opacity"
             style={{ background: ACCENT }}
           >
