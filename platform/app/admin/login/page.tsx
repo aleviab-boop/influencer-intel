@@ -42,9 +42,9 @@ function LoginForm() {
   return (
     <div className="min-h-screen grid place-items-center px-6" style={{ background: 'radial-gradient(900px 500px at 50% -10%, #f2ecff, #fafafc 60%)' }}>
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-2.5 justify-center mb-7">
-          <BrandMark size={34} />
-          <span className="text-[19px] font-semibold tracking-tight">Influencer Intel</span>
+        <div className="flex items-center gap-3 justify-center mb-8">
+          <BrandMark size={44} />
+          <span className="text-[28px] font-semibold tracking-tight">Influencer Intel</span>
         </div>
         <form onSubmit={submit} className="rounded-3xl border border-[#ececf3] bg-white p-9 shadow-[0_24px_70px_rgba(108,77,246,0.12)]">
           <div className="relative -mt-9 -mx-9 mb-7 h-1.5 rounded-t-3xl" style={{ background: `linear-gradient(90deg, ${ACCENT}, #9b7bff)` }} />
