@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LiveSearch } from '@/components/live-search';
-
-const ACCENT = '#6C4DF6';
+import { StatCard, PageHeader, LiveBadge, useTrend } from '@/components/admin-ui';
 
 interface Stats {
   creators: { total: number; active: number };
@@ -12,25 +11,15 @@ interface Stats {
   accounts: { active: number };
   worker_live: boolean;
 }
-
 interface RecentCreator {
-  handle: string;
-  display_name: string;
-  follower_count: number | null;
-  category: string;
-  is_verified: boolean;
-  profile_photo_url: string | null;
-  last_scraped_at: string;
+  handle: string; display_name: string; follower_count: number | null; category: string;
+  is_verified: boolean; profile_photo_url: string | null; last_scraped_at: string;
 }
 interface Account {
-  handle: string;
-  status: string;
-  daily_action_count: number;
-  total_scrapes: number;
-  expired: boolean;
+  handle: string; status: string; daily_action_count: number; total_scrapes: number; expired: boolean;
 }
 
-function usePoll<T>(url: string, intervalMs = 10_000): T | null {
+function usePoll<T>(url: string, intervalMs = 8_000): T | null {
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
     let alive = true;
@@ -58,67 +47,45 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-function Stat({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
-  return (
-    <div className="rounded-2xl border border-[#ececf3] bg-white px-5 py-4">
-      <div className="text-[12px] font-medium uppercase tracking-wide text-[#999]">{label}</div>
-      <div className="mt-1 text-2xl font-bold tabular-nums" style={accent ? { color: ACCENT } : undefined}>{value}</div>
-      {sub && <div className="text-[12px] text-[#aaa] mt-0.5">{sub}</div>}
-    </div>
-  );
-}
-
 export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
   const recent = usePoll<{ creators: RecentCreator[]; accounts: Account[] }>('/api/admin/recent-scrapes', 8_000);
   const live = stats?.worker_live;
+  const scrapedTrend = useTrend(stats?.scraped.last_24h);
+  const queueTrend = useTrend(stats?.jobs.queued);
 
   return (
     <div className="px-8 py-7">
-      <div className="mb-6">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold tracking-tight">Scraper</h1>
-          <span
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-semibold border"
-            style={live
-              ? { background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }
-              : { background: '#f4f4f6', color: '#888', borderColor: '#e5e5ea' }}
-          >
-            <span className={`w-2 h-2 rounded-full ${live ? 'bg-emerald-500 animate-pulse' : 'bg-[#bbb]'}`} />
-            {live ? 'Worker live' : 'Worker idle'}
-          </span>
-        </div>
-        <p className="mt-1 text-[14px] text-[#777]">
-          The browser worker crawls Instagram and stores every creator to the database. Search below to crawl a niche live.
-        </p>
-      </div>
+      <PageHeader
+        title="Scraper"
+        subtitle="The browser worker crawls Instagram and stores every creator to the database. Search below to crawl a niche live."
+        badge={<LiveBadge live={live} label={['Worker live', 'Worker idle']} />}
+      />
 
       {/* live status strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3 mb-6">
-        <Stat label="Creators" value={(stats?.creators.total ?? 0).toLocaleString()} sub={`${(stats?.creators.active ?? 0).toLocaleString()} active`} accent />
-        <Stat label="Scraped 1h" value={stats?.scraped.last_1h ?? 0} sub={`${stats?.scraped.last_24h ?? 0} in 24h`} />
-        <Stat label="Queued" value={stats?.jobs.queued ?? 0} />
-        <Stat label="In progress" value={stats?.jobs.in_progress ?? 0} />
-        <Stat label="Accounts" value={stats?.accounts.active ?? 0} sub="in rotation" />
-        <Stat label="Failed 24h" value={stats?.jobs.failed_24h ?? 0} />
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3.5 mb-7">
+        <StatCard label="Creators" value={(stats?.creators.total ?? 0).toLocaleString()} sub={`${(stats?.creators.active ?? 0).toLocaleString()} active`} />
+        <StatCard label="Scraped 24h" value={stats?.scraped.last_24h ?? 0} sub={`${stats?.scraped.last_1h ?? 0} in 1h`} color="#f59e0b" trend={scrapedTrend} />
+        <StatCard label="Queued" value={stats?.jobs.queued ?? 0} trend={queueTrend} />
+        <StatCard label="In progress" value={stats?.jobs.in_progress ?? 0} color="#0ea5e9" />
+        <StatCard label="Accounts" value={stats?.accounts.active ?? 0} sub="in rotation" color="#10b981" />
+        <StatCard label="Failed 24h" value={stats?.jobs.failed_24h ?? 0} color="#ef4444" />
       </div>
 
       {/* monitoring: recently scraped + account pool */}
-      <div className="grid lg:grid-cols-[1.6fr_1fr] gap-4 mb-7">
-        <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden">
-          <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555] flex items-center gap-2">
+      <div className="grid lg:grid-cols-[1.6fr_1fr] gap-4 mb-8">
+        <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden shadow-[0_2px_16px_rgba(20,20,60,0.03)]">
+          <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555] flex items-center gap-2" style={{ background: 'linear-gradient(90deg, #faf9ff, #fff)' }}>
             Recently scraped
             {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
           </div>
           {(recent?.creators.length ?? 0) === 0 ? (
-            <div className="px-5 py-10 text-center text-[14px] text-[#aaa]">
-              Nothing scraped yet. Run the worker (or search below) to start crawling.
-            </div>
+            <div className="px-5 py-10 text-center text-[14px] text-[#aaa]">Nothing scraped yet. Run the worker (or search below) to start crawling.</div>
           ) : (
             <div className="divide-y divide-[#f5f5f8] max-h-[420px] overflow-y-auto">
               {recent!.creators.map((c) => (
-                <div key={c.handle} className="px-5 py-2.5 flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#eee] shrink-0 overflow-hidden">
+                <div key={c.handle} className="px-5 py-2.5 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-[#eee] shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-[#e3def9]">
                     {c.profile_photo_url && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={c.profile_photo_url} alt="" className="w-full h-full object-cover" />
@@ -136,8 +103,8 @@ export default function AdminScraperPage() {
           )}
         </div>
 
-        <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden">
-          <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555]">
+        <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden shadow-[0_2px_16px_rgba(20,20,60,0.03)]">
+          <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555]" style={{ background: 'linear-gradient(90deg, #faf9ff, #fff)' }}>
             Accounts in rotation
           </div>
           {(recent?.accounts.length ?? 0) === 0 ? (
@@ -147,8 +114,8 @@ export default function AdminScraperPage() {
               {recent!.accounts.map((a) => {
                 const ok = a.status === 'active' && !a.expired;
                 return (
-                  <div key={a.handle} className="px-5 py-3 flex items-center gap-3">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${ok ? 'bg-emerald-500' : 'bg-[#d9534f]'}`} />
+                  <div key={a.handle} className="px-5 py-3 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${ok ? 'bg-emerald-500 animate-pulse' : 'bg-[#d9534f]'}`} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[14px] font-medium text-[#111] truncate">@{a.handle}</div>
                       <div className="text-[12px] text-[#999]">{a.expired ? 'session expired' : a.status}</div>
@@ -168,8 +135,7 @@ export default function AdminScraperPage() {
         </div>
       </div>
 
-      {/* live crawl */}
-      <div className="text-[12px] font-semibold uppercase tracking-wider text-[#aab] mb-2">Crawl a niche live</div>
+      <div className="text-[12px] font-semibold uppercase tracking-wider text-[#aab] mb-2.5">Crawl a niche live</div>
       <LiveSearch initialMode="crawl" />
     </div>
   );

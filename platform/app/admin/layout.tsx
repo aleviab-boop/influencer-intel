@@ -55,7 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="w-60 shrink-0 bg-white border-r border-[#ececf3] flex flex-col sticky top-0 h-screen">
         <Link href="/lander" className="flex items-center gap-2 px-5 h-16 border-b border-[#f1f1f6]">
           <BrandMark size={28} />
-          <span className="text-[15px] font-bold tracking-tight">Influencer Intel</span>
+          <span className="text-[15px] font-semibold tracking-tight">Influencer Intel</span>
         </Link>
 
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#aab] mt-2">
@@ -67,10 +67,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const active = isActive(item.href);
             const inner = (
               <span
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-colors ${
-                  active ? 'text-white' : item.soon ? 'text-[#bbb]' : 'text-[#444] hover:bg-[#f5f3ff]'
+                className={`group/nav flex items-center gap-3 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-200 ${
+                  active ? 'text-white' : item.soon ? 'text-[#bbb]' : 'text-[#444] hover:bg-[#f5f3ff] hover:translate-x-0.5'
                 }`}
-                style={active ? { background: ACCENT } : undefined}
+                style={active ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, boxShadow: '0 8px 20px rgba(108,77,246,0.28)' } : undefined}
               >
                 <NavIcon name={item.icon} />
                 <span className="flex-1">{item.label}</span>

@@ -28,6 +28,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: [
+          'var(--font-fynd)',
           'Inter',
           'ui-sans-serif',
           'system-ui',
