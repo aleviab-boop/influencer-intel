@@ -46,6 +46,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isActive = (href: string) =>
     href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
 
+  // The login page renders bare (no sidebar) — you're not signed in yet.
+  if (pathname === '/admin/login') return <>{children}</>;
+
   return (
     <div className="min-h-screen flex bg-[#fafafc] text-[#111] font-sans">
       {/* sidebar */}
@@ -86,15 +89,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        <div className="p-3 border-t border-[#f1f1f6]">
+        <div className="p-3 border-t border-[#f1f1f6] space-y-1">
           <Link
             href="/lander"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-[#666] hover:bg-[#f5f3ff]"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium hover:brightness-95"
             style={{ color: ACCENT, background: ACCENT_SOFT }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             Open Agency Lander
           </Link>
+          <button
+            onClick={async () => {
+              await fetch('/api/admin/auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'sign_out' }),
+              }).catch(() => {});
+              window.location.href = '/admin/login';
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-[#888] hover:bg-[#f5f5f8]"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+            Sign out
+          </button>
         </div>
       </aside>
 
