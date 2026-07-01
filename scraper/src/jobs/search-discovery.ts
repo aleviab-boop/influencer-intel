@@ -473,17 +473,15 @@ export async function handleSearchQuery(
       /* tagging is best-effort; don't fail the whole search on one row */
     }
 
-    // Queue deep scrape (priority 2 — behind brand-driven on_demand at 1).
-    await queue.enqueueBackground({
-      job_type: 'on_demand',
-      target_handle: handle,
-      brief_id: job.brief_id ?? undefined,
-      priority: 2,
-    });
+    // NOTE: discovery is now discovery-ONLY. We deliberately do NOT queue a deep
+    // scrape per creator — that used to enqueue ~30 on_demand jobs per search,
+    // clogging the worker and hammering the account for creators nobody views.
+    // Rich data (posts / ER / reels) is now fetched on demand by the cookie
+    // scraper when a creator is actually opened in the drawer.
   }
 
   console.log(
-    `[search] "${query}": ${added} qualified candidates upserted (multi-source first), deep scrapes queued`,
+    `[search] "${query}": ${added} qualified candidates upserted (discovery-only, no deep scrapes)`,
   );
   await humanDelay();
 }
