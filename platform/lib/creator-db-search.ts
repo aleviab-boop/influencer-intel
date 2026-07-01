@@ -69,10 +69,12 @@ export async function searchCreatorsInDb(
            (${scoreExpr}) as score, (${locExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
-    -- Location match first (honour "in <place>"), then weighted relevance, then
-    -- the user's own curated/imported list (source='manual'), reach last.
-    order by (${locExpr}) desc,
-             score desc,
+    -- Weighted relevance first: a creator matching BOTH the niche and the place
+    -- ("comedy" + "mumbai") outranks one matching only the place. Location is a
+    -- tiebreak (so among equal scores, locals lead), then the user's own curated
+    -- list, then reach.
+    order by score desc,
+             (${locExpr}) desc,
              coalesce(source = 'manual', false) desc,
              follower_count desc nulls last
     limit $${tokens.length + 1}

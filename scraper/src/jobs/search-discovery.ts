@@ -456,16 +456,18 @@ export async function handleSearchQuery(
     );
     added++;
 
-    // Tag this creator with the originating search job so the platform can
-    // fetch "the creators this search produced" by polling. Append-only (never
-    // clobbers a creator's existing tags), deduped.
+    // Tag the creator with (a) the originating search job so the platform can
+    // poll "the creators this search produced", and (b) the search KEYWORDS
+    // (e.g. comedy, mumbai) so the DB search can actually find them by niche /
+    // location later — otherwise a discovered "comedy" creator is an unlabeled
+    // stub that only matches on location. Append-only, deduped.
     try {
       await db.query(
         `UPDATE creators
            SET tags = (SELECT array_agg(DISTINCT t)
-                       FROM unnest(coalesce(tags, '{}'::text[]) || ARRAY[$1]::text[]) AS t)
+                       FROM unnest(coalesce(tags, '{}'::text[]) || $1::text[]) AS t)
          WHERE platform = 'instagram' AND handle = $2`,
-        [`search:${job.id}`, handle],
+        [[`search:${job.id}`, ...keywords], handle],
       );
     } catch {
       /* tagging is best-effort; don't fail the whole search on one row */
