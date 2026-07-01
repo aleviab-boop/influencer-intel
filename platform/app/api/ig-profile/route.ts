@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   // Not in the DB yet → queue the worker to scrape it, return a pending shell so
   // the drawer can show "scraping…" and poll.
   if (!c) {
-    const refreshing = await enqueueRefresh(handle, 1);
+    const refreshing = await enqueueRefresh(handle, 0);
     return NextResponse.json({
       handle,
       full_name: '',
@@ -193,7 +193,9 @@ export async function GET(req: NextRequest) {
 
   const last = c.last_scraped_at ? new Date(c.last_scraped_at as string).getTime() : 0;
   const stale = !last || Date.now() - last > STALE_MS || recent.length === 0;
-  const refreshing = force || stale ? await enqueueRefresh(handle, force ? 1 : 2) : false;
+  // A creator the user is looking at right now jumps ahead of background
+  // discovery scrapes (priority 2): force → 0, on-open-if-stale → 1.
+  const refreshing = force || stale ? await enqueueRefresh(handle, force ? 0 : 1) : false;
 
   const related = await dbRelated(handle, niche, followers);
 
