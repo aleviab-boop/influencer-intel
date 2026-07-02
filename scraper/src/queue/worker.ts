@@ -139,6 +139,12 @@ export class JobQueue {
     this.actionsThisHour += n;
   }
 
+  /** A handler hit rate-limiting (429) on the active account — cool it down so
+   * the orchestrator rotates to another account on the next loop. */
+  penalizeAccount(): void {
+    this.pool?.penalizeCurrent();
+  }
+
   private maybeResetActions(): void {
     if (Date.now() > this.hourReset) {
       this.actionsThisHour = 0;

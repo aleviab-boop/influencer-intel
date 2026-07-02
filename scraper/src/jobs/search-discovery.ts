@@ -103,6 +103,11 @@ export async function handleSearchQuery(
         'X-IG-App-ID': '936619743392459',
       };
 
+      // Count HTTP 429s across the crawl. IG throttles per-account, so a burst of
+      // 429s means this account is tapped out — Node uses this to cool it down and
+      // rotate to another account for the next job.
+      let rl = 0;
+
       const candidatesByHandle = new Map<string, DiscoveryCandidateRaw>();
       // Arrow expression (no named declaration) — tsx injects __name(fn, "name")
       // for named function decls, which doesn't exist in the browser context.
@@ -153,7 +158,7 @@ export async function handleSearchQuery(
           headers,
           credentials: 'include',
         });
-        if (!ts.ok) return { error: `topsearch HTTP ${ts.status}` };
+        if (!ts.ok) return { error: `topsearch HTTP ${ts.status}`, rateLimited: ts.status === 429 ? 1 : 0 };
         const tj = await ts.json();
 
         for (const e of (tj?.users ?? []) as Array<{ user: any }>) {
@@ -222,7 +227,7 @@ export async function handleSearchQuery(
               `/api/v1/users/web_profile_info/?username=${encodeURIComponent(u.username)}`,
               { headers, credentials: 'include' },
             );
-            if (!pr.ok) continue;
+            if (!pr.ok) { if (pr.status === 429) rl++; continue; }
             const pj = await pr.json();
             const userInfo = pj?.data?.user;
             if (!userInfo?.id) continue;
@@ -308,7 +313,7 @@ export async function handleSearchQuery(
                   `/api/v1/users/web_profile_info/?username=${encodeURIComponent(c.username)}`,
                   { headers, credentials: 'include' },
                 );
-                if (!pr.ok) return;
+                if (!pr.ok) { if (pr.status === 429) rl++; return; }
                 const pj = await pr.json();
                 const u = pj?.data?.user;
                 if (!u) return;
@@ -338,9 +343,10 @@ export async function handleSearchQuery(
             sources: Array.from(c.sources),
           })),
           tagsExplored: tagsToExplore.length,
+          rateLimited: rl,
         };
       } catch (err) {
-        return { error: String(err) };
+        return { error: String(err), rateLimited: rl };
       }
 
       // ----- types local to page.evaluate -----
@@ -364,6 +370,14 @@ export async function handleSearchQuery(
       followingsLimitPerSeed: FOLLOWINGS_LIMIT_PER_SEED,
     },
   );
+
+  // Rate-limited during the crawl → cool this account down so the orchestrator
+  // rotates to another account for the next job (auto-swap on throttle).
+  const rateLimited = (harvest as { rateLimited?: number })?.rateLimited ?? 0;
+  if (rateLimited >= 3) {
+    console.warn(`[search] "${query}": ${rateLimited} × HTTP 429 — cooling down this account & rotating`);
+    queue.penalizeAccount();
+  }
 
   if (harvest?.error) {
     console.warn(`[search] "${query}" failed: ${harvest.error}`);

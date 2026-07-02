@@ -130,8 +130,11 @@ export async function run(): Promise<void> {
       }
     }
 
-    // Every few jobs, probe for a 429 → cool down + rotate off this account.
-    if (++jobsSinceProbe >= 6) {
+    // Safety net: probe for a 429 after every job → cool down + rotate off this
+    // account. (Discovery also self-reports 429s and penalizes mid-flow, but this
+    // catches throttling from any job type promptly so we never keep hammering a
+    // tapped-out account.)
+    if (++jobsSinceProbe >= 2) {
       jobsSinceProbe = 0;
       if (await probeThrottled(driver.page)) pool.penalizeCurrent();
     }
