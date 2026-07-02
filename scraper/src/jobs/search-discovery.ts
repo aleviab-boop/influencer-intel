@@ -283,8 +283,21 @@ export async function handleSearchQuery(
         // (so a crawl that drifts into an unrelated cluster doesn't save junk).
         // Multi-source / higher-reach candidates first; capped so one search
         // doesn't fire so many web_profile_info calls that the account 429s.
+        // Prioritise candidates whose handle/name already matches a query word
+        // (the real "fashionkolkata" / "suruchikolkata" finds) so THEY get real
+        // follower counts + bio — instead of spending the enrichment budget on
+        // drifted multi-source junk that the relevance gate drops anyway.
+        const matchesWord = (c: DiscoveryCandidateRaw) => {
+          const id = `${c.username} ${c.full_name ?? ''}`.toLowerCase();
+          return words.some((w) => id.includes(w));
+        };
         const list = Array.from(candidatesByHandle.values());
-        list.sort((a, b) => (b.sources.size - a.sources.size) || ((b.follower_count ?? 0) - (a.follower_count ?? 0)));
+        list.sort((a, b) => {
+          const am = matchesWord(a) ? 1 : 0;
+          const bm = matchesWord(b) ? 1 : 0;
+          if (am !== bm) return bm - am;
+          return (b.sources.size - a.sources.size) || ((b.follower_count ?? 0) - (a.follower_count ?? 0));
+        });
         const toEnrich = list.slice(0, 30);
         for (let i = 0; i < toEnrich.length; i += 5) {
           const batch = toEnrich.slice(i, i + 5);
