@@ -44,6 +44,20 @@ const SEED_MIN_FOLLOWERS = 10_000;            // chain from any real creator (ti
 const CHAIN_LIMIT_PER_SEED = 40;              // candidates per chaining call
 const FOLLOWINGS_LIMIT_PER_SEED = 60;         // sample of seed's followings
 
+// When a query keyword is one of these cities AND the creator's own profile
+// mentions it, discovery fills primary_city — so the Lander's location filter
+// (which reads primary_city/region, not tags) surfaces these real local finds.
+const CITY_WORDS = new Set([
+  'mumbai', 'bombay', 'delhi', 'newdelhi', 'bangalore', 'bengaluru', 'hyderabad',
+  'chennai', 'kolkata', 'calcutta', 'pune', 'ahmedabad', 'surat', 'jaipur',
+  'lucknow', 'kanpur', 'nagpur', 'indore', 'bhopal', 'patna', 'chandigarh',
+  'kochi', 'goa', 'guwahati', 'bhubaneswar', 'coimbatore', 'mysore', 'mysuru',
+  'vizag', 'visakhapatnam', 'noida', 'gurgaon', 'gurugram', 'thane', 'ranchi',
+  'raipur', 'dehradun', 'amritsar', 'ludhiana', 'agra', 'varanasi', 'siliguri',
+]);
+// Display-cased city for storage (LOC_TXT compares case-insensitively anyway).
+const cityCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+
 export async function handleSearchQuery(
   job: ScrapeJob,
   driver: DriverHandle,
@@ -491,6 +505,21 @@ export async function handleSearchQuery(
       );
     } catch {
       /* tagging is best-effort; don't fail the whole search on one row */
+    }
+
+    // If a matched keyword is a city, fill primary_city (COALESCE = never clobber
+    // a real geo-scraped value) so location searches surface this local creator.
+    const matchedCity = matchedKeywords.find((k) => CITY_WORDS.has(k));
+    if (matchedCity) {
+      try {
+        await db.query(
+          `UPDATE creators SET primary_city = COALESCE(primary_city, $1)
+           WHERE platform = 'instagram' AND handle = $2`,
+          [cityCase(matchedCity), handle],
+        );
+      } catch {
+        /* best-effort */
+      }
     }
 
     // NOTE: discovery is now discovery-ONLY. We deliberately do NOT queue a deep
