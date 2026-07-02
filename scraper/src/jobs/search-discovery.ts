@@ -110,6 +110,8 @@ export async function handleSearchQuery(
           profile_pic_url: u.profile_pic_url ?? null,
           is_verified: !!u.is_verified,
           follower_count: typeof u.follower_count === 'number' ? u.follower_count : null,
+          biography: null,
+          category: null,
           sources: new Set<string>([source]),
         });
       };
@@ -262,14 +264,16 @@ export async function handleSearchQuery(
           await new Promise((res) => setTimeout(res, 400 + Math.random() * 400));
         }
 
-        // 4. Enrich follower counts for candidates that don't have them.
-        // Follower signal for ranking. Capped so one search doesn't fire so many
-        // web_profile_info calls that the account gets rate-limited (429) — the
-        // per-creator deep scrape queued afterwards fills real stats anyway.
+        // 4. Enrich the TOP candidates with real follower_count AND bio/category.
+        // Node uses the bio/category to gate on genuine relevance to the query
+        // (so a crawl that drifts into an unrelated cluster doesn't save junk).
+        // Multi-source / higher-reach candidates first; capped so one search
+        // doesn't fire so many web_profile_info calls that the account 429s.
         const list = Array.from(candidatesByHandle.values());
-        const needsEnrich = list.filter((c) => c.follower_count == null).slice(0, 25);
-        for (let i = 0; i < needsEnrich.length; i += 5) {
-          const batch = needsEnrich.slice(i, i + 5);
+        list.sort((a, b) => (b.sources.size - a.sources.size) || ((b.follower_count ?? 0) - (a.follower_count ?? 0)));
+        const toEnrich = list.slice(0, 30);
+        for (let i = 0; i < toEnrich.length; i += 5) {
+          const batch = toEnrich.slice(i, i + 5);
           await Promise.all(
             batch.map(async (c) => {
               try {
@@ -279,17 +283,15 @@ export async function handleSearchQuery(
                 );
                 if (!pr.ok) return;
                 const pj = await pr.json();
-                const count = pj?.data?.user?.edge_followed_by?.count;
+                const u = pj?.data?.user;
+                if (!u) return;
+                const count = u.edge_followed_by?.count;
                 if (typeof count === 'number') c.follower_count = count;
-                if (!c.profile_pic_url && pj?.data?.user?.profile_pic_url) {
-                  c.profile_pic_url = pj.data.user.profile_pic_url;
-                }
-                if (!c.full_name && pj?.data?.user?.full_name) {
-                  c.full_name = pj.data.user.full_name;
-                }
-                if (typeof pj?.data?.user?.is_verified === 'boolean' && !c.is_verified) {
-                  c.is_verified = pj.data.user.is_verified;
-                }
+                if (!c.profile_pic_url && u.profile_pic_url) c.profile_pic_url = u.profile_pic_url;
+                if (!c.full_name && u.full_name) c.full_name = u.full_name;
+                if (typeof u.is_verified === 'boolean' && !c.is_verified) c.is_verified = u.is_verified;
+                if (typeof u.biography === 'string') c.biography = u.biography;
+                if (typeof u.category_name === 'string') c.category = u.category_name;
               } catch {}
             }),
           );
@@ -304,6 +306,8 @@ export async function handleSearchQuery(
             profile_pic_url: c.profile_pic_url ?? null,
             is_verified: !!c.is_verified,
             follower_count: c.follower_count ?? null,
+            biography: c.biography ?? null,
+            category: c.category ?? null,
             sources: Array.from(c.sources),
           })),
           tagsExplored: tagsToExplore.length,
@@ -319,6 +323,8 @@ export async function handleSearchQuery(
         profile_pic_url: string | null;
         is_verified: boolean;
         follower_count: number | null;
+        biography: string | null;
+        category: string | null;
         sources: Set<string>;
       };
     },
@@ -343,6 +349,8 @@ export async function handleSearchQuery(
     profile_pic_url: string | null;
     is_verified: boolean;
     follower_count: number | null;
+    biography: string | null;
+    category: string | null;
     sources: string[];
   }>;
   console.log(
@@ -374,6 +382,10 @@ export async function handleSearchQuery(
   const SHOP_RE =
     /(wholesale|whole_sale|\bstore\b|\bshop\b|\bshops\b|shopping|boutique|\bmart\b|collections?|couture|\bbuy\b|\bsale\b|\bsales\b|\bdeals?\b|\boffers?\b|export|exports|manufactur|supplier|wholesaler|retail|\btrader\b|emporium|bazaar|\bmall\b|clothing|garments?|textiles?|fabrics?|sarees?|kurtis?|lehenga|fashionweek|fashion_week|outlet|enterprises?|\bpvt\b|\bltd\b|\binc\b|industries|\bco\b|\bhub\b|\bworld\b|\bbazar\b|jewellery|jewelry|footwear)/i;
 
+  // Everything we know about a candidate's OWN profile, for relevance checks.
+  const profileText = (c: { username: string; full_name: string | null; biography: string | null; category: string | null }) =>
+    `${c.username} ${c.full_name ?? ''} ${c.biography ?? ''} ${c.category ?? ''}`.toLowerCase();
+
   const qualified = candidates.filter((c) => {
     // Drop KNOWN sub-5K (nano) — keep unknowns, let the profile-scraper decide.
     if (typeof c.follower_count === 'number' && c.follower_count < 5_000) return false;
@@ -383,6 +395,12 @@ export async function handleSearchQuery(
     const id = `${c.username} ${c.full_name ?? ''}`.toLowerCase();
     if (BLOCK_RE.test(id)) return false;
     if (SHOP_RE.test(id)) return false;
+    // RELEVANCE GATE: keep only creators whose own profile (handle/name/bio/
+    // category) actually supports the query. Without this, a crawl that drifts
+    // into an unrelated cluster (e.g. South-film stars surfaced for a "kolkata"
+    // search) gets saved and tagged with the query — poisoning DB search. A
+    // creator is relevant if ANY query keyword appears in their profile text.
+    if (keywords.length > 0 && !keywords.some((k) => profileText(c).includes(k))) return false;
     return true;
   });
   const droppedCount = candidates.length - qualified.length;
@@ -394,8 +412,8 @@ export async function handleSearchQuery(
   // (a real "pune fashion" creator usually says so), then multi-source surfacing,
   // then a mid-tier follower sweet spot (10K-500K) — so shortlist-grade creators
   // beat both nano noise and mega generic accounts. Raw reach is only a tiebreak.
-  const relScore = (c: { username: string; full_name: string | null; follower_count: number | null; sources: string[] }): number => {
-    const id = `${c.username} ${c.full_name ?? ''}`.toLowerCase();
+  const relScore = (c: { username: string; full_name: string | null; biography: string | null; category: string | null; follower_count: number | null; sources: string[] }): number => {
+    const id = profileText(c);
     let s = 0;
     for (const k of keywords) if (id.includes(k)) s += 3;
     s += Math.min(c.sources.length, 4);
@@ -457,17 +475,19 @@ export async function handleSearchQuery(
     added++;
 
     // Tag the creator with (a) the originating search job so the platform can
-    // poll "the creators this search produced", and (b) the search KEYWORDS
-    // (e.g. comedy, mumbai) so the DB search can actually find them by niche /
-    // location later — otherwise a discovered "comedy" creator is an unlabeled
-    // stub that only matches on location. Append-only, deduped.
+    // poll "the creators this search produced", and (b) ONLY the search keywords
+    // its own profile actually supports — so we never stamp "kolkata" on a
+    // creator whose bio/name/category never mentions it. Blindly tagging every
+    // keyword is what poisoned DB search (foreign accounts tagged "kolkata").
+    // Append-only, deduped.
+    const matchedKeywords = keywords.filter((k) => profileText(c).includes(k));
     try {
       await db.query(
         `UPDATE creators
            SET tags = (SELECT array_agg(DISTINCT t)
                        FROM unnest(coalesce(tags, '{}'::text[]) || $1::text[]) AS t)
          WHERE platform = 'instagram' AND handle = $2`,
-        [[`search:${job.id}`, ...keywords], handle],
+        [[`search:${job.id}`, ...matchedKeywords], handle],
       );
     } catch {
       /* tagging is best-effort; don't fail the whole search on one row */
