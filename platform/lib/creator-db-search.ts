@@ -76,6 +76,18 @@ export async function searchCreatorsInDb(
     ? `and (${cityIdx.map((i) => `${LOC_TXT} like $${i + 1}`).join(' or ')})`
     : '';
 
+  // NICHE gate: the non-city terms ("food", "comedy", "fashion") must match the
+  // creator's niche fields (category / niche / tags) OR their handle/name — so a
+  // location search like "food blogger in pune" returns actual FOOD creators,
+  // not every lifestyle/travel creator who happens to be in Pune. A bio-only
+  // mention is too weak to qualify. Inert when the query is location-only.
+  const nicheIdx = tokens
+    .map((t, i) => (KNOWN_CITIES.has(t.toLowerCase()) ? -1 : i))
+    .filter((i) => i >= 0);
+  const nicheRequired = nicheIdx.length
+    ? `and (${nicheIdx.map((i) => `(${NICHE_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1})`).join(' or ')})`
+    : '';
+
   // Source bucket: the browser scraper's own finds come FIRST, then the
   // creators imported from the Excel sheets. "Excel"/Trends = curated
   // (source 'manual') or the Fynd seeding import (tagged 'fynd-seeding');
@@ -104,6 +116,7 @@ export async function searchCreatorsInDb(
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
       ${locRequired}
+      ${nicheRequired}
       ${bucketFilter}
       ${floor}
     -- Bucket first (scraper finds before Excel imports), THEN weighted relevance:
