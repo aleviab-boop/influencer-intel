@@ -103,31 +103,14 @@ export class JobQueue {
     });
   }
 
-  /** Pick a background job to keep the scraper busy when idle. */
+  /** Idle-time background work. The worker is DISCOVERY-ONLY now — deep/refresh
+   * scraping moved to the cookie scraper — so there is no idle work to generate.
+   * (It used to enqueue `refresh` jobs for stale creators; with deep scraping
+   * removed those became no-ops that never updated the row, so the same creator
+   * was re-picked forever in a tight loop.) Return null so the worker just polls
+   * for real discovery (search_query) jobs. */
   async pickIdleWork(): Promise<ScrapeJob | null> {
-    // Prefer: stale creators that are worth keeping fresh — public, active and
-    // 5K+ followers only. This keeps idle scraping off nano / private / already-
-    // deactivated rows so the worker spends its budget on shortlist-grade
-    // creators instead of endlessly re-scraping the long tail.
-    const rows = await this.db.query<{ id: string; handle: string; platform: string }>(
-      `SELECT id, handle, platform FROM creators
-       WHERE last_scraped_at < NOW() - INTERVAL '14 days'
-         AND is_active = true
-         AND coalesce(follower_count, 0) >= 5000
-       ORDER BY last_scraped_at ASC NULLS FIRST
-       LIMIT 1`,
-    );
-    const stale = rows[0];
-    if (!stale) return null;
-
-    await this.enqueueBackground({
-      job_type: 'refresh',
-      target_handle: stale.handle,
-      target_platform: stale.platform as ScrapeJob['target_platform'],
-      creator_id: stale.id,
-      priority: 8,
-    });
-    return this.claimNext();
+    return null;
   }
 
   bumpActions(n = 1): void {
