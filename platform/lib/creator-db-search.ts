@@ -63,19 +63,25 @@ export async function searchCreatorsInDb(
   // local creators (everyone is loc_hit=false → falls back to relevance).
   const locExpr = tokens.map((_, i) => `${LOC_TXT} like $${i + 1}`).join(' or ');
 
+  // Source bucket: the browser scraper's own finds come FIRST, then the
+  // creators imported from the Excel sheets. "Excel" = curated (source 'manual')
+  // or the Fynd seeding import (tagged 'fynd-seeding'); everything else is a
+  // browser-scraper discovery. Within each bucket we rank by relevance.
+  const SOURCE_BUCKET = `case when source = 'manual' or 'fynd-seeding' = any(coalesce(tags, '{}')) then 1 else 0 end`;
+
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
            engagement_rate, is_verified, profile_photo_url, source,
            (${scoreExpr}) as score, (${locExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
-    -- Weighted relevance first: a creator matching BOTH the niche and the place
-    -- ("comedy" + "mumbai") outranks one matching only the place. Location is a
-    -- tiebreak (so among equal scores, locals lead), then the user's own curated
-    -- list, then reach.
-    order by score desc,
+    -- Bucket first (scraper finds before Excel imports), THEN weighted relevance:
+    -- a creator matching both the niche and the place ("comedy" + "mumbai")
+    -- outranks one matching only the place. Location is a tiebreak (locals lead
+    -- among equal scores), then reach.
+    order by (${SOURCE_BUCKET}) asc,
+             score desc,
              (${locExpr}) desc,
-             coalesce(source = 'manual', false) desc,
              follower_count desc nulls last
     limit $${tokens.length + 1}
   `;
