@@ -40,7 +40,7 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-6 py-12 overflow-hidden font-sans" style={{ background: 'linear-gradient(135deg, #6C4DF6 0%, #7d5cf0 42%, #b79bff 100%)' }}>
+    <div className="min-h-screen relative flex items-center justify-start pl-8 sm:pl-16 lg:pl-28 pr-6 py-12 overflow-hidden font-sans" style={{ background: 'linear-gradient(135deg, #6C4DF6 0%, #7d5cf0 42%, #b79bff 100%)' }}>
       {/* grid texture */}
       <div className="absolute inset-0 opacity-[0.10]" style={{ backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '46px 46px' }} />
       {/* floating gradient orbs */}
