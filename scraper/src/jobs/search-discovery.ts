@@ -425,7 +425,7 @@ export async function handleSearchQuery(
   // they flood the harvest — but they're businesses, not creators. Hard-drop the
   // obvious commerce/brand/event accounts by name.
   const SHOP_RE =
-    /(wholesale|whole_sale|\bstore\b|\bshop\b|\bshops\b|shopping|boutique|\bmart\b|collections?|couture|\bbuy\b|\bsale\b|\bsales\b|\bdeals?\b|\boffers?\b|export|exports|manufactur|supplier|wholesaler|retail|\btrader\b|emporium|bazaar|\bmall\b|clothing|garments?|textiles?|fabrics?|sarees?|kurtis?|lehenga|fashionweek|fashion_week|outlet|enterprises?|\bpvt\b|\bltd\b|\binc\b|industries|\bco\b|\bhub\b|\bworld\b|\bbazar\b|jewellery|jewelry|footwear)/i;
+    /(wholesale|whole_sale|\bstore\b|\bshop\b|\bshops\b|shopping|boutique|\bmart\b|collections?|couture|\bbuy\b|\bsale\b|\bsales\b|\bdeals?\b|\boffers?\b|export|exports|manufactur|supplier|wholesaler|retail|\btrader\b|emporium|bazaar|\bmall\b|clothing|garments?|textiles?|fabrics?|sarees?|kurtis?|lehenga|fashionweek|fashion_week|outlet|enterprises?|\bpvt\b|\bltd\b|\binc\b|industries|\bco\b|\bhub\b|\bworld\b|\bbazar\b|jewellery|jewelry|jeweller|jewellers|gems|footwear|restaurant|\bhotel\b|resort|\bcafe\b|\bcaf\b|property|properties|realty|realestate|real_estate|\bvilla\b|\bdhaba\b|sweets|bakery|mobility|\bmotors\b|automobiles?|builders?|developers?|\brealtor\b|jewels?)/i;
 
   // Everything we know about a candidate's OWN profile, for relevance checks.
   const profileText = (c: { username: string; full_name: string | null; biography: string | null; category: string | null }) =>

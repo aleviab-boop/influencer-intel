@@ -36,13 +36,24 @@ export class AccountPool {
     );
     const pool = new AccountPool();
     const now = Date.now();
-    pool.states = rows.map((a) => ({
-      account: a,
-      actionsThisHour: 0,
-      hourResetAt: now + HOUR_MS,
-      cooldownUntil: 0,
-      totalActions: 0,
-    }));
+    pool.states = rows.map((a) => {
+      // Cooldowns are persisted (service_accounts.cooldown_until) so a 429'd
+      // account stays rested across worker restarts / hot-reloads — otherwise
+      // every reload wiped the in-memory cooldown and snapped back to the same
+      // (still-throttled) account.
+      const cd = (a as { cooldown_until?: string | null }).cooldown_until;
+      const cooldownUntil = cd ? new Date(cd).getTime() : 0;
+      return {
+        account: a,
+        actionsThisHour: 0,
+        hourResetAt: now + HOUR_MS,
+        cooldownUntil: Number.isFinite(cooldownUntil) ? cooldownUntil : 0,
+        totalActions: 0,
+      };
+    });
+    // Start on the first account that isn't currently cooling down.
+    const firstReady = pool.states.findIndex((s) => now >= s.cooldownUntil);
+    pool.idx = firstReady >= 0 ? firstReady : 0;
     return pool;
   }
 
@@ -131,7 +142,11 @@ export class AccountPool {
       await getBolticClient().update(
         'service_accounts',
         { id: s.account.id },
-        { daily_action_count: s.totalActions, updated_at: new Date().toISOString() },
+        {
+          daily_action_count: s.totalActions,
+          cooldown_until: s.cooldownUntil ? new Date(s.cooldownUntil).toISOString() : null,
+          updated_at: new Date().toISOString(),
+        },
       );
     } catch {
       /* best-effort */
