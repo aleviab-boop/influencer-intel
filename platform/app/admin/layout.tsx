@@ -13,7 +13,6 @@ const NAV: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: 'home' },
   { label: 'Scraper', href: '/admin/scraper', icon: 'bot' },
   { label: 'Agency', href: '/admin/agency', icon: 'building' },
-  { label: 'Influencer', href: '/admin/influencer', icon: 'user', soon: true },
 ];
 
 function NavIcon({ name }: { name: string }) {
