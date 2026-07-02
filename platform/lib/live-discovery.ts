@@ -209,7 +209,7 @@ export async function resolveNameToSeeds(
 // and probe them. City-niche accounts have very predictable handles, so this
 // self-seeds the crawl with no login and no user-provided handle.
 
-const KNOWN_CITIES = new Set([
+export const KNOWN_CITIES = new Set([
   // metros + tier-1
   'mumbai', 'bombay', 'delhi', 'newdelhi', 'bangalore', 'bengaluru', 'hyderabad',
   'chennai', 'kolkata', 'calcutta', 'pune', 'ahmedabad', 'surat',

@@ -4,7 +4,7 @@
 // creator's searchable text fields; the score is how many tokens matched.
 
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { extractContact, type LiveProfile } from './live-discovery';
+import { extractContact, KNOWN_CITIES, type LiveProfile } from './live-discovery';
 
 // Searchable text split by field group, so a token's relevance depends on
 // WHERE it matched — not just whether it matched. For a campaign brief
@@ -63,6 +63,18 @@ export async function searchCreatorsInDb(
   // local creators (everyone is loc_hit=false → falls back to relevance).
   const locExpr = tokens.map((_, i) => `${LOC_TXT} like $${i + 1}`).join(' or ');
 
+  // When the query names a real city ("...in kolkata"), REQUIRE the creator's
+  // actual location field to match it. This drops accounts that only matched the
+  // place via a polluted discovery tag (a foreign account tagged "kolkata" by a
+  // hashtag crawl) — for a location search we only want creators genuinely based
+  // there. Inert for queries with no city token.
+  const cityIdx = tokens
+    .map((t, i) => (KNOWN_CITIES.has(t.toLowerCase()) ? i : -1))
+    .filter((i) => i >= 0);
+  const locRequired = cityIdx.length
+    ? `and (${cityIdx.map((i) => `${LOC_TXT} like $${i + 1}`).join(' or ')})`
+    : '';
+
   // Source bucket: the browser scraper's own finds come FIRST, then the
   // creators imported from the Excel sheets. "Excel" = curated (source 'manual')
   // or the Fynd seeding import (tagged 'fynd-seeding'); everything else is a
@@ -75,6 +87,7 @@ export async function searchCreatorsInDb(
            (${scoreExpr}) as score, (${locExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
+      ${locRequired}
     -- Bucket first (scraper finds before Excel imports), THEN weighted relevance:
     -- a creator matching both the niche and the place ("comedy" + "mumbai")
     -- outranks one matching only the place. Location is a tiebreak (locals lead
