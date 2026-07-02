@@ -56,7 +56,6 @@ function LoginForm() {
         </div>
 
         <form onSubmit={submit} className="w-full rounded-3xl border border-white/40 bg-white/95 backdrop-blur-xl p-9 shadow-[0_30px_80px_rgba(40,20,90,0.35)]">
-          <div className="relative -mt-9 -mx-9 mb-7 h-1.5 rounded-t-3xl" style={{ background: `linear-gradient(90deg, ${ACCENT}, #9b7bff, #d9c9ff)` }} />
           <h1 className="text-2xl font-semibold tracking-tight bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(115deg, #17172b 40%, ${ACCENT})` }}>Admin sign-in</h1>
           <p className="mt-1.5 text-[14px] text-[#888]">Sign in with your superadmin credentials.</p>
           <label className="block mt-6 text-[13px] font-medium text-[#666]">Email</label>
