@@ -80,7 +80,7 @@ export async function searchCreatorsInDb(
   // creators imported from the Excel sheets. "Excel"/Trends = curated
   // (source 'manual') or the Fynd seeding import (tagged 'fynd-seeding');
   // everything else is a browser-scraper (real Instagram) discovery.
-  const EXCEL_EXPR = `(source = 'manual' or 'fynd-seeding' = any(coalesce(tags, '{}')))`;
+  const EXCEL_EXPR = `(coalesce(source, '') = 'manual' or 'fynd-seeding' = any(coalesce(tags, '{}')))`;
   const SOURCE_BUCKET = `case when ${EXCEL_EXPR} then 1 else 0 end`;
 
   // Toggle: 'instagram' → only the scraper's real-IG finds; 'trends' → only the
