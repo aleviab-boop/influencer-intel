@@ -41,11 +41,12 @@ function LoginForm() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ background: 'radial-gradient(900px 500px at 50% -10%, #f2ecff, #fafafc 60%)' }}>
-      <div className="flex items-center justify-center gap-3.5 mb-8 whitespace-nowrap">
-        <BrandMark size={56} />
-        <span className="text-[40px] font-semibold tracking-tight leading-none">Influencer Intel</span>
+      <div className="w-full max-w-md flex flex-col items-center">
+      <div className="flex items-center justify-center gap-3 mb-8 whitespace-nowrap">
+        <BrandMark size={52} />
+        <span className="text-[36px] font-semibold tracking-tight leading-none">Influencer Intel</span>
       </div>
-      <form onSubmit={submit} className="w-full max-w-md rounded-3xl border border-[#ececf3] bg-white p-9 shadow-[0_24px_70px_rgba(108,77,246,0.12)]">
+      <form onSubmit={submit} className="w-full rounded-3xl border border-[#ececf3] bg-white p-9 shadow-[0_24px_70px_rgba(108,77,246,0.12)]">
           <div className="relative -mt-9 -mx-9 mb-7 h-1.5 rounded-t-3xl" style={{ background: `linear-gradient(90deg, ${ACCENT}, #9b7bff)` }} />
           <h1 className="text-2xl font-semibold tracking-tight">Admin sign-in</h1>
           <p className="mt-1.5 text-[14px] text-[#888]">Sign in with your superadmin credentials.</p>
@@ -78,6 +79,7 @@ function LoginForm() {
             {loading ? 'Checking…' : 'Sign in'}
           </button>
         </form>
+      </div>
     </div>
   );
 }
