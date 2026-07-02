@@ -96,9 +96,10 @@ export function StatCard({
 export function PageHeader({ title, subtitle, badge }: { title: string; subtitle?: string; badge?: ReactNode }) {
   return (
     <div className="relative mb-7 rounded-2xl overflow-hidden border border-[#ececf3] px-6 py-5" style={{ background: 'linear-gradient(120deg, #ffffff 0%, #f7f5ff 55%, #f2ecff 100%)' }}>
-      <div className="absolute -right-10 -top-16 w-56 h-56 rounded-full opacity-[0.14]" style={{ background: `radial-gradient(circle, ${ACCENT}, transparent 70%)` }} />
+      <div className="absolute -right-10 -top-16 w-56 h-56 rounded-full opacity-[0.16]" style={{ background: `radial-gradient(circle, ${ACCENT}, transparent 70%)` }} />
+      <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: `linear-gradient(180deg, ${ACCENT}, #9b7bff)` }} />
       <div className="relative flex items-center gap-3 flex-wrap">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight bg-clip-text text-transparent" style={{ backgroundImage: `linear-gradient(115deg, #17172b 35%, ${ACCENT})` }}>{title}</h1>
         {badge}
       </div>
       {subtitle && <p className="relative mt-1 text-[14px] text-[#777] max-w-2xl">{subtitle}</p>}
