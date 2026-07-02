@@ -54,6 +54,10 @@ const CITY_WORDS = new Set([
   'kochi', 'goa', 'guwahati', 'bhubaneswar', 'coimbatore', 'mysore', 'mysuru',
   'vizag', 'visakhapatnam', 'noida', 'gurgaon', 'gurugram', 'thane', 'ranchi',
   'raipur', 'dehradun', 'amritsar', 'ludhiana', 'agra', 'varanasi', 'siliguri',
+  'udaipur', 'jodhpur', 'jaisalmer', 'kota', 'ajmer', 'nashik', 'aurangabad',
+  'vadodara', 'rajkot', 'madurai', 'trichy', 'jamshedpur', 'trivandrum',
+  'thiruvananthapuram', 'kozhikode', 'calicut', 'mangalore', 'mangaluru',
+  'vijayawada', 'warangal', 'shillong', 'imphal', 'jaipur', 'srinagar',
 ]);
 // Display-cased city for storage (LOC_TXT compares case-insensitively anyway).
 const cityCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
@@ -439,9 +443,17 @@ export async function handleSearchQuery(
     // RELEVANCE GATE: keep only creators whose own profile (handle/name/bio/
     // category) actually supports the query. Without this, a crawl that drifts
     // into an unrelated cluster (e.g. South-film stars surfaced for a "kolkata"
-    // search) gets saved and tagged with the query — poisoning DB search. A
-    // creator is relevant if ANY query keyword appears in their profile text.
-    if (keywords.length > 0 && !keywords.some((k) => profileText(c).includes(k))) return false;
+    // search) gets saved and tagged with the query — poisoning DB search.
+    // A creator qualifies if EITHER:
+    //   (a) IG's own top-search ranked it for the exact query (highest-precision
+    //       source — trusted even when rate-limiting blocked bio enrichment), or
+    //   (b) any query keyword appears in its profile text.
+    // This keeps recall when the per-profile bio lookup is throttled, without
+    // re-admitting chaining/hashtag drift (which never has 'topsearch_user').
+    if (keywords.length > 0) {
+      const fromTopsearch = c.sources.includes('topsearch_user');
+      if (!fromTopsearch && !keywords.some((k) => profileText(c).includes(k))) return false;
+    }
     return true;
   });
   const droppedCount = candidates.length - qualified.length;
