@@ -49,6 +49,7 @@ interface Row {
 export async function searchCreatorsInDb(
   tokens: string[],
   limit: number,
+  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number } = {},
 ): Promise<LiveProfile[]> {
   if (tokens.length === 0) return [];
 
@@ -76,10 +77,25 @@ export async function searchCreatorsInDb(
     : '';
 
   // Source bucket: the browser scraper's own finds come FIRST, then the
-  // creators imported from the Excel sheets. "Excel" = curated (source 'manual')
-  // or the Fynd seeding import (tagged 'fynd-seeding'); everything else is a
-  // browser-scraper discovery. Within each bucket we rank by relevance.
-  const SOURCE_BUCKET = `case when source = 'manual' or 'fynd-seeding' = any(coalesce(tags, '{}')) then 1 else 0 end`;
+  // creators imported from the Excel sheets. "Excel"/Trends = curated
+  // (source 'manual') or the Fynd seeding import (tagged 'fynd-seeding');
+  // everything else is a browser-scraper (real Instagram) discovery.
+  const EXCEL_EXPR = `(source = 'manual' or 'fynd-seeding' = any(coalesce(tags, '{}')))`;
+  const SOURCE_BUCKET = `case when ${EXCEL_EXPR} then 1 else 0 end`;
+
+  // Toggle: 'instagram' → only the scraper's real-IG finds; 'trends' → only the
+  // uploaded Excel/campaign creators. Undefined → both (scraper first).
+  const bucketFilter =
+    opts.bucket === 'instagram' ? `and not ${EXCEL_EXPR}`
+    : opts.bucket === 'trends' ? `and ${EXCEL_EXPR}`
+    : '';
+
+  // Follower floor (default 0). The Lander passes 5000 so sub-5K nanos and
+  // bad-scrape anomalies (e.g. a mega read as 41 followers) drop out; unknown
+  // counts are kept so freshly-discovered stubs still surface.
+  const floor = Number(opts.minFollowers) > 0
+    ? `and (follower_count is null or follower_count >= ${Math.floor(Number(opts.minFollowers))})`
+    : '';
 
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
@@ -88,6 +104,8 @@ export async function searchCreatorsInDb(
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
       ${locRequired}
+      ${bucketFilter}
+      ${floor}
     -- Bucket first (scraper finds before Excel imports), THEN weighted relevance:
     -- a creator matching both the niche and the place ("comedy" + "mumbai")
     -- outranks one matching only the place. Location is a tiebreak (locals lead

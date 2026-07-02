@@ -530,6 +530,9 @@ export function LiveSearch({
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
+  // Lander source toggle: 'instagram' = real creators from the browser scraper,
+  // 'trends' = creators uploaded from the campaign Excel sheets.
+  const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>('instagram');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState('');
@@ -1120,7 +1123,7 @@ export function LiveSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl' }) {
+  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends' }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
     const mode = opts?.mode ?? 'crawl';
@@ -1174,7 +1177,7 @@ export function LiveSearch({
       const r = await fetch('/api/discover-live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p, seeds, names, mode }),
+        body: JSON.stringify({ prompt: p, seeds, names, mode, bucket: opts?.bucketOverride ?? sourceBucket }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -1432,6 +1435,27 @@ export function LiveSearch({
       {/* results table */}
       {run && !loading && (
         <div className="mt-6">
+          {initialMode === 'db' && (
+            <div className="mb-4 inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
+              {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => {
+                    if (sourceBucket === val) return;
+                    setSourceBucket(val);
+                    void search({ mode: 'db', bucketOverride: val, promptOverride: run.prompt });
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+                  style={sourceBucket === val
+                    ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
+                    : { color: '#777', background: 'transparent' }}
+                  title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-3">
             <div className="text-[14px] text-[#555]">
               <span className="font-semibold text-[#111]">{shown.length}</span>
