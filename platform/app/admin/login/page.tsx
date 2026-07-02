@@ -50,9 +50,9 @@ function LoginForm() {
 
       {/* card on top of the gradient */}
       <div className="relative z-10 w-full max-w-md">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <BrandMark size={48} />
-          <span className="text-[32px] font-semibold tracking-tight leading-none text-white drop-shadow-sm">Influencer Intel</span>
+        <div className="flex items-center gap-3 mb-8 pl-1">
+          <BrandMark size={44} />
+          <span className="text-[28px] font-semibold tracking-tight leading-none text-white drop-shadow-sm">Influencer Intel</span>
         </div>
 
         <form onSubmit={submit} className="w-full rounded-3xl border border-white/40 bg-white/95 backdrop-blur-xl p-9 shadow-[0_30px_80px_rgba(40,20,90,0.35)]">
