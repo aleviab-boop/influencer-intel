@@ -88,7 +88,7 @@ export default function AdminScraperPage() {
                   <div className="w-8 h-8 rounded-full bg-[#eee] shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-[#e3def9]">
                     {c.profile_photo_url && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                      <img src={`/api/ig-image?u=${encodeURIComponent(c.profile_photo_url)}`} alt="" className="w-full h-full object-cover" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
