@@ -107,9 +107,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               }).catch(() => {});
               window.location.href = '/admin/login';
             }}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-[#888] hover:bg-[#f5f5f8]"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-[#888] hover:bg-rose-50 hover:text-rose-600 transition-colors"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+            <svg className="text-rose-500" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
             Sign out
           </button>
         </div>
