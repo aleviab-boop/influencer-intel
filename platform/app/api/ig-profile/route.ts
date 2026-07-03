@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { extractContact } from '@/lib/live-discovery';
 import { igFetch } from '@/lib/ig-fetch';
 import { getBolticClient } from '@influencer-intel/shared/db';
+import { getOpenAIClient } from '@influencer-intel/shared/llm';
 
 export const runtime = 'nodejs';
 export const maxDuration = 20;
@@ -381,6 +382,27 @@ export async function GET(req: NextRequest) {
       caption_excerpt: p.caption,
     }));
     await persistLive(handle, u, er, geoPosts);
+
+    // Image-verify gender from the FRESH profile photo (runs after the response
+    // is sent, so it adds no latency). Overrides any stale text-inferred label —
+    // e.g. a female creator with a male-leaning name ("Mukul") gets corrected.
+    const freshPic = u.profile_pic_url_hd ?? u.profile_pic_url ?? null;
+    if (freshPic) {
+      after(async () => {
+        try {
+          const g = await getOpenAIClient().inferGendersFromPhotos([{ handle, imageUrl: freshPic }]);
+          const gender = g[handle.toLowerCase()];
+          if (gender === 'female' || gender === 'male') {
+            await getBolticClient().query(
+              `UPDATE creators SET gender = $1 WHERE platform = 'instagram' AND lower(handle) = lower($2)`,
+              [gender, handle],
+            );
+          }
+        } catch {
+          /* best-effort */
+        }
+      });
+    }
 
     return NextResponse.json({
       handle: u.username,
