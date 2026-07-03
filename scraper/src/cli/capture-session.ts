@@ -14,6 +14,7 @@ import readline from 'node:readline';
 import path from 'node:path';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import { firefox } from 'playwright-core';
 import { launchOptions } from 'camoufox-js';
 
@@ -41,10 +42,13 @@ async function main() {
     process.exit(1);
   }
 
-  await fsp.mkdir(config.chromeProfilePath, { recursive: true });
+  // Fresh, isolated profile per capture — no leftover cookies or a different
+  // account's session to contaminate this login. This is what caused a session
+  // to be saved under the wrong handle (and the stale Facebook tab) before.
+  const captureDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'ig-capture-'));
 
-  console.log(`\n  Opening Camoufox (anti-detect Firefox).`);
-  console.log(`  Profile: ${config.chromeProfilePath}\n`);
+  console.log(`\n  Opening Camoufox (anti-detect Firefox) on a clean profile.`);
+  console.log(`  Profile: ${captureDir}\n`);
 
   const camoOpts = await launchOptions({
     headless: false,
@@ -54,13 +58,15 @@ async function main() {
     window: [1280, 800],
   });
 
-  const context = await firefox.launchPersistentContext(config.chromeProfilePath, {
+  const context = await firefox.launchPersistentContext(captureDir, {
     ...camoOpts,
     viewport: { width: 1280, height: 800 },
   });
 
   const page = context.pages()[0] ?? (await context.newPage());
-  await page.goto('https://www.instagram.com/');
+  // Straight to the Instagram login page (not the home page, which can bounce
+  // to a stale Facebook/Meta login when there's no session).
+  await page.goto('https://www.instagram.com/accounts/login/');
 
   console.log(`Manual step (one-time):
   1. Log in to Instagram in the Chrome window that just opened, as @${handle}.
@@ -83,6 +89,31 @@ async function main() {
     console.warn('  ⚠ No IG sessionid cookie found. Did the login complete?');
   }
 
+  // Identity guard: confirm the session actually belongs to @handle before we
+  // save it under that handle — prevents mislabeling a different account's login.
+  let confirmedUser: string | null = null;
+  try {
+    confirmedUser = await page.evaluate(async () => {
+      const r = await fetch('/api/v1/accounts/current_user/?edit=false', {
+        headers: { 'X-IG-App-ID': '936619743392459', 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'include',
+      });
+      if (!r.ok) return null;
+      const j = await r.json();
+      return (j?.user?.username as string) ?? null;
+    });
+  } catch {
+    /* ignore — fall back to the sessionid check above */
+  }
+  if (confirmedUser && confirmedUser.toLowerCase() !== handle.toLowerCase()) {
+    console.error(`\n  ✗ Logged-in account is @${confirmedUser}, but you asked to save @${handle}.`);
+    console.error(`    NOT saving. Log out, log in as @${handle}, and re-run.\n`);
+    await context.close().catch(() => {});
+    await fsp.rm(captureDir, { recursive: true, force: true }).catch(() => {});
+    process.exit(1);
+  }
+  if (confirmedUser) console.log(`  ✓ Confirmed logged in as @${confirmedUser}.`);
+
   console.log('Saving to Boltic service_accounts…');
   const db = getBolticClient();
   await db.upsert(
@@ -102,11 +133,13 @@ async function main() {
     ['platform', 'handle'],
   );
 
-  const backupPath = path.join(config.chromeProfilePath, 'storage-state.json');
+  await fsp.mkdir(config.chromeProfilePath, { recursive: true });
+  const backupPath = path.join(config.chromeProfilePath, `storage-state-${handle}.json`);
   await fsp.writeFile(backupPath, JSON.stringify(storageState, null, 2));
   console.log(`  ✓ Saved to DB + local backup at ${backupPath}\n`);
 
   await context.close();
+  await fsp.rm(captureDir, { recursive: true, force: true }).catch(() => {}); // clean up the throwaway profile
   console.log('Done. Start the scraper with: npm run scraper:dev');
   process.exit(0);
 }
