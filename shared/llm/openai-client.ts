@@ -365,6 +365,47 @@ Be conservative — when unsure, use null or "unknown".`,
   }
 
   /**
+   * Detect each creator's gender from their PROFILE PHOTO (face), batched into
+   * one vision call. Each image is preceded by its handle. Returns a map
+   * handle -> 'female' | 'male' | 'unknown' ('unknown' for logos / group photos
+   * / no visible face). More accurate than name/bio text inference.
+   */
+  async inferGendersFromPhotos(
+    items: Array<{ handle: string; imageUrl: string }>,
+  ): Promise<Record<string, 'female' | 'male' | 'unknown'>> {
+    const usable = items.filter((i) => i.imageUrl).slice(0, 8);
+    if (usable.length === 0) return {};
+    const content: Array<Record<string, unknown>> = [
+      {
+        type: 'text',
+        text: `Each image below is an Instagram profile picture, preceded by that account's handle. Identify the ACCOUNT OWNER's gender from the photo (the visible person's presentation). Return ONLY JSON: {"results":[{"handle":"<handle>","gender":"female"|"male"|"unknown"}]} — one entry per handle. Use "unknown" for logos, brand marks, group photos, no visible face, or genuinely ambiguous.`,
+      },
+    ];
+    for (const it of usable) {
+      content.push({ type: 'text', text: `handle: ${it.handle}` });
+      content.push({ type: 'image_url', image_url: { url: it.imageUrl, detail: 'low' } });
+    }
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.outreachModel, // gpt-4o has vision
+        response_format: { type: 'json_object' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        messages: [{ role: 'user', content: content as any }],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(raw) as { results?: Array<{ handle?: string; gender?: string }> };
+      const out: Record<string, 'female' | 'male' | 'unknown'> = {};
+      for (const r of parsed.results ?? []) {
+        const g = r.gender === 'female' || r.gender === 'male' ? r.gender : 'unknown';
+        if (r.handle) out[r.handle.toLowerCase()] = g;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Generate per-creator reasoning for a shortlist position.
    * Uses gpt-4o (quality matters here for brand trust).
    */

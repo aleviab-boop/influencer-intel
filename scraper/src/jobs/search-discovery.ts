@@ -568,15 +568,30 @@ export async function handleSearchQuery(
     // scraper when a creator is actually opened in the drawer.
   }
 
-  // Infer each saved creator's gender (one batched LLM call on handle+name+bio)
-  // so the Lander's male/female filter has data. Best-effort — never fails the
-  // crawl; 'unknown' is left NULL so it can be re-labeled on a future crawl.
+  // Label each saved creator's gender for the Lander's male/female filter.
+  // PHOTO-based first (vision on the profile picture — most accurate), then a
+  // name+bio text fallback for anyone the photo couldn't resolve. Best-effort:
+  // 'unknown' stays NULL so it can be re-labeled on a future crawl.
   try {
-    const forGender = qualified
+    const saved = qualified
       .slice(0, CAP_PER_QUERY)
-      .filter((c) => /^[a-z0-9._]+$/i.test(c.username))
-      .map((c) => ({ handle: c.username, name: c.full_name, bio: c.biography }));
-    const genders = await llm.inferGenders(forGender);
+      .filter((c) => /^[a-z0-9._]+$/i.test(c.username));
+    const genders: Record<string, 'female' | 'male' | 'unknown'> = {};
+
+    const withPhoto = saved.filter((c) => c.profile_pic_url);
+    for (let i = 0; i < withPhoto.length; i += 8) {
+      const batch = withPhoto.slice(i, i + 8).map((c) => ({ handle: c.username, imageUrl: c.profile_pic_url as string }));
+      Object.assign(genders, await llm.inferGendersFromPhotos(batch));
+    }
+
+    const needText = saved.filter((c) => (genders[c.username.toLowerCase()] ?? 'unknown') === 'unknown');
+    if (needText.length > 0) {
+      const textG = await llm.inferGenders(needText.map((c) => ({ handle: c.username, name: c.full_name, bio: c.biography })));
+      for (const [h, g] of Object.entries(textG)) {
+        if ((genders[h] ?? 'unknown') === 'unknown') genders[h] = g;
+      }
+    }
+
     let labeled = 0;
     for (const [h, g] of Object.entries(genders)) {
       if (g === 'unknown') continue;
@@ -586,7 +601,7 @@ export async function handleSearchQuery(
       );
       labeled++;
     }
-    console.log(`[search] "${query}": gender-labeled ${labeled} creators`);
+    console.log(`[search] "${query}": gender-labeled ${labeled} creators (photo + text)`);
   } catch {
     /* best-effort — gender is a nice-to-have */
   }
