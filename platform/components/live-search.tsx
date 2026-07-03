@@ -1419,6 +1419,32 @@ export function LiveSearch({
         );
       })()}
 
+      {/* Instagram / Trends toggle — always visible on the Lander after a search,
+          INCLUDING the empty/error state, so you can switch buckets even when the
+          current one returned 0 (previously it lived inside the results block and
+          vanished, stranding you on an empty bucket). */}
+      {initialMode === 'db' && !loading && (run || error) && (
+        <div className="mt-4 inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
+          {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => {
+                if (sourceBucket === val) return;
+                setSourceBucket(val);
+                void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
+              }}
+              className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+              style={sourceBucket === val
+                ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
+                : { color: '#777', background: 'transparent' }}
+              title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {error && (
         <div className="mt-3 px-4 py-3 rounded-lg border border-rose-300 bg-rose-50 text-[14px] text-rose-700">
           {error}
@@ -1435,27 +1461,6 @@ export function LiveSearch({
       {/* results table */}
       {run && !loading && (
         <div className="mt-6">
-          {initialMode === 'db' && (
-            <div className="mb-4 inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
-              {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
-                <button
-                  key={val}
-                  onClick={() => {
-                    if (sourceBucket === val) return;
-                    setSourceBucket(val);
-                    void search({ mode: 'db', bucketOverride: val, promptOverride: run.prompt });
-                  }}
-                  className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
-                  style={sourceBucket === val
-                    ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
-                    : { color: '#777', background: 'transparent' }}
-                  title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="flex items-center justify-between mb-3">
             <div className="text-[14px] text-[#555]">
               <span className="font-semibold text-[#111]">{shown.length}</span>
