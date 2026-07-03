@@ -49,9 +49,15 @@ interface Row {
 export async function searchCreatorsInDb(
   tokens: string[],
   limit: number,
-  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number } = {},
+  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number; gender?: 'female' | 'male' } = {},
 ): Promise<LiveProfile[]> {
   if (tokens.length === 0) return [];
+
+  // Optional creator-gender filter (labeled during discovery via LLM on
+  // handle/name/bio). Only 'female'/'male' are accepted; anything else is inert.
+  const genderFilter = opts.gender === 'female' ? "and gender = 'female'"
+    : opts.gender === 'male' ? "and gender = 'male'"
+    : '';
 
   const params = tokens.map((t) => `%${t.toLowerCase()}%`);
   const scoreExpr = tokens.map((_, i) => tokenScore(`$${i + 1}`)).join(' + ');
@@ -119,6 +125,7 @@ export async function searchCreatorsInDb(
       ${nicheRequired}
       ${bucketFilter}
       ${floor}
+      ${genderFilter}
     -- Bucket first (scraper finds before Excel imports), THEN weighted relevance:
     -- a creator matching both the niche and the place ("comedy" + "mumbai")
     -- outranks one matching only the place. Location is a tiebreak (locals lead

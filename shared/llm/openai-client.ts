@@ -44,6 +44,48 @@ export class OpenAIClient {
   }
 
   /**
+   * Infer each creator's gender from their handle + display name + bio, in ONE
+   * batched call. Returns a map handle -> 'female' | 'male' | 'unknown'. Uses bio
+   * context (pronouns, "makeup artist", etc.), not just the name — and returns
+   * 'unknown' for brands / ambiguous cases rather than guessing.
+   */
+  async inferGenders(
+    items: Array<{ handle: string; name?: string | null; bio?: string | null }>,
+  ): Promise<Record<string, 'female' | 'male' | 'unknown'>> {
+    if (items.length === 0) return {};
+    const payload = items.slice(0, 60).map((i) => ({
+      handle: i.handle,
+      name: (i.name ?? '').slice(0, 60),
+      bio: (i.bio ?? '').slice(0, 200),
+    }));
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.classificationModel,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You label the GENDER OF THE CREATOR (the account owner/person), not their audience, for Indian Instagram creators. Use the handle, display name, and bio (pronouns like she/her or he/him, words like "makeup artist", "dad", "girl", "boy" are strong signals). Return "female" or "male" only when reasonably confident; return "unknown" for brands, businesses, couples, groups, or genuinely ambiguous names — do NOT guess from an ambiguous name alone.
+
+Output ONLY JSON: { "results": [ { "handle": "...", "gender": "female"|"male"|"unknown" } ] } — one entry per input handle.`,
+          },
+          { role: 'user', content: JSON.stringify({ creators: payload }) },
+        ],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(raw) as { results?: Array<{ handle?: string; gender?: string }> };
+      const out: Record<string, 'female' | 'male' | 'unknown'> = {};
+      for (const r of parsed.results ?? []) {
+        const g = r.gender === 'female' || r.gender === 'male' ? r.gender : 'unknown';
+        if (r.handle) out[r.handle.toLowerCase()] = g;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Parse a free-text brief to structured spec via gpt-4o-mini with JSON mode.
    */
   async parseBrief(rawText: string): Promise<{

@@ -568,6 +568,29 @@ export async function handleSearchQuery(
     // scraper when a creator is actually opened in the drawer.
   }
 
+  // Infer each saved creator's gender (one batched LLM call on handle+name+bio)
+  // so the Lander's male/female filter has data. Best-effort — never fails the
+  // crawl; 'unknown' is left NULL so it can be re-labeled on a future crawl.
+  try {
+    const forGender = qualified
+      .slice(0, CAP_PER_QUERY)
+      .filter((c) => /^[a-z0-9._]+$/i.test(c.username))
+      .map((c) => ({ handle: c.username, name: c.full_name, bio: c.biography }));
+    const genders = await llm.inferGenders(forGender);
+    let labeled = 0;
+    for (const [h, g] of Object.entries(genders)) {
+      if (g === 'unknown') continue;
+      await db.query(
+        `UPDATE creators SET gender = $1 WHERE platform = 'instagram' AND lower(handle) = lower($2)`,
+        [g, h],
+      );
+      labeled++;
+    }
+    console.log(`[search] "${query}": gender-labeled ${labeled} creators`);
+  } catch {
+    /* best-effort — gender is a nice-to-have */
+  }
+
   console.log(
     `[search] "${query}": ${added} qualified candidates upserted (discovery-only, no deep scrapes)`,
   );

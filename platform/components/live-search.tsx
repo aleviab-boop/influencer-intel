@@ -533,6 +533,8 @@ export function LiveSearch({
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
   // 'trends' = creators uploaded from the campaign Excel sheets.
   const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>('instagram');
+  // Lander creator-gender filter: 'any' | 'female' | 'male'.
+  const [genderFilter, setGenderFilter] = useState<'any' | 'female' | 'male'>('any');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState('');
@@ -1123,7 +1125,7 @@ export function LiveSearch({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends' }) {
+  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male' }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
     const mode = opts?.mode ?? 'crawl';
@@ -1177,7 +1179,10 @@ export function LiveSearch({
       const r = await fetch('/api/discover-live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p, seeds, names, mode, bucket: opts?.bucketOverride ?? sourceBucket }),
+        body: JSON.stringify((() => {
+          const g = opts?.genderOverride ?? genderFilter;
+          return { prompt: p, seeds, names, mode, bucket: opts?.bucketOverride ?? sourceBucket, gender: g === 'any' ? undefined : g };
+        })()),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -1424,24 +1429,47 @@ export function LiveSearch({
           current one returned 0 (previously it lived inside the results block and
           vanished, stranding you on an empty bucket). */}
       {initialMode === 'db' && !loading && (run || error) && (
-        <div className="mt-4 inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
-          {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
-            <button
-              key={val}
-              onClick={() => {
-                if (sourceBucket === val) return;
-                setSourceBucket(val);
-                void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
-              }}
-              className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
-              style={sourceBucket === val
-                ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
-                : { color: '#777', background: 'transparent' }}
-              title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {/* source bucket */}
+          <div className="inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
+            {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => {
+                  if (sourceBucket === val) return;
+                  setSourceBucket(val);
+                  void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
+                }}
+                className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+                style={sourceBucket === val
+                  ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
+                  : { color: '#777', background: 'transparent' }}
+                title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* creator gender */}
+          <div className="inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
+            {([['any', 'All'], ['female', 'Female'], ['male', 'Male']] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => {
+                  if (genderFilter === val) return;
+                  setGenderFilter(val);
+                  void search({ mode: 'db', genderOverride: val, promptOverride: run?.prompt ?? prompt });
+                }}
+                className="px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+                style={genderFilter === val
+                  ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
+                  : { color: '#777', background: 'transparent' }}
+                title="Filter by the creator's gender (labeled from name/bio)"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

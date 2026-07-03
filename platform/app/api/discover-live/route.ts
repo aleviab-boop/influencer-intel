@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
     // Lander toggle: 'instagram' = real scraper finds, 'trends' = uploaded
     // Excel/campaign creators. 5K follower floor drops nanos + bad-scrape noise.
     const bucket = body?.bucket === 'trends' ? 'trends' : body?.bucket === 'instagram' ? 'instagram' : undefined;
-    const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: 5000 });
+    const gender = body?.gender === 'female' ? 'female' : body?.gender === 'male' ? 'male' : undefined;
+    const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: 5000, gender });
     // Log the agency search for the admin Agency activity feed (best-effort).
     void getBolticClient()
       .insert('agency_searches', { prompt, result_count: dbMatches.length })
