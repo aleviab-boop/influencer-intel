@@ -71,17 +71,12 @@ export async function searchCreatorsInDb(
   // local creators (everyone is loc_hit=false → falls back to relevance).
   const locExpr = tokens.map((_, i) => `${LOC_TXT} like $${i + 1}`).join(' or ');
 
-  // When the query names a real city ("...in kolkata"), REQUIRE the creator's
-  // actual location field to match it. This drops accounts that only matched the
-  // place via a polluted discovery tag (a foreign account tagged "kolkata" by a
-  // hashtag crawl) — for a location search we only want creators genuinely based
-  // there. Inert for queries with no city token.
-  const cityIdx = tokens
-    .map((t, i) => (KNOWN_CITIES.has(t.toLowerCase()) ? i : -1))
-    .filter((i) => i >= 0);
-  const locRequired = cityIdx.length
-    ? `and (${cityIdx.map((i) => `${LOC_TXT} like $${i + 1}`).join(' or ')})`
-    : '';
+  // Location is a RANKING signal, not a hard filter: creators verified in the
+  // queried city score higher (LOC_TXT is weighted 3 in tokenScore) and are the
+  // loc_match tiebreak, so PERFECT matches (right niche + right city) lead — then
+  // niche-relevant creators without a verified location follow below. (We used to
+  // hard-require the location, which hid every niche match that wasn't yet
+  // geo-tagged; the niche gate below keeps results on-topic instead.)
 
   // NICHE gate: the non-city terms ("food", "comedy", "fashion") must match the
   // creator's niche fields (category / niche / tags) OR their handle/name — so a
@@ -122,7 +117,6 @@ export async function searchCreatorsInDb(
            (${scoreExpr}) as score, (${locExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
-      ${locRequired}
       ${nicheRequired}
       ${bucketFilter}
       ${floor}
