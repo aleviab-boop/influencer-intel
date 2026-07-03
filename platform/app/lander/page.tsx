@@ -102,7 +102,7 @@ function LanderContent() {
           // Searching from the home page runs inline — no redirect to another page.
           // Kept as a <div> (not <section>) so the global scroll-reveal motion
           // doesn't mutate its className and trip a hydration mismatch.
-          <div className="max-w-5xl mx-auto w-full px-6 py-10 min-h-screen">
+          <div className="max-w-7xl mx-auto w-full px-6 py-10 min-h-screen">
             <div className="mb-6">
               <button
                 onClick={() => router.push('/lander')}
