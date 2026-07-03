@@ -100,7 +100,7 @@ export async function run(): Promise<void> {
       );
       // Fail-fast: never let one job hang the worker (a 429 retry loop or a stuck
       // navigation would otherwise block every queued search behind it).
-      const budget = job.job_type === 'search_query' ? 150_000 : 75_000;
+      const budget = job.job_type === 'search_query' ? 230_000 : 75_000;
       await withTimeout(dispatch(job, driver, queue), budget, `${job.job_type} ${job.target_handle}`);
       await queue.complete(job.id, { ok: true });
       void notifyPlatform({

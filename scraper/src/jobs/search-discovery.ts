@@ -38,11 +38,11 @@ interface DiscoveryCandidate {
   source: 'topsearch_user' | 'hashtag_top_media';
 }
 
-const HASHTAGS_TO_EXPLORE_PER_QUERY = 5;
-const SEEDS_TO_EXPAND_PER_QUERY = 3;          // top N strong seeds to chain from
+const HASHTAGS_TO_EXPLORE_PER_QUERY = 9;      // more hashtags = wider candidate net
+const SEEDS_TO_EXPAND_PER_QUERY = 5;          // top N strong seeds to chain from
 const SEED_MIN_FOLLOWERS = 10_000;            // chain from any real creator (tier-2 cities have smaller seeds)
-const CHAIN_LIMIT_PER_SEED = 40;              // candidates per chaining call
-const FOLLOWINGS_LIMIT_PER_SEED = 60;         // sample of seed's followings
+const CHAIN_LIMIT_PER_SEED = 50;              // candidates per chaining call
+const FOLLOWINGS_LIMIT_PER_SEED = 80;         // sample of seed's followings
 
 // When a query keyword is one of these cities AND the creator's own profile
 // mentions it, discovery fills primary_city — so the Lander's location filter
@@ -307,7 +307,7 @@ export async function handleSearchQuery(
           if (am !== bm) return bm - am;
           return (b.sources.size - a.sources.size) || ((b.follower_count ?? 0) - (a.follower_count ?? 0));
         });
-        const toEnrich = list.slice(0, 30);
+        const toEnrich = list.slice(0, 45);
         for (let i = 0; i < toEnrich.length; i += 5) {
           const batch = toEnrich.slice(i, i + 5);
           await Promise.all(
@@ -494,7 +494,7 @@ export async function handleSearchQuery(
   // recent reels (the reel forecast) at a human pace — we deliberately do NOT
   // burst-fetch profiles inline here, which just gets the account rate-limited
   // (429) and starves those deep scrapes of data.
-  const CAP_PER_QUERY = 30;
+  const CAP_PER_QUERY = 60;
 
   for (const c of qualified.slice(0, CAP_PER_QUERY)) {
     const handle = c.username;
