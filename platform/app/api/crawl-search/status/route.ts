@@ -22,6 +22,7 @@ interface Row {
   is_verified: boolean | null;
   profile_photo_url: string | null;
   source: string | null;
+  gender: string | null;
 }
 
 function mapRow(r: Row): LiveProfile {
@@ -44,6 +45,7 @@ function mapRow(r: Row): LiveProfile {
     from: 'live' as const,
     loc_match: false,
     curated: false,
+    gender: (r.gender === 'female' || r.gender === 'male' ? r.gender : null) as 'female' | 'male' | null,
   };
 }
 
@@ -68,7 +70,7 @@ export async function GET(req: NextRequest) {
   try {
     const rows = await db.query<Row>(
       `SELECT id, handle, display_name, bio, primary_category, follower_count,
-              engagement_rate, is_verified, profile_photo_url, source
+              engagement_rate, is_verified, profile_photo_url, source, gender
        FROM creators
        WHERE platform = 'instagram' AND is_active = true
          AND tags @> ARRAY[$1]::text[]

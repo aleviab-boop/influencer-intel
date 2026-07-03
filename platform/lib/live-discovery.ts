@@ -62,6 +62,7 @@ export interface LiveProfile {
   from?: 'db' | 'live';
   loc_match?: boolean; // matched a place token in the location field (DB search)
   curated?: boolean; // from the user's own curated/imported list (source='manual')
+  gender?: 'female' | 'male' | 'unknown' | null; // creator's inferred gender
 }
 
 export interface LiveDiscoveryResult {

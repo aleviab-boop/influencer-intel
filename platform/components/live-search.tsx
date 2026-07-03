@@ -26,6 +26,7 @@ interface LiveProfile {
   from?: 'db' | 'live';
   loc_match?: boolean;
   curated?: boolean;
+  gender?: 'female' | 'male' | 'unknown' | null;
 }
 
 interface Program {
@@ -1037,6 +1038,7 @@ export function LiveSearch({
         (minER === 0 || !erKnown || er >= minER) &&
         (!verifiedOnly || p.is_verified) &&
         (!healthyOnly || authenticityFlag(followers, er ?? undefined) !== 'low') &&
+        (genderFilter === 'any' || p.gender === genderFilter) &&
         (!hideContacted || !isContacted(p.username))
       );
     });
@@ -1428,38 +1430,36 @@ export function LiveSearch({
           INCLUDING the empty/error state, so you can switch buckets even when the
           current one returned 0 (previously it lived inside the results block and
           vanished, stranding you on an empty bucket). */}
-      {initialMode === 'db' && !loading && (run || error) && (
+      {!loading && (run || error) && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {/* source bucket */}
-          <div className="inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
-            {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
-              <button
-                key={val}
-                onClick={() => {
-                  if (sourceBucket === val) return;
-                  setSourceBucket(val);
-                  void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
-                }}
-                className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
-                style={sourceBucket === val
-                  ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
-                  : { color: '#777', background: 'transparent' }}
-                title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* creator gender */}
+          {/* source bucket — Lander (db) only */}
+          {initialMode === 'db' && (
+            <div className="inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
+              {([['instagram', 'Instagram'], ['trends', 'Trends']] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => {
+                    if (sourceBucket === val) return;
+                    setSourceBucket(val);
+                    void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+                  style={sourceBucket === val
+                    ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
+                    : { color: '#777', background: 'transparent' }}
+                  title={val === 'instagram' ? 'Real creators discovered from Instagram by the scraper' : 'Creators uploaded from your campaign Excel sheets'}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* creator gender — both Lander and Scraper (client-side filter) */}
           <div className="inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
             {([['any', 'All'], ['female', 'Female'], ['male', 'Male']] as const).map(([val, label]) => (
               <button
                 key={val}
-                onClick={() => {
-                  if (genderFilter === val) return;
-                  setGenderFilter(val);
-                  void search({ mode: 'db', genderOverride: val, promptOverride: run?.prompt ?? prompt });
-                }}
+                onClick={() => setGenderFilter(val)}
                 className="px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-all"
                 style={genderFilter === val
                   ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }

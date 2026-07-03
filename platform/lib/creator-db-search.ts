@@ -42,6 +42,7 @@ interface Row {
   is_verified: boolean | null;
   profile_photo_url: string | null;
   source: string | null;
+  gender: string | null;
   score: number | string;
   loc_match: boolean | null;
 }
@@ -117,7 +118,7 @@ export async function searchCreatorsInDb(
 
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
-           engagement_rate, is_verified, profile_photo_url, source,
+           engagement_rate, is_verified, profile_photo_url, source, gender,
            (${scoreExpr}) as score, (${locExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
@@ -167,6 +168,7 @@ export async function searchCreatorsInDb(
       from: 'db' as const,
       loc_match: Boolean(r.loc_match),
       curated: r.source === 'manual',
+      gender: (r.gender === 'female' || r.gender === 'male' ? r.gender : null) as 'female' | 'male' | null,
       };
     })
     .filter((p) => p.username && p.score > 0);
