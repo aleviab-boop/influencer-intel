@@ -1070,6 +1070,12 @@ export function LiveSearch({
     return sorted;
   })();
 
+  // Tier boundary: on a location search (relevance sort), the exact city+niche
+  // matches lead (loc_match) and the niche-related creators follow — insert a
+  // divider between them. Only when there's a genuine mix of both.
+  const exactMatchCount = shown.filter((p) => p.loc_match).length;
+  const showTierDivider = sortBy === 'relevance' && exactMatchCount > 0 && exactMatchCount < shown.length;
+
   function pickSuggestion(s: string) {
     setPrompt(s);
     setShowSug(false);
@@ -1675,6 +1681,16 @@ export function LiveSearch({
                     const p = live ? { ...pRaw, ...live } : pRaw;
                     return (
                     <Fragment key={p.username}>
+                    {showTierDivider && i === exactMatchCount && (
+                      <tr>
+                        <td colSpan={8} className="px-3 pt-5 pb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">Also relevant to this niche</span>
+                            <span className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, #e3def9, transparent)' }} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                     <tr
                       data-handle={p.username}
                       ref={(el) => { if (el) rowObserver().observe(el); }}
