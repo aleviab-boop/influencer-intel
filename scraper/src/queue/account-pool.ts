@@ -95,6 +95,31 @@ export class AccountPool {
     void this.persist(s);
   }
 
+  /** The active account's SESSION is dead (401 — expired/invalid login). Unlike a
+   * 429, resting won't fix it — it needs a manual re-capture. Park it out of
+   * rotation (long cooldown) and mark its stored session expired so the pool
+   * drops it on the next load. The orchestrator then rotates to another account. */
+  markCurrentDead(): void {
+    const s = this.states[this.idx]!;
+    s.cooldownUntil = Date.now() + 30 * 24 * HOUR_MS; // effectively parked
+    console.warn(`[pool] @${s.account.handle} session DEAD (401) → parking it. Re-capture with: SERVICE_ACCOUNT_HANDLE=${s.account.handle} npm run scraper:capture`);
+    void (async () => {
+      try {
+        await getBolticClient().update(
+          'service_accounts',
+          { id: s.account.id },
+          {
+            cooldown_until: new Date(s.cooldownUntil).toISOString(),
+            storage_expires_at: new Date().toISOString(), // expire so load() drops it until re-captured
+            updated_at: new Date().toISOString(),
+          },
+        );
+      } catch {
+        /* best-effort */
+      }
+    })();
+  }
+
   /**
    * Pick the best available account: not cooling down, under its hourly cap,
    * lowest current usage. Sets it active. Returns null when every account is

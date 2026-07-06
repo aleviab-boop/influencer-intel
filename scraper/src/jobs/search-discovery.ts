@@ -107,10 +107,11 @@ export async function handleSearchQuery(
         'X-IG-App-ID': '936619743392459',
       };
 
-      // Count HTTP 429s across the crawl. IG throttles per-account, so a burst of
-      // 429s means this account is tapped out — Node uses this to cool it down and
-      // rotate to another account for the next job.
+      // Count HTTP 429s (throttled) and 401s (dead/expired session) across the
+      // crawl. A burst of 429s → cool the account down; a burst of 401s → its
+      // login is dead and must be parked (Node acts on these to auto-rotate).
       let rl = 0;
+      let un = 0;
 
       const candidatesByHandle = new Map<string, DiscoveryCandidateRaw>();
       // Arrow expression (no named declaration) — tsx injects __name(fn, "name")
@@ -162,7 +163,7 @@ export async function handleSearchQuery(
           headers,
           credentials: 'include',
         });
-        if (!ts.ok) return { error: `topsearch HTTP ${ts.status}`, rateLimited: ts.status === 429 ? 1 : 0 };
+        if (!ts.ok) return { error: `topsearch HTTP ${ts.status}`, rateLimited: ts.status === 429 ? 1 : 0, sessionDead: ts.status === 401 || ts.status === 403 };
         const tj = await ts.json();
 
         for (const e of (tj?.users ?? []) as Array<{ user: any }>) {
@@ -231,7 +232,7 @@ export async function handleSearchQuery(
               `/api/v1/users/web_profile_info/?username=${encodeURIComponent(u.username)}`,
               { headers, credentials: 'include' },
             );
-            if (!pr.ok) { if (pr.status === 429) rl++; continue; }
+            if (!pr.ok) { if (pr.status === 429) rl++; else if (pr.status === 401 || pr.status === 403) un++; continue; }
             const pj = await pr.json();
             const userInfo = pj?.data?.user;
             if (!userInfo?.id) continue;
@@ -317,7 +318,7 @@ export async function handleSearchQuery(
                   `/api/v1/users/web_profile_info/?username=${encodeURIComponent(c.username)}`,
                   { headers, credentials: 'include' },
                 );
-                if (!pr.ok) { if (pr.status === 429) rl++; return; }
+                if (!pr.ok) { if (pr.status === 429) rl++; else if (pr.status === 401 || pr.status === 403) un++; return; }
                 const pj = await pr.json();
                 const u = pj?.data?.user;
                 if (!u) return;
@@ -348,9 +349,10 @@ export async function handleSearchQuery(
           })),
           tagsExplored: tagsToExplore.length,
           rateLimited: rl,
+          sessionDead: un >= 3,
         };
       } catch (err) {
-        return { error: String(err), rateLimited: rl };
+        return { error: String(err), rateLimited: rl, sessionDead: un >= 3 };
       }
 
       // ----- types local to page.evaluate -----
@@ -381,6 +383,11 @@ export async function handleSearchQuery(
   if (rateLimited >= 3) {
     console.warn(`[search] "${query}": ${rateLimited} × HTTP 429 — cooling down this account & rotating`);
     queue.penalizeAccount();
+  }
+  // Dead/expired session (401) → park this account (needs re-capture) and rotate.
+  if ((harvest as { sessionDead?: boolean })?.sessionDead) {
+    console.warn(`[search] "${query}": session appears DEAD (401) — parking this account & rotating to another`);
+    queue.markAccountDead();
   }
 
   if (harvest?.error) {

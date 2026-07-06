@@ -15,8 +15,11 @@ import { handleSearchQuery } from './jobs/search-discovery.js';
 import { notifyPlatform } from './platform-notify.js';
 
 // One cheap authenticated probe to see if the active account is being
-// rate-limited (429). Run between jobs so we can rotate off a throttled account.
-async function probeThrottled(page: Page): Promise<boolean> {
+// Probe the active account's health with one cheap authenticated request.
+// 'throttled' = 429 (rest + rotate), 'dead' = 401/403 (expired session — park it
+// + rotate; resting won't fix it). Run between jobs so the worker self-heals off
+// a bad account without anyone asking.
+async function probeAccount(page: Page): Promise<'ok' | 'throttled' | 'dead'> {
   try {
     const status = await page.evaluate(async () => {
       const g = globalThis as unknown as { __name?: (fn: unknown) => unknown };
@@ -31,9 +34,11 @@ async function probeThrottled(page: Page): Promise<boolean> {
         return 0;
       }
     });
-    return status === 429;
+    if (status === 429) return 'throttled';
+    if (status === 401 || status === 403) return 'dead';
+    return 'ok';
   } catch {
-    return false;
+    return 'ok';
   }
 }
 
@@ -130,13 +135,14 @@ export async function run(): Promise<void> {
       }
     }
 
-    // Safety net: probe for a 429 after every job → cool down + rotate off this
-    // account. (Discovery also self-reports 429s and penalizes mid-flow, but this
-    // catches throttling from any job type promptly so we never keep hammering a
-    // tapped-out account.)
+    // Self-heal: probe the active account after every couple of jobs. 429 →
+    // cool it down; 401/403 (dead/expired session) → PARK it. Either way the
+    // next loop rotates to a healthy account automatically — no manual swapping.
     if (++jobsSinceProbe >= 2) {
       jobsSinceProbe = 0;
-      if (await probeThrottled(driver.page)) pool.penalizeCurrent();
+      const health = await probeAccount(driver.page);
+      if (health === 'throttled') pool.penalizeCurrent();
+      else if (health === 'dead') pool.markCurrentDead();
     }
   }
 }

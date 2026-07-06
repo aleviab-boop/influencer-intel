@@ -128,6 +128,12 @@ export class JobQueue {
     this.pool?.penalizeCurrent();
   }
 
+  /** A handler saw the active account's session is dead (401) — park it (needs
+   * re-capture) so the orchestrator rotates off it and never reuses it. */
+  markAccountDead(): void {
+    this.pool?.markCurrentDead();
+  }
+
   private maybeResetActions(): void {
     if (Date.now() > this.hourReset) {
       this.actionsThisHour = 0;
