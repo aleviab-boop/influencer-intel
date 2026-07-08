@@ -16,8 +16,21 @@ interface RecentCreator {
   is_verified: boolean; profile_photo_url: string | null; last_scraped_at: string;
 }
 interface Account {
-  handle: string; status: string; daily_action_count: number; total_scrapes: number; expired: boolean;
+  handle: string; state: 'ready' | 'cooling' | 'parked' | 'expired'; status: string;
+  daily_action_count: number; total_scrapes: number; expired: boolean; cooldown_until: string | null;
 }
+interface RecentData {
+  creators: RecentCreator[];
+  accounts: Account[];
+  activeCrawl: { target: string; started_at: string } | null;
+}
+
+const ACCT_STATE: Record<Account['state'], { label: string; dot: string; fg: string; hint?: string }> = {
+  ready: { label: 'ready', dot: 'bg-emerald-500 animate-pulse', fg: 'text-emerald-600' },
+  cooling: { label: 'resting', dot: 'bg-amber-500', fg: 'text-amber-600', hint: 'rate-limited — auto-resumes' },
+  parked: { label: 'parked', dot: 'bg-rose-500', fg: 'text-rose-600', hint: 'dead/paused — re-capture to revive' },
+  expired: { label: 'expired', dot: 'bg-[#c1c1cc]', fg: 'text-[#999]', hint: 'session expired — re-capture' },
+};
 
 function usePoll<T>(url: string, intervalMs = 8_000): T | null {
   const [data, setData] = useState<T | null>(null);
@@ -49,8 +62,12 @@ function timeAgo(iso: string): string {
 
 export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
-  const recent = usePoll<{ creators: RecentCreator[]; accounts: Account[] }>('/api/admin/recent-scrapes', 8_000);
+  const recent = usePoll<RecentData>('/api/admin/recent-scrapes', 8_000);
   const live = stats?.worker_live;
+  const readyAccounts = recent?.accounts.filter((a) => a.state === 'ready').length ?? null;
+  // Warn if there's queued work but the worker looks idle / has no ready account.
+  const workerStalled = stats != null && !live && (stats.jobs.queued > 0 || stats.jobs.in_progress > 0);
+  const noReadyAccounts = recent != null && readyAccounts === 0;
   // Coverage dashboard links here with ?prefill=<niche> creator in <city> so a
   // gap cell can kick off its crawl in one click.
   const [prefill] = useState(() =>
@@ -66,6 +83,32 @@ export default function AdminScraperPage() {
         subtitle="The browser worker crawls Instagram and stores every creator to the database. Search below to crawl a niche live."
         badge={<LiveBadge live={live} label={['Worker live', 'Worker idle']} />}
       />
+
+      {/* worker-stalled / no-account warning */}
+      {(workerStalled || noReadyAccounts) && (
+        <div className="mb-6 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5">
+          <svg className="mt-0.5 shrink-0 text-amber-500" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+          <div className="text-[13px] text-amber-800 leading-relaxed">
+            {noReadyAccounts
+              ? <>No account is ready to crawl — every account is resting, parked, or expired. <span className="font-medium">Re-capture one</span> (below) or wait for a resting one to recover.</>
+              : <>There&apos;s queued work but the worker looks idle. Start it on the crawl host with <span className="font-mono text-amber-900">./run-worker.sh</span>.</>}
+          </div>
+        </div>
+      )}
+
+      {/* live crawl indicator */}
+      {recent?.activeCrawl && (
+        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-[#e3def9] bg-white px-5 py-3.5" style={{ background: 'linear-gradient(90deg, #f7f5ff, #fff)' }}>
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#9b7bff] opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#6C4DF6]" />
+          </span>
+          <div className="text-[13px] text-[#555]">
+            Crawling Instagram now for <span className="font-semibold text-[#111]">“{recent.activeCrawl.target}”</span>
+            <span className="text-[#999]"> · started {timeAgo(recent.activeCrawl.started_at)} ago</span>
+          </div>
+        </div>
+      )}
 
       {/* live status strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3.5 mb-7">
@@ -109,25 +152,31 @@ export default function AdminScraperPage() {
         </div>
 
         <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden shadow-[0_2px_16px_rgba(20,20,60,0.03)]">
-          <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555]" style={{ background: 'linear-gradient(90deg, #faf9ff, #fff)' }}>
-            Accounts in rotation
+          <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555] flex items-center justify-between" style={{ background: 'linear-gradient(90deg, #faf9ff, #fff)' }}>
+            <span>Accounts in rotation</span>
+            {readyAccounts != null && (
+              <span className="text-[12px] font-medium text-emerald-600">{readyAccounts} ready</span>
+            )}
           </div>
           {(recent?.accounts.length ?? 0) === 0 ? (
             <div className="px-5 py-10 text-center text-[14px] text-[#aaa]">No accounts captured yet.</div>
           ) : (
             <div className="divide-y divide-[#f5f5f8]">
               {recent!.accounts.map((a) => {
-                const ok = a.status === 'active' && !a.expired;
+                const st = ACCT_STATE[a.state];
                 return (
                   <div key={a.handle} className="px-5 py-3 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${ok ? 'bg-emerald-500 animate-pulse' : 'bg-[#d9534f]'}`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[14px] font-medium text-[#111] truncate">@{a.handle}</div>
-                      <div className="text-[12px] text-[#999]">{a.expired ? 'session expired' : a.status}</div>
+                      <div className="text-[12px]">
+                        <span className={`font-medium ${st.fg}`}>{st.label}</span>
+                        {st.hint && <span className="text-[#bbb]"> · {st.hint}</span>}
+                      </div>
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-[13px] font-semibold tabular-nums text-[#444]">{a.total_scrapes.toLocaleString()}</div>
-                      <div className="text-[11px] text-[#bbb]">total scrapes</div>
+                      <div className="text-[11px] text-[#bbb]">scrapes</div>
                     </div>
                   </div>
                 );
@@ -135,7 +184,7 @@ export default function AdminScraperPage() {
             </div>
           )}
           <div className="px-5 py-3 border-t border-[#f1f1f6] text-[12px] text-[#999] leading-relaxed">
-            Capture more accounts with <span className="font-mono text-[#666]">npm run capture-session</span> — they join the rotation automatically.
+            Add / re-capture an account: <span className="font-mono text-[#666]">npm run scraper:capture</span> — it joins the rotation automatically.
           </div>
         </div>
       </div>

@@ -28,7 +28,7 @@ export async function GET() {
     accounts = await db.query(
       `SELECT handle, status, coalesce(daily_action_count, 0) AS daily_action_count,
               coalesce(total_scrapes, 0) AS total_scrapes,
-              storage_captured_at, storage_expires_at
+              storage_captured_at, storage_expires_at, cooldown_until
        FROM service_accounts
        WHERE platform = 'instagram'
        ORDER BY storage_captured_at DESC NULLS LAST`,
@@ -37,8 +37,23 @@ export async function GET() {
     accounts = [];
   }
 
+  // The crawl the worker is running right now (if any), for a live status line.
+  let activeCrawl: { target: string; started_at: string } | null = null;
+  try {
+    const rows = await db.query<{ target_handle: string; started_at: string }>(
+      `SELECT target_handle, started_at FROM scrape_jobs
+       WHERE job_type = 'search_query' AND status = 'in_progress'
+       ORDER BY started_at DESC LIMIT 1`,
+    );
+    if (rows[0]) activeCrawl = { target: rows[0].target_handle, started_at: rows[0].started_at };
+  } catch {
+    activeCrawl = null;
+  }
+
   const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
   return NextResponse.json({
+    activeCrawl,
     creators: creators.map((c) => ({
       handle: c.handle,
       display_name: (c.display_name as string) ?? '',
@@ -51,13 +66,22 @@ export async function GET() {
     accounts: accounts.map((a) => {
       const exp = a.storage_expires_at ? new Date(a.storage_expires_at as string).getTime() : null;
       const expired = exp != null && exp < now;
+      const cd = a.cooldown_until ? new Date(a.cooldown_until as string).getTime() : null;
+      const cooling = cd != null && cd > now;
+      // A long cooldown (>2 days) = parked: a dead session or a manual pause —
+      // it needs a re-capture / un-pause, not just time. A short one = resting
+      // off a rate-limit. Expiry beats everything (session no longer valid).
+      const state: 'ready' | 'cooling' | 'parked' | 'expired' =
+        expired ? 'expired' : cooling ? (cd! - now > 2 * DAY ? 'parked' : 'cooling') : 'ready';
       return {
         handle: a.handle,
-        status: expired ? 'expired' : (a.status as string) ?? 'unknown',
+        state,
+        status: (a.status as string) ?? 'unknown',
         daily_action_count: Number(a.daily_action_count),
         total_scrapes: Number(a.total_scrapes),
         captured_at: a.storage_captured_at,
         expires_at: a.storage_expires_at,
+        cooldown_until: a.cooldown_until ?? null,
         expired,
       };
     }),
