@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { extractContact, type LiveProfile } from '@/lib/live-discovery';
+import { extractContact, tokenize, expandStateTokens, isLocationToken, type LiveProfile } from '@/lib/live-discovery';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +23,8 @@ interface Row {
   profile_photo_url: string | null;
   source: string | null;
   gender: string | null;
+  region: string | null;
+  primary_city: string | null;
 }
 
 function mapRow(r: Row): LiveProfile {
@@ -56,21 +58,29 @@ export async function GET(req: NextRequest) {
   const db = getBolticClient();
 
   let status = 'unknown';
+  let prompt = '';
   try {
-    const jobs = await db.query<{ status: string }>(
-      `SELECT status FROM scrape_jobs WHERE id = $1 LIMIT 1`,
+    const jobs = await db.query<{ status: string; target_handle: string }>(
+      `SELECT status, target_handle FROM scrape_jobs WHERE id = $1 LIMIT 1`,
       [id],
     );
     status = jobs[0]?.status ?? 'unknown';
+    prompt = jobs[0]?.target_handle ?? '';
   } catch (err) {
     console.error('[crawl-search/status] job lookup failed:', err);
   }
+
+  // The location tokens from the prompt (cities, plus a state's cities) so we can
+  // flag which crawled creators are actually in the searched place — the results
+  // table ranks loc_match creators first, matching the Lander's ordering.
+  const locTokens = expandStateTokens(tokenize(prompt)).filter(isLocationToken);
 
   let results: LiveProfile[] = [];
   try {
     const rows = await db.query<Row>(
       `SELECT id, handle, display_name, bio, primary_category, follower_count,
-              engagement_rate, is_verified, profile_photo_url, source, gender
+              engagement_rate, is_verified, profile_photo_url, source, gender,
+              region, primary_city
        FROM creators
        WHERE platform = 'instagram' AND is_active = true
          AND tags @> ARRAY[$1]::text[]
@@ -78,7 +88,14 @@ export async function GET(req: NextRequest) {
        LIMIT 80`,
       [`search:${id}`],
     );
-    results = rows.map(mapRow);
+    results = rows.map((r) => {
+      const p = mapRow(r);
+      if (locTokens.length > 0) {
+        const loc = `${r.primary_city ?? ''} ${r.region ?? ''}`.toLowerCase();
+        p.loc_match = locTokens.some((t) => loc.includes(t));
+      }
+      return p;
+    });
   } catch (err) {
     console.error('[crawl-search/status] results query failed:', err);
   }
