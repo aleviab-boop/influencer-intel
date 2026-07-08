@@ -56,6 +56,7 @@ interface MediaNode {
   edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> };
 }
 interface LiveUser {
+  id?: string;
   username?: string;
   full_name?: string;
   biography?: string;
@@ -102,6 +103,60 @@ async function fetchLiveUser(handle: string): Promise<LiveUser | null> {
 
 function captionOf(node: MediaNode): string {
   return node.edge_media_to_caption?.edges?.[0]?.node?.text ?? '';
+}
+
+interface RecentPost {
+  shortcode: string;
+  thumbnail: string | null;
+  likes: number;
+  comments: number;
+  is_video: boolean;
+  taken_at: number | null;
+  caption: string;
+}
+
+interface FeedItem {
+  code?: string;
+  media_type?: number; // 1 image, 2 video, 8 carousel
+  taken_at?: number;
+  like_count?: number;
+  comment_count?: number;
+  caption?: { text?: string } | null;
+  image_versions2?: { candidates?: Array<{ url?: string }> };
+  carousel_media?: Array<{ image_versions2?: { candidates?: Array<{ url?: string }> } }>;
+}
+
+// web_profile_info frequently returns the profile but an EMPTY posts array once a
+// session is warmed/used — so when we get no post edges we pull them from the
+// user-feed endpoint, which reliably returns the recent posts (likes, comments,
+// thumbnails) for the reel forecast + posts grid.
+async function fetchUserFeed(userId: string): Promise<RecentPost[]> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const res = await igFetch(
+      `https://www.instagram.com/api/v1/feed/user/${encodeURIComponent(userId)}/?count=12`,
+      { headers: REQUEST_HEADERS, signal: ctrl.signal },
+    );
+    if (!res.ok) return [];
+    const j = (await res.json()) as { items?: FeedItem[] };
+    return (j?.items ?? []).map((it) => {
+      const cands = it.image_versions2?.candidates ?? it.carousel_media?.[0]?.image_versions2?.candidates ?? [];
+      return {
+        shortcode: it.code ?? '',
+        thumbnail: cands[cands.length - 1]?.url ?? cands[0]?.url ?? null,
+        likes: typeof it.like_count === 'number' ? it.like_count : 0,
+        comments: typeof it.comment_count === 'number' ? it.comment_count : 0,
+        is_video: it.media_type === 2,
+        taken_at: typeof it.taken_at === 'number' ? it.taken_at : null,
+        caption: (it.caption?.text ?? '').slice(0, 200),
+      };
+    });
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Persist a live payload so the DB stays warm and the Lander's DB search can
@@ -320,7 +375,7 @@ export async function GET(req: NextRequest) {
     const followers = u.edge_followed_by?.count ?? 0;
 
     // recent posts → drawer grid + reel forecast (forecast derives views from likes)
-    const recent = edges.map((e) => {
+    let recent: RecentPost[] = edges.map((e) => {
       const n = e.node ?? {};
       const likes = n.edge_liked_by?.count ?? n.edge_media_preview_like?.count ?? 0;
       const comments = n.edge_media_to_comment?.count ?? 0;
@@ -335,6 +390,13 @@ export async function GET(req: NextRequest) {
         caption: cap.slice(0, 200),
       };
     });
+
+    // web_profile_info often returns an empty posts array (esp. once the session
+    // is warmed) — pull them from the user-feed endpoint so the grid + forecast
+    // aren't blank.
+    if (recent.length === 0 && u.id) {
+      recent = await fetchUserFeed(u.id);
+    }
 
     // live ER = avg((likes+comments)/followers) across recent posts, as a %
     let er: number | null = null;
