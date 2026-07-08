@@ -59,6 +59,18 @@ function timeAgo(iso: string): string {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 }
+// How long until an ISO timestamp in the future, e.g. "42m" / "3h". null if past/absent.
+function timeUntil(iso: string | null): string | null {
+  if (!iso) return null;
+  const s = Math.floor((new Date(iso).getTime() - Date.now()) / 1000);
+  if (s <= 0) return null;
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
 
 export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
@@ -164,6 +176,10 @@ export default function AdminScraperPage() {
             <div className="divide-y divide-[#f5f5f8]">
               {recent!.accounts.map((a) => {
                 const st = ACCT_STATE[a.state];
+                // For a resting account, show the concrete auto-resume ETA if we
+                // know it; otherwise fall back to the generic hint.
+                const resumesIn = a.state === 'cooling' ? timeUntil(a.cooldown_until) : null;
+                const sub = resumesIn ? `resumes in ${resumesIn}` : st.hint;
                 return (
                   <div key={a.handle} className="px-5 py-3 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`} />
@@ -171,12 +187,16 @@ export default function AdminScraperPage() {
                       <div className="text-[14px] font-medium text-[#111] truncate">@{a.handle}</div>
                       <div className="text-[12px]">
                         <span className={`font-medium ${st.fg}`}>{st.label}</span>
-                        {st.hint && <span className="text-[#bbb]"> · {st.hint}</span>}
+                        {sub && <span className="text-[#bbb]"> · {sub}</span>}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-[13px] font-semibold tabular-nums text-[#444]">{a.total_scrapes.toLocaleString()}</div>
-                      <div className="text-[11px] text-[#bbb]">scrapes</div>
+                      <div className="text-[11px] text-[#bbb]">
+                        {a.state === 'ready' && a.daily_action_count > 0
+                          ? <span className="text-emerald-600">{a.daily_action_count} today</span>
+                          : 'scrapes'}
+                      </div>
                     </div>
                   </div>
                 );
