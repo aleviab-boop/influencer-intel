@@ -75,10 +75,16 @@ function timeUntil(iso: string | null): string | null {
 export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
   const recent = usePoll<RecentData>('/api/admin/recent-scrapes', 8_000);
-  const live = stats?.worker_live;
+  const activeCrawl = recent?.activeCrawl ?? null;
+  // The worker is "live" if it wrote a creator in the last ~3min (stats) OR it's
+  // mid-crawl right now. A slow crawl can go minutes between DB writes, so trust
+  // an in-progress crawl too — otherwise the badge flickers to "idle" while the
+  // "Crawling now" banner is showing.
+  const live = stats?.worker_live || !!activeCrawl;
   const readyAccounts = recent?.accounts.filter((a) => a.state === 'ready').length ?? null;
-  // Warn if there's queued work but the worker looks idle / has no ready account.
-  const workerStalled = stats != null && !live && (stats.jobs.queued > 0 || stats.jobs.in_progress > 0);
+  // Warn only when there's queued work and nothing is actually happening (no
+  // recent scrape, no active crawl) — i.e. the worker genuinely needs starting.
+  const workerStalled = stats != null && !live && stats.jobs.queued > 0;
   const noReadyAccounts = recent != null && readyAccounts === 0;
   // Coverage dashboard links here with ?prefill=<niche> creator in <city> so a
   // gap cell can kick off its crawl in one click.
