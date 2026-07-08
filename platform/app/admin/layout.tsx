@@ -12,6 +12,7 @@ type NavItem = { label: string; href: string; icon: string; soon?: boolean };
 const NAV: NavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: 'home' },
   { label: 'Scraper', href: '/admin/scraper', icon: 'bot' },
+  { label: 'Coverage', href: '/admin/coverage', icon: 'grid' },
   { label: 'Agency', href: '/admin/agency', icon: 'building' },
 ];
 
@@ -33,6 +34,8 @@ function NavIcon({ name }: { name: string }) {
       return (<svg {...c}><rect x="4" y="8" width="16" height="11" rx="2" /><path d="M12 8V4M9 4h6" /><circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" /></svg>);
     case 'building':
       return (<svg {...c}><rect x="5" y="3" width="14" height="18" rx="1.5" /><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2" /></svg>);
+    case 'grid':
+      return (<svg {...c}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>);
     case 'user':
       return (<svg {...c}><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" /></svg>);
     default:

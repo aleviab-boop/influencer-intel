@@ -51,6 +51,11 @@ export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
   const recent = usePoll<{ creators: RecentCreator[]; accounts: Account[] }>('/api/admin/recent-scrapes', 8_000);
   const live = stats?.worker_live;
+  // Coverage dashboard links here with ?prefill=<niche> creator in <city> so a
+  // gap cell can kick off its crawl in one click.
+  const [prefill] = useState(() =>
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('prefill') ?? '' : '',
+  );
   const scrapedTrend = useTrend(stats?.scraped.last_24h);
   const queueTrend = useTrend(stats?.jobs.queued);
 
@@ -136,7 +141,7 @@ export default function AdminScraperPage() {
       </div>
 
       <div className="text-[12px] font-semibold uppercase tracking-wider text-[#aab] mb-2.5">Crawl a niche live</div>
-      <LiveSearch initialMode="crawl" />
+      <LiveSearch initialMode="crawl" initialPrompt={prefill} />
     </div>
   );
 }
