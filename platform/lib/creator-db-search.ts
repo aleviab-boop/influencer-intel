@@ -4,7 +4,7 @@
 // creator's searchable text fields; the score is how many tokens matched.
 
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { extractContact, KNOWN_CITIES, type LiveProfile } from './live-discovery';
+import { extractContact, expandStateTokens, isLocationToken, type LiveProfile } from './live-discovery';
 
 // Searchable text split by field group, so a token's relevance depends on
 // WHERE it matched — not just whether it matched. For a campaign brief
@@ -53,6 +53,9 @@ export async function searchCreatorsInDb(
   opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number; gender?: 'female' | 'male' } = {},
 ): Promise<LiveProfile[]> {
   if (tokens.length === 0) return [];
+  // Expand a state ("gujarat") into its cities so a state search ranks creators
+  // anywhere in that state (their location field holds a city, not the state).
+  tokens = expandStateTokens(tokens);
 
   // Optional creator-gender filter (labeled during discovery via LLM on
   // handle/name/bio). Only 'female'/'male' are accepted; anything else is inert.
@@ -84,7 +87,7 @@ export async function searchCreatorsInDb(
   // not every lifestyle/travel creator who happens to be in Pune. A bio-only
   // mention is too weak to qualify. Inert when the query is location-only.
   const nicheIdx = tokens
-    .map((t, i) => (KNOWN_CITIES.has(t.toLowerCase()) ? -1 : i))
+    .map((t, i) => (isLocationToken(t) ? -1 : i))
     .filter((i) => i >= 0);
   const nicheRequired = nicheIdx.length
     ? `and (${nicheIdx.map((i) => `(${NICHE_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1})`).join(' or ')})`

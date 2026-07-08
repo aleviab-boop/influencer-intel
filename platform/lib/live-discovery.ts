@@ -230,6 +230,46 @@ export const KNOWN_CITIES = new Set([
   'kolhapur', 'sangli', 'dombivli',
 ]);
 
+// Indian STATES → their notable cities. A search like "tech creator in gujarat"
+// names a state, not a city, so on its own it matches nothing in the (city-level)
+// location field. We expand a state into its cities so the location ranking
+// applies to creators anywhere in that state.
+export const STATE_CITIES: Record<string, string[]> = {
+  gujarat: ['ahmedabad', 'surat', 'vadodara', 'baroda', 'rajkot', 'gandhinagar', 'jamnagar', 'bhavnagar'],
+  maharashtra: ['mumbai', 'pune', 'nagpur', 'nashik', 'thane', 'aurangabad', 'solapur', 'kolhapur'],
+  karnataka: ['bangalore', 'bengaluru', 'mysore', 'mysuru', 'mangalore', 'mangaluru', 'hubli', 'belgaum'],
+  kerala: ['kochi', 'cochin', 'trivandrum', 'thiruvananthapuram', 'kozhikode', 'calicut', 'thrissur'],
+  telangana: ['hyderabad', 'warangal'],
+  rajasthan: ['jaipur', 'jodhpur', 'udaipur', 'kota', 'ajmer', 'bikaner'],
+  punjab: ['chandigarh', 'ludhiana', 'amritsar', 'jalandhar', 'patiala'],
+  goa: ['goa', 'panaji'],
+  bihar: ['patna'],
+  odisha: ['bhubaneswar', 'cuttack'],
+  assam: ['guwahati'],
+  jharkhand: ['ranchi', 'jamshedpur', 'dhanbad'],
+  chhattisgarh: ['raipur'],
+  haryana: ['gurgaon', 'gurugram', 'faridabad'],
+  uttarakhand: ['dehradun'],
+};
+
+// Expand any STATE token in the list into its cities (keeping the state token),
+// deduped. A no-op when the query has no state. Used by DB search so state-level
+// searches rank creators in that state's cities.
+export function expandStateTokens(tokens: string[]): string[] {
+  const out = new Set(tokens);
+  for (const t of tokens) {
+    const cities = STATE_CITIES[t.toLowerCase()];
+    if (cities) for (const c of cities) out.add(c);
+  }
+  return Array.from(out);
+}
+
+// A token is a "location" (excluded from the niche gate) if it's a city OR a state.
+export function isLocationToken(t: string): boolean {
+  const l = t.toLowerCase();
+  return KNOWN_CITIES.has(l) || l in STATE_CITIES;
+}
+
 const NICHE_SYNONYMS: Record<string, string[]> = {
   food: ['food', 'foodie', 'foodies', 'eats', 'foodgram', 'foodlover', 'khana'],
   fashion: ['fashion', 'style', 'fashionista', 'outfits', 'wardrobe', 'styling', 'ootd'],
