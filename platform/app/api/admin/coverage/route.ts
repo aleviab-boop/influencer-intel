@@ -34,6 +34,18 @@ const CITIES: Array<{ label: string; match: string[] }> = [
   { label: 'Chandigarh', match: ['chandigarh'] },
   { label: 'Kochi', match: ['kochi', 'cochin'] },
   { label: 'Lucknow', match: ['lucknow'] },
+  { label: 'Nagpur', match: ['nagpur'] },
+  { label: 'Surat', match: ['surat'] },
+  { label: 'Goa', match: ['goa', 'panaji'] },
+  { label: 'Indore', match: ['indore'] },
+  { label: 'Gurgaon', match: ['gurgaon', 'gurugram'] },
+  { label: 'Noida', match: ['noida'] },
+  { label: 'Bhopal', match: ['bhopal'] },
+  { label: 'Mysore', match: ['mysore', 'mysuru'] },
+  { label: 'Udaipur', match: ['udaipur'] },
+  { label: 'Varanasi', match: ['varanasi', 'banaras'] },
+  { label: 'Guwahati', match: ['guwahati'] },
+  { label: 'Shillong', match: ['shillong'] },
 ];
 
 // Note: NICHES/CITIES are hardcoded (not user input) so inlining them in SQL is safe.
