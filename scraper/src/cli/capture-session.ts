@@ -125,6 +125,9 @@ async function main() {
       storage_captured_at: new Date().toISOString(),
       storage_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       status: 'active',
+      // Clear any parked/resting cooldown — a fresh session revives the account,
+      // so it must re-enter rotation immediately instead of staying skipped.
+      cooldown_until: null,
       total_scrapes: 0,
       daily_action_count: 0,
       warmed_at: new Date().toISOString(),
