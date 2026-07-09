@@ -22,39 +22,86 @@ interface AcctState {
   totalActions: number;
 }
 
+// The active, session-bearing accounts eligible for rotation. Shared by the
+// initial load and the periodic in-place refresh so they never diverge.
+const POOL_QUERY = `SELECT * FROM service_accounts
+   WHERE platform = 'instagram' AND status = 'active' AND storage_state IS NOT NULL
+     AND (storage_expires_at IS NULL OR storage_expires_at > now())
+   ORDER BY storage_captured_at DESC NULLS LAST`;
+
+function cooldownMs(a: ServiceAccount): number {
+  const cd = (a as { cooldown_until?: string | null }).cooldown_until;
+  const t = cd ? new Date(cd).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+
 export class AccountPool {
   private states: AcctState[] = [];
   private idx = 0;
 
   static async load(): Promise<AccountPool> {
-    const db = getBolticClient();
-    const rows = await db.query<ServiceAccount>(
-      `SELECT * FROM service_accounts
-       WHERE platform = 'instagram' AND status = 'active' AND storage_state IS NOT NULL
-         AND (storage_expires_at IS NULL OR storage_expires_at > now())
-       ORDER BY storage_captured_at DESC NULLS LAST`,
-    );
+    const rows = await getBolticClient().query<ServiceAccount>(POOL_QUERY);
     const pool = new AccountPool();
     const now = Date.now();
-    pool.states = rows.map((a) => {
+    pool.states = rows.map((a) => ({
       // Cooldowns are persisted (service_accounts.cooldown_until) so a 429'd
       // account stays rested across worker restarts / hot-reloads — otherwise
       // every reload wiped the in-memory cooldown and snapped back to the same
       // (still-throttled) account.
-      const cd = (a as { cooldown_until?: string | null }).cooldown_until;
-      const cooldownUntil = cd ? new Date(cd).getTime() : 0;
-      return {
-        account: a,
-        actionsThisHour: 0,
-        hourResetAt: now + HOUR_MS,
-        cooldownUntil: Number.isFinite(cooldownUntil) ? cooldownUntil : 0,
-        totalActions: 0,
-      };
-    });
+      account: a,
+      actionsThisHour: 0,
+      hourResetAt: now + HOUR_MS,
+      cooldownUntil: cooldownMs(a),
+      totalActions: 0,
+    }));
     // Start on the first account that isn't currently cooling down.
     const firstReady = pool.states.findIndex((s) => now >= s.cooldownUntil);
     pool.idx = firstReady >= 0 ? firstReady : 0;
     return pool;
+  }
+
+  /**
+   * Re-read the pool from the DB in place, so accounts captured/revived while
+   * the worker runs join rotation — and removed/expired ones drop — WITHOUT a
+   * restart. Existing accounts keep their in-memory usage counters; the DB's
+   * cooldown_until is taken as source of truth (a re-capture clears it, which
+   * is exactly how a revived account snaps back to ready here). Returns the
+   * handles added/removed so the caller can log the change.
+   */
+  async refresh(): Promise<{ added: string[]; removed: string[] }> {
+    const rows = await getBolticClient().query<ServiceAccount>(POOL_QUERY);
+    const now = Date.now();
+    const prevById = new Map(this.states.map((s) => [s.account.id, s]));
+    const keepId = this.states[this.idx]?.account.id;
+
+    const added: string[] = [];
+    this.states = rows.map((a) => {
+      const ex = prevById.get(a.id);
+      if (ex) {
+        ex.account = a;
+        ex.cooldownUntil = cooldownMs(a); // DB authoritative — picks up revives
+        return ex;
+      }
+      added.push(a.handle);
+      return {
+        account: a,
+        actionsThisHour: 0,
+        hourResetAt: now + HOUR_MS,
+        cooldownUntil: cooldownMs(a),
+        totalActions: 0,
+      };
+    });
+
+    const liveIds = new Set(rows.map((a) => a.id));
+    const removed = [...prevById.values()]
+      .filter((s) => !liveIds.has(s.account.id))
+      .map((s) => s.account.handle);
+
+    // Keep pointing at the same account if it survived; otherwise fall back to
+    // the first ready one. (The orchestrator reconciles the browser after.)
+    const idx = keepId ? this.states.findIndex((s) => s.account.id === keepId) : -1;
+    this.idx = idx >= 0 ? idx : Math.max(0, this.states.findIndex((s) => now >= s.cooldownUntil));
+    return { added, removed };
   }
 
   get size(): number {

@@ -39,6 +39,10 @@ export const config = {
   // what keeps accounts alive; draining one until it dies is what got them
   // killed. 1 = rotate after every job (max spread).
   rotateEveryJobs: Number(process.env.ROTATE_EVERY_JOBS ?? 1),
+  // How often the worker re-reads the account pool from the DB, so newly
+  // captured / revived accounts join rotation (and removed ones drop) WITHOUT a
+  // manual worker restart. Default 3 min.
+  poolRefreshMs: Number(process.env.POOL_REFRESH_MS ?? 180_000),
   serviceAccountHandle: process.env.SERVICE_ACCOUNT_HANDLE ?? '',
   platformCallbackUrl:
     process.env.PLATFORM_CALLBACK_URL ?? 'http://localhost:3030/api/scrape-callback',

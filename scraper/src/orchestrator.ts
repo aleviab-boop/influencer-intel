@@ -75,6 +75,7 @@ export async function run(): Promise<void> {
 
   let jobsSinceProbe = 0;
   let jobsSinceRotate = 0;
+  let lastPoolRefresh = Date.now();
 
   // Move the active account to `next`, relaunching the browser with its session.
   // No-op if it's already active. Shared by proactive + forced rotation.
@@ -87,6 +88,29 @@ export async function run(): Promise<void> {
   };
 
   while (!stopping) {
+    // Periodically re-sync the pool from the DB so accounts you capture/revive
+    // join rotation on their own, and removed/expired ones drop — no manual
+    // worker restart needed.
+    if (Date.now() - lastPoolRefresh > config.poolRefreshMs) {
+      lastPoolRefresh = Date.now();
+      try {
+        const { added, removed } = await pool.refresh();
+        if (added.length || removed.length) {
+          console.log(`[pool] refreshed — +[${added.join(', ') || '—'}] -[${removed.join(', ') || '—'}]  [${pool.status()}]`);
+        }
+        // If the account we're currently launched with vanished, move the
+        // browser onto whatever the pool now treats as current.
+        if (pool.size > 0) await rotateTo(pool.current(), 'pool refresh');
+      } catch (err) {
+        console.warn('[pool] refresh failed:', err instanceof Error ? err.message : String(err));
+      }
+    }
+    if (pool.size === 0) {
+      console.warn('[pool] no accounts available — waiting for one to be captured/revived…');
+      await sleep(Math.min(config.poolRefreshMs, 60_000));
+      continue;
+    }
+
     // Rotate accounts when the active one is over its hourly cap or cooling down.
     if (pool.dueForRotation()) {
       const next = pool.pickNext();
