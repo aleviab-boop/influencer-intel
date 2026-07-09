@@ -534,6 +534,10 @@ export function LiveSearch({
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
   // 'trends' = creators uploaded from the campaign Excel sheets.
   const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>('instagram');
+  // Per-bucket result cache so toggling Instagram ↔ Trends and back RESTORES the
+  // exact list you already saw instead of re-searching (the DB search re-ranks,
+  // so a re-run returned a different/mixed list). Reset on a fresh prompt search.
+  const bucketCache = useRef<Record<'instagram' | 'trends', RunResponse | null>>({ instagram: null, trends: null });
   // Lander creator-gender filter: 'any' | 'female' | 'male'.
   const [genderFilter, setGenderFilter] = useState<'any' | 'female' | 'male'>('any');
   // shortlist / recruit
@@ -1142,6 +1146,9 @@ export function LiveSearch({
     const p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
     if (p.length < 2) return;
 
+    // A fresh user search (not a bucket toggle) invalidates the cached buckets.
+    if (!opts?.bucketOverride) bucketCache.current = { instagram: null, trends: null };
+
     // Worker-backed crawl: enqueue a search_query job, show instant DB matches,
     // then poll for the creators the worker tags as it crawls Instagram.
     if (mode === 'crawl') {
@@ -1446,7 +1453,11 @@ export function LiveSearch({
                   key={val}
                   onClick={() => {
                     if (sourceBucket === val) return;
+                    // Snapshot the list you're leaving, so returning restores it exactly.
+                    bucketCache.current[sourceBucket] = run;
+                    const cached = bucketCache.current[val];
                     setSourceBucket(val);
+                    if (cached) { setRun(cached); setError(null); return; } // restore — no re-search, no mix-up
                     void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
                   }}
                   className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
