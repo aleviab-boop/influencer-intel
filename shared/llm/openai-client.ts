@@ -65,7 +65,10 @@ export class OpenAIClient {
         messages: [
           {
             role: 'system',
-            content: `You label the GENDER OF THE CREATOR (the account owner/person), not their audience, for Indian Instagram creators. Use the handle, display name, and bio (pronouns like she/her or he/him, words like "makeup artist", "dad", "girl", "boy" are strong signals). Return "female" or "male" only when reasonably confident; return "unknown" for brands, businesses, couples, groups, or genuinely ambiguous names — do NOT guess from an ambiguous name alone.
+            content: `You label the GENDER OF THE CREATOR (the account owner/person), not their audience, for Indian Instagram creators. Signals, strongest first:
+1. Explicit pronouns (she/her, he/him) or self-descriptors ("makeup artist", "bridal", "girl", "mom", "dad", "boy", "himself/herself").
+2. The person's FIRST NAME in the display name or handle — the great majority of Indian first names are reliably gendered (e.g. Priya, Sneha, Ananya, Pooja, Riya, Neha, Aditi, Kavya → female; Rahul, Amit, Arjun, Rohit, Vikram, Sahil → male). A recognizable gendered first name IS enough to commit.
+COMMIT to "female" or "male" whenever any signal above gives a reasonable read — prefer committing over "unknown". Only return "unknown" for brands / businesses / shops / couples / groups / fan pages, or when there is genuinely no name and no other signal. Do not sit on the fence for a clearly-gendered name just because you lack a photo.
 
 Output ONLY JSON: { "results": [ { "handle": "...", "gender": "female"|"male"|"unknown" } ] } — one entry per input handle.`,
           },
@@ -378,7 +381,7 @@ Be conservative — when unsure, use null or "unknown".`,
     const content: Array<Record<string, unknown>> = [
       {
         type: 'text',
-        text: `Each image below is an Instagram profile picture, preceded by that account's handle. Identify the ACCOUNT OWNER's gender from the photo (the visible person's presentation). Return ONLY JSON: {"results":[{"handle":"<handle>","gender":"female"|"male"|"unknown"}]} — one entry per handle. Use "unknown" for logos, brand marks, group photos, no visible face, or genuinely ambiguous.`,
+        text: `Each image below is an Instagram profile picture, preceded by that account's handle. Identify the ACCOUNT OWNER's gender from the visible person's presentation. If a single person is visible, COMMIT to "female" or "male" even if you're not fully certain — a best-judgment call is wanted, not a fence-sit. Use "unknown" ONLY for logos / brand marks / text-only images, no visible face, or group photos with no single clear owner. Return ONLY JSON: {"results":[{"handle":"<handle>","gender":"female"|"male"|"unknown"}]} — one entry per handle.`,
       },
     ];
     for (const it of usable) {
