@@ -62,13 +62,65 @@ const CITY_WORDS = new Set([
 // Display-cased city for storage (LOC_TXT compares case-insensitively anyway).
 const cityCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
+// State → its main creator cities, primary first. A search that names a STATE
+// ("makeup artist in assam") can't be crawled as "assam" — locals tag the CITY
+// (#guwahatimakeupartist), never the state — so we fan the query out to the
+// state's primary city, which lands on the real local hashtag/topsearch cluster
+// (this is why "…in guwahati" already works but "…in assam" didn't).
+const STATE_CITIES: Record<string, string[]> = {
+  assam: ['guwahati', 'dibrugarh', 'silchar'],
+  gujarat: ['ahmedabad', 'surat', 'vadodara'],
+  maharashtra: ['mumbai', 'pune', 'nagpur'],
+  karnataka: ['bangalore', 'mysore', 'mangalore'],
+  kerala: ['kochi', 'trivandrum', 'kozhikode'],
+  telangana: ['hyderabad', 'warangal'],
+  'tamil nadu': ['chennai', 'coimbatore', 'madurai'],
+  tamilnadu: ['chennai', 'coimbatore'],
+  rajasthan: ['jaipur', 'jodhpur', 'udaipur'],
+  punjab: ['ludhiana', 'amritsar', 'chandigarh'],
+  'west bengal': ['kolkata', 'siliguri'],
+  westbengal: ['kolkata', 'siliguri'],
+  bengal: ['kolkata', 'siliguri'],
+  'uttar pradesh': ['lucknow', 'kanpur', 'noida'],
+  bihar: ['patna'],
+  odisha: ['bhubaneswar'],
+  jharkhand: ['ranchi', 'jamshedpur'],
+  chhattisgarh: ['raipur'],
+  uttarakhand: ['dehradun'],
+  haryana: ['gurgaon', 'faridabad'],
+  goa: ['goa', 'panaji'],
+  meghalaya: ['shillong'],
+  manipur: ['imphal'],
+};
+const STATE_SET = new Set(Object.keys(STATE_CITIES));
+const isLocationWord = (w: string): boolean => CITY_WORDS.has(w) || STATE_SET.has(w);
+
+// If the query names a state, append its primary city so the in-page harvest
+// generates the local city hashtags (#guwahatimakeup, #makeupguwahati) and
+// city-topsearch instead of the empty "assam" tags. Additive & no-op when the
+// city is already present or no state is named.
+function expandStateInQuery(query: string): string {
+  const lower = query.toLowerCase();
+  for (const [state, cities] of Object.entries(STATE_CITIES)) {
+    const re = new RegExp(`(^|[^a-z])${state.replace(/ /g, '\\s+')}([^a-z]|$)`);
+    if (re.test(lower) && cities[0] && !lower.includes(cities[0])) {
+      return `${query} ${cities[0]}`;
+    }
+  }
+  return query;
+}
+
 export async function handleSearchQuery(
   job: ScrapeJob,
   driver: DriverHandle,
   queue: JobQueue,
 ): Promise<void> {
   const query = job.target_handle.trim();
-  console.log(`[search] querying IG for "${query}"`);
+  // Fan a state out to its primary city so the crawl hits the local hashtag
+  // cluster (the query the in-page harvest actually searches).
+  const crawlQuery = expandStateInQuery(query);
+  if (crawlQuery !== query) console.log(`[search] "${query}" → crawling as "${crawlQuery}" (state → city)`);
+  else console.log(`[search] querying IG for "${query}"`);
 
   if (!driver.page.url().startsWith('https://www.instagram.com/')) {
     await navigateHumanly(driver.page, 'https://www.instagram.com/');
@@ -368,7 +420,7 @@ export async function handleSearchQuery(
       };
     },
     {
-      q: query,
+      q: crawlQuery,
       hashtagsToExplore: HASHTAGS_TO_EXPLORE_PER_QUERY,
       seedsToExpand: SEEDS_TO_EXPAND_PER_QUERY,
       seedMinFollowers: SEED_MIN_FOLLOWERS,
@@ -422,6 +474,11 @@ export async function handleSearchQuery(
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length >= 3 && !STOP.has(w));
+  // Niche (non-location) keywords. A LOCATION term must NOT satisfy the
+  // relevance gate on its own — otherwise "photographer | guwahati" slips
+  // through a "makeup artist in guwahati" search just for being local. Location
+  // stays a ranking signal (relScore), not a pass to the gate.
+  const nicheKeywords = keywords.filter((k) => !isLocationWord(k));
 
   // News / TV / magazine / agency accounts blanket every hashtag and dominate by
   // reach — they're never the niche creator you searched for. Hard-drop them.
@@ -457,9 +514,12 @@ export async function handleSearchQuery(
     //   (b) any query keyword appears in its profile text.
     // This keeps recall when the per-profile bio lookup is throttled, without
     // re-admitting chaining/hashtag drift (which never has 'topsearch_user').
-    if (keywords.length > 0) {
+    // Gate on NICHE terms (location alone doesn't qualify). If the search is
+    // location-only (no niche term), fall back to keeping all local finds.
+    const gateWords = nicheKeywords.length > 0 ? nicheKeywords : keywords;
+    if (gateWords.length > 0) {
       const fromTopsearch = c.sources.includes('topsearch_user');
-      if (!fromTopsearch && !keywords.some((k) => profileText(c).includes(k))) return false;
+      if (!fromTopsearch && !gateWords.some((k) => profileText(c).includes(k))) return false;
     }
     return true;
   });
