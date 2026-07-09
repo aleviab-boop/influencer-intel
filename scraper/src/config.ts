@@ -33,6 +33,12 @@ export const config = {
   proxyUrl: process.env.SCRAPER_PROXY_URL || undefined,
   pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000),
   maxActionsPerHour: Number(process.env.MAX_ACTIONS_PER_HOUR ?? 90),
+  // Proactive rotation: hand off to the least-used ready account after this many
+  // jobs, WELL before an account hits its hourly cap — so no single account
+  // builds up a burst big enough for IG to flag/kill it. Spreading load thin is
+  // what keeps accounts alive; draining one until it dies is what got them
+  // killed. 1 = rotate after every job (max spread).
+  rotateEveryJobs: Number(process.env.ROTATE_EVERY_JOBS ?? 1),
   serviceAccountHandle: process.env.SERVICE_ACCOUNT_HANDLE ?? '',
   platformCallbackUrl:
     process.env.PLATFORM_CALLBACK_URL ?? 'http://localhost:3030/api/scrape-callback',

@@ -74,6 +74,17 @@ export async function run(): Promise<void> {
   process.on('SIGTERM', () => stop('SIGTERM'));
 
   let jobsSinceProbe = 0;
+  let jobsSinceRotate = 0;
+
+  // Move the active account to `next`, relaunching the browser with its session.
+  // No-op if it's already active. Shared by proactive + forced rotation.
+  const rotateTo = async (next: { handle: string; storage_state: unknown } | null, reason: string) => {
+    if (!next || next.handle === activeHandle) return;
+    console.log(`[pool] ${reason} @${activeHandle} → @${next.handle}  [${pool.status()}]`);
+    await driver.close().catch(() => {});
+    driver = await launchDriver({ headless: false, storageStateJson: next.storage_state });
+    activeHandle = next.handle;
+  };
 
   while (!stopping) {
     // Rotate accounts when the active one is over its hourly cap or cooling down.
@@ -146,6 +157,16 @@ export async function run(): Promise<void> {
       const health = await probeAccount(driver.page);
       if (health === 'throttled') pool.penalizeCurrent();
       else if (health === 'dead') pool.markCurrentDead();
+    }
+
+    // Proactive rotation: after each job, hand off to the least-used ready
+    // account — WELL before the active one bursts enough to get flagged. This
+    // is "swap before it dies": spread the crawl load thin across the pool so
+    // no single account builds a footprint IG wants to kill. Crawl jobs run for
+    // minutes, so the few-second browser relaunch between them is negligible.
+    if (++jobsSinceRotate >= config.rotateEveryJobs) {
+      jobsSinceRotate = 0;
+      await rotateTo(pool.pickNext(), 'proactive rotate');
     }
   }
 }
