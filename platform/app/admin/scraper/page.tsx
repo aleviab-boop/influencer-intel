@@ -18,6 +18,7 @@ interface RecentCreator {
 interface Account {
   handle: string; state: 'ready' | 'cooling' | 'parked' | 'expired'; status: string;
   daily_action_count: number; total_scrapes: number; expired: boolean; cooldown_until: string | null;
+  last_used_at: string | null; active: boolean;
 }
 interface RecentData {
   creators: RecentCreator[];
@@ -187,10 +188,21 @@ export default function AdminScraperPage() {
                 const resumesIn = a.state === 'cooling' ? timeUntil(a.cooldown_until) : null;
                 const sub = resumesIn ? `resumes in ${resumesIn}` : st.hint;
                 return (
-                  <div key={a.handle} className="px-5 py-3 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
+                  <div key={a.handle} className={`px-5 py-3 flex items-center gap-3 transition-colors ${a.active ? 'bg-[#f4fbf7]' : 'hover:bg-[#faf9ff]'}`}>
                     <span className={`w-2 h-2 rounded-full shrink-0 ${st.dot}`} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[14px] font-medium text-[#111] truncate">@{a.handle}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14px] font-medium text-[#111] truncate">@{a.handle}</span>
+                        {a.active && (
+                          <span className="inline-flex items-center gap-1 shrink-0 text-[10.5px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-1.5 py-0.5">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            </span>
+                            crawling now
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[12px]">
                         <span className={`font-medium ${st.fg}`}>{st.label}</span>
                         {sub && <span className="text-[#bbb]"> · {sub}</span>}

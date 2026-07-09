@@ -162,6 +162,24 @@ export class AccountPool {
       .join('  ');
   }
 
+  /** Stamp the active account as "used just now" so the admin panel can show a
+   * live "active now" badge on whichever account is currently crawling.
+   * Best-effort + fire-and-forget — never blocks or fails the job loop. */
+  markActive(): void {
+    const s = this.states[this.idx]!;
+    void (async () => {
+      try {
+        await getBolticClient().update(
+          'service_accounts',
+          { id: s.account.id },
+          { last_used_at: new Date().toISOString() },
+        );
+      } catch {
+        /* best-effort */
+      }
+    })();
+  }
+
   private async persist(s: AcctState): Promise<void> {
     try {
       await getBolticClient().update(

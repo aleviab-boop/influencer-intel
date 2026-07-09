@@ -103,6 +103,9 @@ export async function run(): Promise<void> {
       console.log(
         `[orchestrator] picked job ${job.id} type=${job.job_type} target=${job.target_handle} priority=${job.priority} via @${activeHandle}`,
       );
+      // Record which account is crawling right now, so the admin Scraper page
+      // can show a live "active now" badge on it.
+      pool.markActive();
       // Fail-fast: never let one job hang the worker (a 429 retry loop or a stuck
       // navigation would otherwise block every queued search behind it).
       const budget = job.job_type === 'search_query' ? 230_000 : 75_000;

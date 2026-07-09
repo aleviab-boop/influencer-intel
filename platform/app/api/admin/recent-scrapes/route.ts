@@ -28,7 +28,7 @@ export async function GET() {
     accounts = await db.query(
       `SELECT handle, status, coalesce(daily_action_count, 0) AS daily_action_count,
               coalesce(total_scrapes, 0) AS total_scrapes,
-              storage_captured_at, storage_expires_at, cooldown_until
+              storage_captured_at, storage_expires_at, cooldown_until, last_used_at
        FROM service_accounts
        WHERE platform = 'instagram'
        ORDER BY storage_captured_at DESC NULLS LAST`,
@@ -52,6 +52,19 @@ export async function GET() {
 
   const now = Date.now();
   const DAY = 24 * 60 * 60 * 1000;
+  // The account crawling *right now* = the one used most recently, within a
+  // short window (a single crawl runs a few minutes; the worker stamps
+  // last_used_at at job-pick). Beyond the window, nobody is "active".
+  const ACTIVE_WINDOW_MS = 6 * 60 * 1000;
+  let activeHandle: string | null = null;
+  let activeTs = 0;
+  for (const a of accounts) {
+    const lu = a.last_used_at ? new Date(a.last_used_at as string).getTime() : 0;
+    if (lu > activeTs && now - lu < ACTIVE_WINDOW_MS) {
+      activeTs = lu;
+      activeHandle = a.handle as string;
+    }
+  }
   return NextResponse.json({
     activeCrawl,
     creators: creators.map((c) => ({
@@ -82,6 +95,8 @@ export async function GET() {
         captured_at: a.storage_captured_at,
         expires_at: a.storage_expires_at,
         cooldown_until: a.cooldown_until ?? null,
+        last_used_at: a.last_used_at ?? null,
+        active: a.handle === activeHandle,
         expired,
       };
     }),
