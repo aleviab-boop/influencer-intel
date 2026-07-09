@@ -96,6 +96,28 @@ const STATE_CITIES: Record<string, string[]> = {
 const STATE_SET = new Set(Object.keys(STATE_CITIES));
 const isLocationWord = (w: string): boolean => CITY_WORDS.has(w) || STATE_SET.has(w);
 
+// Reverse index city → state (from STATE_CITIES) so a detected city can also
+// fill primary_state.
+const CITY_STATE: Record<string, string> = {};
+for (const [state, cities] of Object.entries(STATE_CITIES)) {
+  for (const c of cities) if (!CITY_STATE[c]) CITY_STATE[c] = state;
+}
+const titleCase = (s: string) => s.replace(/\b\w/g, (m) => m.toUpperCase());
+
+// Scan a creator's OWN profile text for any known city (whole-word) so we can
+// locate them even when the SEARCH didn't name a city — a niche-only crawl
+// ("fashion creator") still lands everyone's city if their bio/name/handle says
+// it. This is what keeps the Coverage grid filling on every crawl.
+function detectCityInProfile(text: string): { city: string; state: string | null } | null {
+  const lower = text.toLowerCase();
+  for (const w of CITY_WORDS) {
+    if (new RegExp(`(^|[^a-z])${w}([^a-z]|$)`).test(lower)) {
+      return { city: cityCase(w), state: CITY_STATE[w] ? titleCase(CITY_STATE[w]) : null };
+    }
+  }
+  return null;
+}
+
 // If the query names a state, append its primary city so the in-page harvest
 // generates the local city hashtags (#guwahatimakeup, #makeupguwahati) and
 // city-topsearch instead of the empty "assam" tags. Additive & no-op when the
@@ -614,15 +636,27 @@ export async function handleSearchQuery(
       /* tagging is best-effort; don't fail the whole search on one row */
     }
 
-    // If a matched keyword is a city, fill primary_city (COALESCE = never clobber
-    // a real geo-scraped value) so location searches surface this local creator.
+    // Fill primary_city / primary_state / primary_category (COALESCE = never
+    // clobber a real geo-scraped value) so the creator lands on the Coverage
+    // grid and location/niche searches surface them. Prefer a city named in the
+    // query, else detect one anywhere in the creator's OWN profile — so even a
+    // niche-only crawl ("fashion creator") locates people whose bio says a city.
     const matchedCity = matchedKeywords.find((k) => CITY_WORDS.has(k));
-    if (matchedCity) {
+    const loc = matchedCity
+      ? { city: cityCase(matchedCity), state: CITY_STATE[matchedCity] ? titleCase(CITY_STATE[matchedCity]) : null }
+      : detectCityInProfile(profileText(c));
+    // Niche = the first non-location keyword the profile actually supports, so
+    // Coverage's structured niche match (primary_category) has something to hit.
+    const nicheHit = matchedKeywords.find((k) => !isLocationWord(k)) ?? null;
+    if (loc || nicheHit) {
       try {
         await db.query(
-          `UPDATE creators SET primary_city = COALESCE(primary_city, $1)
-           WHERE platform = 'instagram' AND handle = $2`,
-          [cityCase(matchedCity), handle],
+          `UPDATE creators SET
+             primary_city     = COALESCE(primary_city, $1),
+             primary_state    = COALESCE(NULLIF(primary_state, ''), $2),
+             primary_category = COALESCE(NULLIF(primary_category, ''), $3)
+           WHERE platform = 'instagram' AND handle = $4`,
+          [loc?.city ?? null, loc?.state ?? null, nicheHit, handle],
         );
       } catch {
         /* best-effort */
