@@ -51,7 +51,8 @@ const CITY_WORDS = new Set([
   'mumbai', 'bombay', 'delhi', 'newdelhi', 'bangalore', 'bengaluru', 'hyderabad',
   'chennai', 'kolkata', 'calcutta', 'pune', 'ahmedabad', 'surat', 'jaipur',
   'lucknow', 'kanpur', 'nagpur', 'indore', 'bhopal', 'patna', 'chandigarh',
-  'kochi', 'goa', 'guwahati', 'bhubaneswar', 'coimbatore', 'mysore', 'mysuru',
+  'kochi', 'goa', 'guwahati', 'dibrugarh', 'silchar', 'jorhat', 'tezpur', 'nagaon',
+  'bhubaneswar', 'coimbatore', 'mysore', 'mysuru',
   'vizag', 'visakhapatnam', 'noida', 'gurgaon', 'gurugram', 'thane', 'ranchi',
   'raipur', 'dehradun', 'amritsar', 'ludhiana', 'agra', 'varanasi', 'siliguri',
   'udaipur', 'jodhpur', 'jaisalmer', 'kota', 'ajmer', 'nashik', 'aurangabad',
@@ -68,7 +69,7 @@ const cityCase = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 // state's primary city, which lands on the real local hashtag/topsearch cluster
 // (this is why "…in guwahati" already works but "…in assam" didn't).
 const STATE_CITIES: Record<string, string[]> = {
-  assam: ['guwahati', 'dibrugarh', 'silchar'],
+  assam: ['guwahati', 'dibrugarh', 'silchar', 'jorhat', 'tezpur', 'nagaon'],
   gujarat: ['ahmedabad', 'surat', 'vadodara'],
   maharashtra: ['mumbai', 'pune', 'nagpur'],
   karnataka: ['bangalore', 'mysore', 'mangalore'],
