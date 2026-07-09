@@ -176,13 +176,21 @@ export class AccountPool {
     const now = Date.now();
     let best = -1;
     let bestActions = Infinity;
+    let bestTotal = Infinity;
     for (let i = 0; i < this.states.length; i++) {
       const s = this.states[i]!;
       this.maybeReset(s);
       if (now < s.cooldownUntil) continue;
       if (s.actionsThisHour >= config.maxActionsPerHour) continue;
-      if (s.actionsThisHour < bestActions) {
+      // Least-loaded first: fewest actions this hour, then fewest lifetime
+      // actions. The lifetime tie-break matters because actionsThisHour resets
+      // every hour — without it, the picker would keep favouring the same
+      // (earliest-listed) accounts after each reset and slowly overwork them.
+      // With it, load equalises evenly across the whole pool over time, so no
+      // single account accrues enough to get flagged/killed.
+      if (s.actionsThisHour < bestActions || (s.actionsThisHour === bestActions && s.totalActions < bestTotal)) {
         bestActions = s.actionsThisHour;
+        bestTotal = s.totalActions;
         best = i;
       }
     }
