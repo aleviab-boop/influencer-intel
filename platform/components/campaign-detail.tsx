@@ -60,6 +60,7 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<RecruitStatus | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function deleteCampaign() {
     if (!program) return;
@@ -68,6 +69,43 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
     const r = await fetch(`/api/programs/${id}`, { method: 'DELETE' });
     if (r.ok) router.push(backHref);
     else { setDeleting(false); alert('Failed to delete campaign.'); }
+  }
+
+  // Export the shortlist to CSV (handle, name, followers, status, deal terms) so
+  // it can go into a sheet / be shared with a brand.
+  function exportCsv() {
+    if (recruits.length === 0) return;
+    const cols = ['handle', 'name', 'followers', 'status', 'quality', 'genre', 'region', 'deliverables', 'due_date', 'rate', 'profile_url'];
+    const esc = (v: unknown) => {
+      const s = String(v ?? '').replace(/[\r\n]+/g, ' ');
+      return /[",]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = recruits.map((r) => [
+      r.handle, r.display_name ?? '', num(r.follower_count), r.status,
+      r.quality_score ?? '', r.genre ?? '', r.region ?? '',
+      r.deliverables ?? '', r.due_date ?? '', num(r.rate) || '', r.profile_url,
+    ].map(esc).join(','));
+    const csv = [cols.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(program?.name ?? 'campaign').replace(/[^\w.-]+/g, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Copy all still-in-play (non-declined) creators' @handles for outreach.
+  async function copyHandles() {
+    const hs = recruits.filter((r) => r.status !== 'declined').map((r) => `@${r.handle}`);
+    if (hs.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(hs.join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — ignore */
+    }
   }
 
   const load = useCallback(async () => {
@@ -142,7 +180,25 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
             >
               {['active', 'paused', 'closed'].map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
-            <button onClick={deleteCampaign} disabled={deleting} className="ml-auto text-[13px] text-ink-400 hover:text-rose-600 disabled:opacity-50 transition-colors">{deleting ? 'Deleting…' : 'Delete campaign'}</button>
+            <button
+              onClick={copyHandles}
+              disabled={recruits.length === 0}
+              title="Copy all shortlisted @handles for outreach"
+              className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+              {copied ? 'Copied!' : 'Copy handles'}
+            </button>
+            <button
+              onClick={exportCsv}
+              disabled={recruits.length === 0}
+              title="Download the shortlist as a CSV"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+              Export CSV
+            </button>
+            <button onClick={deleteCampaign} disabled={deleting} className="text-[13px] text-ink-400 hover:text-rose-600 disabled:opacity-50 transition-colors">{deleting ? 'Deleting…' : 'Delete campaign'}</button>
           </div>
           <input
             defaultValue={program.description ?? ''}
