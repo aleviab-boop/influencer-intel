@@ -722,9 +722,19 @@ export function LiveSearch({
     fetch('/api/saved')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.creators) {
+        if (!d?.creators) return; // fetch failed → keep the localStorage list
+        if (d.creators.length > 0) {
           setSavedCreators(d.creators);
           try { localStorage.setItem('ii_saved_creators', JSON.stringify(d.creators)); } catch { /* ignore */ }
+        } else {
+          // DB empty — migrate any existing localStorage saves up to it (one-time)
+          // and keep showing them rather than wiping to empty.
+          try {
+            const local = JSON.parse(localStorage.getItem('ii_saved_creators') || '[]') as SavedCreator[];
+            for (const c of local) {
+              void fetch('/api/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creator: c }) }).catch(() => {});
+            }
+          } catch { /* ignore */ }
         }
       })
       .catch(() => {});

@@ -32,11 +32,20 @@ export default function SavedCreatorsPage() {
   const [brief, setBrief] = useState('');
 
   useEffect(() => {
-    const fromLocal = () => { try { const raw = localStorage.getItem(KEY); if (raw) setSaved(JSON.parse(raw)); } catch { /* ignore */ } };
+    const readLocal = (): SavedCreator[] => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } };
     fetch('/api/saved')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d?.creators) setSaved(d.creators); else fromLocal(); })
-      .catch(fromLocal)
+      .then((d) => {
+        if (!d?.creators) { setSaved(readLocal()); return; } // fetch failed → local
+        if (d.creators.length > 0) { setSaved(d.creators); return; }
+        // DB empty — show any localStorage saves and migrate them up (one-time).
+        const local = readLocal();
+        setSaved(local);
+        for (const c of local) {
+          void fetch('/api/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creator: c }) }).catch(() => {});
+        }
+      })
+      .catch(() => setSaved(readLocal()))
       .finally(() => setLoaded(true));
   }, []);
 
