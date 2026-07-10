@@ -2296,6 +2296,17 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
     }
     recordGrowth(profile.handle, profile.followers);
   }, [profile?.handle, profile?.followers]);
+  // Semantic "more like this" — creators in our DB nearest by content embedding.
+  const [similar, setSimilar] = useState<Array<{ handle: string; display_name: string | null; follower_count: number | null; category?: string | null; profile_photo_url: string | null; similarity: number }>>([]);
+  useEffect(() => {
+    if (!profile?.handle) { setSimilar([]); return; }
+    let alive = true;
+    fetch(`/api/creators/${encodeURIComponent(profile.handle)}/similar?limit=8`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive) setSimilar(d?.similar ?? []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [profile?.handle]);
   if (loading) {
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
@@ -2619,7 +2630,7 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
 
         {profile.related && profile.related.length > 0 && (
           <div className="break-inside-avoid mb-4">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Similar creators</div>
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">Related on Instagram</div>
             <div className="flex flex-col gap-1.5">
               {profile.related.slice(0, 6).map((r, i) => (
                 <button
@@ -2635,6 +2646,34 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
                     {r.full_name && <span className="block text-[11px] text-[#999] truncate">{r.full_name}</span>}
                   </span>
                   <span className="ml-auto text-[14px] opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: ACCENT }}>→</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {similar.length > 0 && (
+          <div className="break-inside-avoid mb-4">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#999]">
+              Similar creators <span className="normal-case font-normal text-[#bbb]">· in your database</span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {similar.slice(0, 8).map((s, i) => (
+                <button
+                  key={s.handle}
+                  onClick={() => onPivot(s.handle)}
+                  className="group flex items-center gap-2.5 w-full text-left px-2 py-1.5 rounded-xl border border-transparent hover:border-[#e3def9] hover:bg-[#faf9ff] transition-all"
+                  title={`Explore @${s.handle} · ${Math.round(s.similarity * 100)}% similar`}
+                  style={{ animation: `ii-fadeup .4s ${0.1 + i * 0.04}s both` }}
+                >
+                  <Avatar name={s.display_name || s.handle} url={s.profile_photo_url} handle={s.handle} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-[#111] truncate">@{s.handle}</span>
+                    <span className="block text-[11px] text-[#999] truncate">
+                      {s.category || '—'}{s.follower_count != null ? ` · ${fmt(s.follower_count)}` : ''}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: ACCENT }}>{Math.round(s.similarity * 100)}%</span>
                 </button>
               ))}
             </div>
