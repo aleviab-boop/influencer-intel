@@ -1564,59 +1564,12 @@ export function LiveSearch({
 
           {/* filters + sort */}
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
-            <span className="inline-flex items-center gap-1">
-              <select
-                value={minFollowers}
-                onChange={(e) => setMinFollowers(Number(e.target.value))}
-                className={`px-2.5 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${minFollowers !== 0 ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9]'}`}
-              >
-                <option value={0}>Any followers</option>
-                <option value={1000}>1K+</option>
-                <option value={5000}>5K+</option>
-                <option value={10000}>10K+</option>
-                <option value={100000}>100K+</option>
-                <option value={1000000}>1M+</option>
-              </select>
-              {minFollowers !== 0 && (
-                <button onClick={() => setMinFollowers(0)} className="w-4 h-4 grid place-items-center rounded-full text-[#c9b9ff] hover:text-rose-600 hover:bg-rose-50 text-[13px] leading-none" title="Clear this filter">×</button>
-              )}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <select
-                value={maxFollowers}
-                onChange={(e) => setMaxFollowers(Number(e.target.value))}
-                className={`px-2.5 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${maxFollowers !== 0 ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9]'}`}
-                title="Cap follower count — useful for finding micro / nano creators"
-              >
-                <option value={0}>No max</option>
-                <option value={10000}>Under 10K</option>
-                <option value={50000}>Under 50K</option>
-                <option value={100000}>Under 100K</option>
-                <option value={500000}>Under 500K</option>
-                <option value={1000000}>Under 1M</option>
-              </select>
-              {maxFollowers !== 0 && (
-                <button onClick={() => setMaxFollowers(0)} className="w-4 h-4 grid place-items-center rounded-full text-[#c9b9ff] hover:text-rose-600 hover:bg-rose-50 text-[13px] leading-none" title="Clear this filter">×</button>
-              )}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <select
-                value={minER}
-                onChange={(e) => setMinER(Number(e.target.value))}
-                className={`px-2.5 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${minER !== 0 ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9]'}`}
-                title="Minimum engagement rate"
-              >
-                <option value={0}>Any ER</option>
-                <option value={1}>1%+ ER</option>
-                <option value={2}>2%+ ER</option>
-                <option value={3}>3%+ ER</option>
-                <option value={5}>5%+ ER</option>
-                <option value={8}>8%+ ER</option>
-              </select>
-              {minER !== 0 && (
-                <button onClick={() => setMinER(0)} className="w-4 h-4 grid place-items-center rounded-full text-[#c9b9ff] hover:text-rose-600 hover:bg-rose-50 text-[13px] leading-none" title="Clear this filter">×</button>
-              )}
-            </span>
+            <FilterDropdown value={minFollowers} active={minFollowers !== 0} onClear={() => setMinFollowers(0)} onChange={setMinFollowers}
+              options={[[0, 'Any followers'], [1000, '1K+'], [5000, '5K+'], [10000, '10K+'], [100000, '100K+'], [1000000, '1M+']]} />
+            <FilterDropdown value={maxFollowers} active={maxFollowers !== 0} onClear={() => setMaxFollowers(0)} onChange={setMaxFollowers} title="Cap follower count — useful for finding micro / nano creators"
+              options={[[0, 'No max'], [10000, 'Under 10K'], [50000, 'Under 50K'], [100000, 'Under 100K'], [500000, 'Under 500K'], [1000000, 'Under 1M']]} />
+            <FilterDropdown value={minER} active={minER !== 0} onClear={() => setMinER(0)} onChange={setMinER} title="Minimum engagement rate"
+              options={[[0, 'Any ER'], [1, '1%+ ER'], [2, '2%+ ER'], [3, '3%+ ER'], [5, '5%+ ER'], [8, '8%+ ER']]} />
             <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white cursor-pointer select-none">
               <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="accent-[#6C4DF6]" />
               Verified only
@@ -2328,6 +2281,42 @@ function CompareModal({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// A filter dropdown whose trailing chevron becomes a clickable × once a
+// non-default option is chosen — clearing just that one filter.
+function FilterDropdown({ value, active, onClear, onChange, options, title }: {
+  value: number;
+  active: boolean;
+  onClear: () => void;
+  onChange: (v: number) => void;
+  options: [number, string][];
+  title?: string;
+}) {
+  return (
+    <div className="relative inline-flex items-center">
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        title={title}
+        className={`appearance-none pl-2.5 pr-7 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${active ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9] text-[#333]'}`}
+      >
+        {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+      </select>
+      {active ? (
+        <button
+          type="button"
+          onClick={onClear}
+          title="Clear this filter"
+          className="absolute right-1 top-1/2 -translate-y-1/2 z-10 w-5 h-5 grid place-items-center rounded-full text-[#6C4DF6] hover:text-white hover:bg-rose-500 transition-colors"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        </button>
+      ) : (
+        <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#9aa]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+      )}
     </div>
   );
 }
