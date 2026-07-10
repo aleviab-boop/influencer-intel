@@ -10,6 +10,7 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import type { ServiceAccount } from '@influencer-intel/shared/types';
 import { config } from '../config.js';
+import { notifySlack } from '../notify-slack.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DEFAULT_COOLDOWN_MS = 90 * 60 * 1000; // rest a 429'd account for 90 min
@@ -150,6 +151,11 @@ export class AccountPool {
     const s = this.states[this.idx]!;
     s.cooldownUntil = Date.now() + 30 * 24 * HOUR_MS; // effectively parked
     console.warn(`[pool] @${s.account.handle} session DEAD (401) → parking it. Re-capture with: SERVICE_ACCOUNT_HANDLE=${s.account.handle} npm run scraper:capture`);
+    // Ping the operator so a dead account is re-captured promptly (no-op if no webhook).
+    void notifySlack(
+      `:warning: IG scraper account *@${s.account.handle}* session died (401) — parked out of rotation.\n` +
+      `Re-capture it: \`SERVICE_ACCOUNT_HANDLE=${s.account.handle} npm run scraper:capture\``,
+    );
     void (async () => {
       try {
         await getBolticClient().update(

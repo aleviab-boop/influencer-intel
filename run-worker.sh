@@ -15,6 +15,19 @@
 
 cd "$(dirname "$0")" || exit 1
 
+# Load the root .env so the worker's config is reproducible and picks up
+# SLACK_WEBHOOK_URL for dead-account alerts. .env is the canonical config, so it
+# overrides the shell env. Values are read literally (no shell interpretation),
+# so URLs containing ? & = are safe.
+if [ -f .env ]; then
+  set -a
+  while IFS='=' read -r key val; do
+    case "$key" in ''|\#*) continue ;; esac
+    export "$key=$val"
+  done < .env
+  set +a
+fi
+
 exec caffeinate -i bash -c '
   while true; do
     echo "[run-worker] starting scraper worker ($(date "+%H:%M:%S"))…"
