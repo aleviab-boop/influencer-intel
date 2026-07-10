@@ -68,7 +68,7 @@ export default function SavedCreatorsPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
-      <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-9">
+      <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-9">
         <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
           <div>
             <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Your shortlist</div>
@@ -102,24 +102,30 @@ export default function SavedCreatorsPage() {
             <Link href="/lander" className="mt-5 inline-block px-5 py-2.5 rounded-xl text-white text-sm font-medium" style={{ background: ACCENT }}>Start a search</Link>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 gap-3">
-            {shown.map((s) => (
-              <div key={s.username} className="flex items-center gap-3 rounded-2xl bg-white border border-border shadow-card px-4 py-3.5">
+          <div className="space-y-2.5">
+            {shown.map((s, i) => (
+              <div key={s.username} className="group flex items-center gap-4 rounded-2xl bg-white border border-border shadow-card px-5 py-4 hover:shadow-hover hover:border-[#6C4DF6]/30 transition-all">
+                <span className="w-5 shrink-0 text-center text-[13px] tabular-nums text-ink-300">{i + 1}</span>
                 <Avatar name={s.full_name || s.username} url={s.profile_pic_url} />
                 <div className="min-w-0 flex-1">
-                  <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" className="text-[14px] font-semibold text-ink-900 truncate hover:underline block">@{s.username}</a>
-                  <div className="text-[12px] text-ink-500 truncate">
-                    {fmt(s.followers)} followers{s.category ? ` · ${s.category}` : ''}{s.engagement ? ` · ${s.engagement}% ER` : ''}
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-ink-900 hover:text-[#6C4DF6] transition-colors truncate">@{s.username}</a>
+                    {s.full_name && <span className="text-[12px] text-ink-400 truncate">{s.full_name}</span>}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                    <Pill>{fmt(s.followers)} followers</Pill>
+                    {s.engagement ? <Pill>{s.engagement}% ER</Pill> : null}
+                    {s.category ? <Pill>{s.category}</Pill> : null}
                   </div>
                   {(s.email || s.phone) && (
-                    <div className="text-[11px] text-ink-400 truncate mt-0.5">{[s.email, s.phone].filter(Boolean).join(' · ')}</div>
+                    <div className="mt-1.5 text-[11px] text-ink-400 truncate">{[s.email, s.phone].filter(Boolean).join('  ·  ')}</div>
                   )}
                 </div>
-                <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" title="Open on Instagram" className="shrink-0 w-8 h-8 grid place-items-center rounded-lg text-white" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+                <a href={`https://instagram.com/${s.username}`} target="_blank" rel="noreferrer" title="Open on Instagram" className="shrink-0 w-9 h-9 grid place-items-center rounded-xl text-white hover:brightness-105 transition" style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
                 </a>
-                <button onClick={() => remove(s.username)} title="Remove from saved" className="shrink-0 w-7 h-7 grid place-items-center rounded-full text-ink-300 hover:text-rose-600 hover:bg-rose-50">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                <button onClick={() => remove(s.username)} title="Remove from saved" className="shrink-0 w-8 h-8 grid place-items-center rounded-full text-ink-300 hover:text-rose-600 hover:bg-rose-50 transition-colors">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </button>
               </div>
             ))}
@@ -130,6 +136,10 @@ export default function SavedCreatorsPage() {
   );
 }
 
+function Pill({ children }: { children: React.ReactNode }) {
+  return <span className="px-2 py-0.5 rounded-md text-[11.5px] font-medium bg-[#f4f2fb] text-[#6a6a8a] tabular-nums">{children}</span>;
+}
+
 function Avatar({ name, url }: { name: string; url?: string | null }) {
   const [err, setErr] = useState(false);
   const initials = name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -137,9 +147,9 @@ function Avatar({ name, url }: { name: string; url?: string | null }) {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   if (url && !err) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={`/api/ig-image?u=${encodeURIComponent(url)}`} alt={name} onError={() => setErr(true)} className="w-10 h-10 rounded-full object-cover shrink-0 bg-[#eee]" />;
+    return <img src={`/api/ig-image?u=${encodeURIComponent(url)}`} alt={name} onError={() => setErr(true)} className="w-12 h-12 rounded-full object-cover shrink-0 bg-[#eee] ring-2 ring-[#f0edfb]" />;
   }
   return (
-    <div className="w-10 h-10 rounded-full grid place-items-center text-white text-[12px] font-semibold shrink-0" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 70% 55%), hsl(${(h + 40) % 360} 70% 45%))` }}>{initials}</div>
+    <div className="w-12 h-12 rounded-full grid place-items-center text-white text-[13px] font-semibold shrink-0" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 70% 55%), hsl(${(h + 40) % 360} 70% 45%))` }}>{initials}</div>
   );
 }
