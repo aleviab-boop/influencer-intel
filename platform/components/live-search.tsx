@@ -507,10 +507,15 @@ export function LiveSearch({
   initialPrompt = '',
   initialSeed = '',
   initialMode = 'crawl',
+  onSearchPrompt,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
   initialMode?: 'db' | 'live' | 'crawl';
+  // When set (the Lander), a new search pushes the prompt to the URL instead of
+  // searching in-place — so browser back/forward navigates between searches and
+  // returning restores the last one. Unset (Scraper) → search in place.
+  onSearchPrompt?: (prompt: string) => void;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [seedText, setSeedText] = useState(initialSeed);
@@ -825,34 +830,43 @@ export function LiveSearch({
       setProfileRefreshing(false);
     }
   }
-  // saved searches (localStorage)
-  const [saved, setSaved] = useState<{ prompt: string; seed: string }[]>([]);
+  // recently searched — auto-tracked in localStorage, most-recent-first, capped.
+  const RECENT_MAX = 10;
+  const [recent, setRecent] = useState<string[]>([]);
   const autoRan = useRef(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('ii_saved_searches');
-      if (raw) setSaved(JSON.parse(raw));
+      const raw = localStorage.getItem('ii_recent_searches');
+      if (raw) setRecent(JSON.parse(raw));
     } catch { /* ignore */ }
   }, []);
 
-  function persistSaved(next: { prompt: string; seed: string }[]) {
-    setSaved(next);
-    try { localStorage.setItem('ii_saved_searches', JSON.stringify(next)); } catch { /* ignore */ }
+  // Record a query as recently-searched (deduped, newest first, capped). Called
+  // automatically on every real search.
+  function addRecent(p: string) {
+    const t = p.trim();
+    if (t.length < 2 || t.startsWith('Similar to @')) return;
+    setRecent((list) => {
+      const next = [t, ...list.filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, RECENT_MAX);
+      try { localStorage.setItem('ii_recent_searches', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   }
 
-  function saveCurrentSearch() {
-    const entry = { prompt: (run?.prompt ?? prompt).trim(), seed: seedText.trim() };
-    if (!entry.prompt) return;
-    if (saved.some((s) => s.prompt === entry.prompt && s.seed === entry.seed)) return;
-    persistSaved([entry, ...saved].slice(0, 12));
+  function removeRecent(p: string) {
+    setRecent((list) => {
+      const next = list.filter((x) => x !== p);
+      try { localStorage.setItem('ii_recent_searches', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   }
 
-  function runSaved(s: { prompt: string; seed: string }) {
-    setPrompt(s.prompt);
-    setSeedText(s.seed);
+  function runRecent(p: string) {
+    setPrompt(p);
     setSelected(new Set());
-    void search({ promptOverride: s.prompt, seedOverride: s.seed });
+    if (onSearchPrompt) { onSearchPrompt(p); return; } // Lander → URL-drives it
+    void search({ promptOverride: p });
   }
 
   function toggleSelect(username: string) {
@@ -1090,8 +1104,11 @@ export function LiveSearch({
   function runSearch() {
     setShowSug(false); // close the autocomplete dropdown on every search
     setActiveIdx(-1);
-    // Mode is set by the host: the agency lander searches the DB (instant);
-    // the admin Scraper page drives the live browser-worker crawl.
+    // On the Lander, push the prompt to the URL so browser back/forward navigates
+    // between searches (the URL-watching effect re-runs the search). Elsewhere
+    // (Scraper) search in place — the host drives the live browser-worker crawl.
+    const p = prompt.trim();
+    if (onSearchPrompt && p.length >= 2) { onSearchPrompt(p); return; }
     void search({ mode: initialMode });
   }
 
@@ -1129,13 +1146,24 @@ export function LiveSearch({
   // Arriving from the home page with a prompt → run once (seed optional; the
   // server self-seeds from the prompt when no handle/name is given).
   useEffect(() => {
+    // URL-driven host (Lander): (re)run whenever the prompt in the URL changes,
+    // so browser back/forward restores each search. Other hosts (Scraper) run
+    // once on mount.
+    if (onSearchPrompt) {
+      const p = initialPrompt.trim();
+      if (p.length >= 2 || initialSeed.trim().length >= 2) {
+        setPrompt(initialPrompt);
+        void search({ mode: initialMode, promptOverride: initialPrompt, seedOverride: initialMode === 'db' ? '' : (initialSeed || undefined) });
+      }
+      return;
+    }
     if (autoRan.current) return;
     if (initialPrompt.trim().length >= 2 || initialSeed.trim().length >= 2) {
       autoRan.current = true;
       void search({ mode: initialMode, seedOverride: initialMode === 'db' ? '' : undefined });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initialPrompt, initialSeed]);
 
   async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male' }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
@@ -1146,8 +1174,12 @@ export function LiveSearch({
     const p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
     if (p.length < 2) return;
 
-    // A fresh user search (not a bucket toggle) invalidates the cached buckets.
-    if (!opts?.bucketOverride) bucketCache.current = { instagram: null, trends: null };
+    // A fresh user search (not a bucket toggle) invalidates the cached buckets
+    // and gets recorded as recently-searched.
+    if (!opts?.bucketOverride) {
+      bucketCache.current = { instagram: null, trends: null };
+      addRecent(p);
+    }
 
     // Worker-backed crawl: enqueue a search_query job, show instant DB matches,
     // then poll for the creators the worker tags as it crawls Instagram.
@@ -1377,17 +1409,17 @@ export function LiveSearch({
         </div>
       </div>
 
-      {/* saved searches */}
-      {saved.length > 0 && (
+      {/* recently searched — auto-tracked, click to re-run, × to forget */}
+      {recent.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-[12px] text-[#999]">Saved:</span>
-          {saved.map((s, i) => (
-            <span key={`${s.prompt}|${s.seed}`} className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full border border-[#e3def9] bg-white text-[12px]">
-              <button onClick={() => runSaved(s)} className="hover:underline" style={{ color: ACCENT }} title={s.seed ? `seed: ${s.seed}` : undefined}>
-                {s.prompt}
+          <span className="text-[12px] text-[#999]">Recent:</span>
+          {recent.map((p) => (
+            <span key={p} className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full border border-[#e3def9] bg-white text-[12px]">
+              <button onClick={() => runRecent(p)} className="hover:underline" style={{ color: ACCENT }} title="Search again">
+                {p}
               </button>
               <button
-                onClick={() => persistSaved(saved.filter((_, j) => j !== i))}
+                onClick={() => removeRecent(p)}
                 className="w-4 h-4 grid place-items-center rounded-full text-[#bbb] hover:text-[#666] hover:bg-[#f3f3f3]"
                 title="Remove"
               >
@@ -1520,14 +1552,6 @@ export function LiveSearch({
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={saveCurrentSearch}
-                className="px-3 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff]"
-                style={{ color: ACCENT }}
-                title="Save this search"
-              >
-                ★ Save
-              </button>
-              <button
                 onClick={() => void downloadExcel()}
                 disabled={exporting || shown.length === 0}
                 className="px-3.5 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff] disabled:opacity-50"
@@ -1590,6 +1614,20 @@ export function LiveSearch({
               <input type="checkbox" checked={hideContacted} onChange={(e) => setHideContacted(e.target.checked)} className="accent-[#6C4DF6]" />
               Hide contacted
             </label>
+            {(minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly || healthyOnly || hideContacted || genderFilter !== 'any') && (
+              <button
+                onClick={() => {
+                  setMinFollowers(0); setMaxFollowers(0); setMinER(0);
+                  setVerifiedOnly(false); setHealthyOnly(false); setHideContacted(false);
+                  setGenderFilter('any');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
+                title="Clear all filters"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                Clear filters
+              </button>
+            )}
             <span className="ml-auto text-[#999]">Sort</span>
             <select
               value={sortBy}

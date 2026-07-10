@@ -111,7 +111,12 @@ function LanderContent() {
                 ← Back
               </button>
             </div>
-            <LiveSearch initialPrompt={query ?? ''} initialSeed={seed} initialMode={mode} />
+            <LiveSearch
+              initialPrompt={query ?? ''}
+              initialSeed={seed}
+              initialMode={mode}
+              onSearchPrompt={(q) => router.push(`/lander?prompt=${encodeURIComponent(q)}`)}
+            />
           </div>
         ) : (
           <>
