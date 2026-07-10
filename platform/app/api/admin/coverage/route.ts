@@ -21,37 +21,79 @@ const NICHES: Array<{ key: string; label: string; match: string[] }> = [
   { key: 'finance', label: 'Finance', match: ['finance', 'investing', 'stock'] },
 ];
 
-const CITIES: Array<{ label: string; match: string[] }> = [
-  { label: 'Mumbai', match: ['mumbai', 'bombay'] },
-  { label: 'Delhi', match: ['delhi'] },
-  { label: 'Bangalore', match: ['bangalore', 'bengaluru'] },
-  { label: 'Hyderabad', match: ['hyderabad'] },
-  { label: 'Chennai', match: ['chennai'] },
-  { label: 'Kolkata', match: ['kolkata', 'calcutta'] },
-  { label: 'Pune', match: ['pune'] },
-  { label: 'Ahmedabad', match: ['ahmedabad'] },
-  { label: 'Jaipur', match: ['jaipur'] },
-  { label: 'Chandigarh', match: ['chandigarh'] },
-  { label: 'Kochi', match: ['kochi', 'cochin'] },
-  { label: 'Lucknow', match: ['lucknow'] },
-  { label: 'Nagpur', match: ['nagpur'] },
-  { label: 'Surat', match: ['surat'] },
-  { label: 'Goa', match: ['goa', 'panaji'] },
-  { label: 'Indore', match: ['indore'] },
-  { label: 'Gurgaon', match: ['gurgaon', 'gurugram'] },
-  { label: 'Noida', match: ['noida'] },
-  { label: 'Bhopal', match: ['bhopal'] },
-  { label: 'Mysore', match: ['mysore', 'mysuru'] },
-  { label: 'Udaipur', match: ['udaipur'] },
-  { label: 'Varanasi', match: ['varanasi', 'banaras'] },
-  { label: 'Guwahati', match: ['guwahati'] },
-  { label: 'Shillong', match: ['shillong'] },
-];
+// Cities are DYNAMIC — derived from the DB (top cities by active-creator count)
+// so the grid always shows where the data actually is, with no hardcoded list to
+// maintain. A small alias map merges dual-name cities so they don't appear twice;
+// everything else is title-cased as-is.
+const CITY_ALIAS: Record<string, string> = {
+  bombay: 'Mumbai', mumbai: 'Mumbai',
+  bengaluru: 'Bangalore', bangalore: 'Bangalore',
+  calcutta: 'Kolkata', kolkata: 'Kolkata',
+  gurugram: 'Gurgaon', gurgaon: 'Gurgaon',
+  mysuru: 'Mysore', mysore: 'Mysore',
+  cochin: 'Kochi', ernakulam: 'Kochi', kochi: 'Kochi',
+  thiruvananthapuram: 'Trivandrum', trivandrum: 'Trivandrum',
+  vizag: 'Visakhapatnam', visakhapatnam: 'Visakhapatnam',
+  baroda: 'Vadodara', vadodara: 'Vadodara',
+  mangaluru: 'Mangalore', mangalore: 'Mangalore',
+  banaras: 'Varanasi', varanasi: 'Varanasi',
+  delhi: 'Delhi',
+};
+const TOP_CITIES = 24;
+// Junk / non-city location strings to keep off the grid.
+const CITY_STOP = new Set(['india', 'indian', 'earth', 'worldwide', 'global', 'online', 'everywhere']);
+const titleCase = (s: string) => s.replace(/\b\w/g, (m) => m.toUpperCase());
+const canonCity = (raw: string): string => {
+  for (const [k, v] of Object.entries(CITY_ALIAS)) if (raw.includes(k)) return v;
+  return titleCase(raw);
+};
+// Substring `match` terms for the matrix SQL: the alias keys that map to a
+// canonical (so '%mumbai%' catches "mumbai - मुंबई", "mumbai ncr", etc.), else
+// the canonical name itself.
+function matchTerms(label: string): string[] {
+  const keys = Object.entries(CITY_ALIAS).filter(([, v]) => v === label).map(([k]) => k);
+  return keys.length ? keys : [label.toLowerCase()];
+}
 
-// Note: NICHES/CITIES are hardcoded (not user input) so inlining them in SQL is safe.
+// Top cities by active-creator count, alias-merged.
+async function topCities(db: ReturnType<typeof getBolticClient>): Promise<Array<{ label: string; match: string[] }>> {
+  let rows: Array<{ city: string; n: number }> = [];
+  try {
+    rows = await db.query<{ city: string; n: number }>(
+      `select lower(coalesce(nullif(primary_city,''), region, '')) as city, count(*)::int as n
+       from creators
+       where platform='instagram' and is_active=true
+         and coalesce(nullif(primary_city,''), region) is not null
+       group by 1`,
+    );
+  } catch { rows = []; }
+  const merged = new Map<string, number>();
+  for (const r of rows) {
+    const raw = (r.city ?? '').trim();
+    if (!raw || CITY_STOP.has(raw)) continue;
+    const label = canonCity(raw);
+    merged.set(label, (merged.get(label) ?? 0) + Number(r.n));
+  }
+  return [...merged.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_CITIES)
+    .map(([label]) => ({ label, match: matchTerms(label) }));
+}
+
+// Note: NICHES is a curated taxonomy (free-text niche values are too messy to
+// auto-derive); CITIES are dynamic. Both are code-derived, not user input, so
+// inlining them in SQL is safe.
 const like = (col: string, terms: string[]) => `(${terms.map((t) => `${col} like '%${t}%'`).join(' or ')})`;
 
 export async function GET() {
+  const db = getBolticClient();
+  const CITIES = await topCities(db);
+  if (CITIES.length === 0) {
+    return NextResponse.json({
+      niches: NICHES.map((n) => ({ key: n.key, label: n.label })),
+      cities: [], matrix: [], nicheTotals: [], grandTotal: 0,
+    });
+  }
   const nicheSums = NICHES.map((n) => `sum((${like('nt', n.match)})::int) as ${n.key}`).join(',\n           ');
   const cityCase =
     `case ${CITIES.map((c) => `when ${like('cr', c.match)} then '${c.label}'`).join('\n              ')}\n              else null end`;
@@ -77,7 +119,7 @@ export async function GET() {
 
   let rows: Record<string, unknown>[] = [];
   try {
-    rows = await getBolticClient().query<Record<string, unknown>>(sql);
+    rows = await db.query<Record<string, unknown>>(sql);
   } catch (err) {
     console.error('[coverage] query failed:', err);
   }
