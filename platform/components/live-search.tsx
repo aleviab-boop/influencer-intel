@@ -508,7 +508,6 @@ export function LiveSearch({
   initialSeed = '',
   initialMode = 'crawl',
   onSearchPrompt,
-  openSaved = false,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
@@ -517,8 +516,6 @@ export function LiveSearch({
   // searching in-place — so browser back/forward navigates between searches and
   // returning restores the last one. Unset (Scraper) → search in place.
   onSearchPrompt?: (prompt: string) => void;
-  // Opens the "Saved creators" panel (driven by the Features → Saved menu link).
-  openSaved?: boolean;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [seedText, setSeedText] = useState(initialSeed);
@@ -662,8 +659,6 @@ export function LiveSearch({
   // pinned creators that persist across searches (localStorage)
   const [savedCreators, setSavedCreators] = useState<SavedCreator[]>([]);
   const [showSaved, setShowSaved] = useState(false);
-  // Open the saved-creators panel when the host asks (Features → Saved link).
-  useEffect(() => { if (openSaved) setShowSaved(true); }, [openSaved]);
   const [shortlistBrief, setShortlistBrief] = useState('');
   // side-by-side compare
   const [compareSel, setCompareSel] = useState<Set<string>>(new Set());

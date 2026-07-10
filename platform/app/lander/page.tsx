@@ -15,12 +15,12 @@ const ACCENT = '#6C4DF6';
 const ACCENT_SOFT = '#F4F2FF';
 
 const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
-  { label: 'Saved creators', href: '/lander?saved=1', icon: 'bookmark' },
   { label: 'Influencer Search', href: '/influencer-search', icon: 'search' },
   { label: 'AI Content Generator', href: '/tools/content-ideas', icon: 'spark' },
   { label: 'Reply Assistant', href: '/tools/reply-assistant', icon: 'chat' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
+  { label: 'Saved creators', href: '/saved', icon: 'bookmark' },
   { label: 'Competitor Analysis', href: '/competitor-analysis', icon: 'bars' },
   { label: 'Influencer Database', href: '/database', icon: 'database' },
   { label: 'Campaign Analytics', href: '/campaign-analytics', icon: 'clock' },
@@ -87,13 +87,11 @@ function LanderContent() {
   // View is driven by the URL so "Home" (→ /lander) always resets to the hero.
   const query = params.get('prompt');
   const seed = params.get('seed') ?? '';
-  // Features → Saved creators links here with ?saved=1 to open the saved panel.
-  const savedOpen = params.get('saved') === '1';
   // The agency lander searches the DATABASE — the admin Scraper page is what
   // crawls Instagram live and fills that database. So the lander is instant and
   // never hits Instagram itself.
   const mode = 'db' as const;
-  const showResults = query !== null || seed.trim().length >= 2 || savedOpen;
+  const showResults = query !== null || seed.trim().length >= 2;
   const runSearch = (q: string) => {
     const qs = new URLSearchParams();
     if (q) qs.set('prompt', q);
@@ -120,7 +118,6 @@ function LanderContent() {
               initialPrompt={query ?? ''}
               initialSeed={seed}
               initialMode={mode}
-              openSaved={savedOpen}
               onSearchPrompt={(q) => router.push(`/lander?prompt=${encodeURIComponent(q)}`)}
             />
           </div>

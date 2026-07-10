@@ -270,6 +270,7 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
             onAdded={load}
           />
           <InviteCreators programId={id} existing={new Set(recruits.map((r) => r.creator_id))} onAdded={load} />
+          <SavedCreatorsSegment programId={id} onAdded={load} />
 
           {/* kanban */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -486,6 +487,60 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
 }
 
 interface SearchCreator { id: string; handle: string; display_name: string | null; follower_count: number | string | null; primary_category: string | null }
+interface SavedCreator { username: string; full_name?: string; followers?: number; category?: string }
+// Your saved shortlist (localStorage) — add them straight into this campaign.
+// Resolves the handle to a creator_id, then recruits (idempotent).
+function SavedCreatorsSegment({ programId, onAdded }: { programId: string; onAdded: () => void }) {
+  const [saved, setSaved] = useState<SavedCreator[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try { const raw = localStorage.getItem('ii_saved_creators'); if (raw) setSaved(JSON.parse(raw)); } catch { /* ignore */ }
+  }, []);
+
+  async function add(username: string) {
+    setBusy(username);
+    try {
+      const r = await fetch(`/api/creators?q=${encodeURIComponent(username)}&limit=8`);
+      const d = await r.json();
+      const match = (d.creators ?? []).find((c: { handle?: string; id?: string }) => c.handle?.toLowerCase() === username.toLowerCase());
+      if (!match?.id) { alert(`@${username} isn't in the database yet — open them from a search first.`); return; }
+      await fetch(`/api/programs/${programId}/recruits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creator_id: match.id }) });
+      setAdded((s) => new Set(s).add(username));
+      onAdded();
+    } finally { setBusy(null); }
+  }
+
+  if (saved.length === 0) return null;
+  return (
+    <div className="mt-6">
+      <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-400 mb-2">Your saved creators ({saved.length})</div>
+      <div className="rounded-2xl bg-white border border-border shadow-card divide-y divide-border-soft max-h-[300px] overflow-auto">
+        {saved.map((s) => {
+          const isAdded = added.has(s.username);
+          return (
+            <div key={s.username} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-ink-900 truncate">{s.full_name || `@${s.username}`}</div>
+                <div className="text-[11px] text-ink-400 truncate">@{s.username}{s.followers ? ` · ${kfmt(s.followers)}` : ''}{s.category ? ` · ${s.category}` : ''}</div>
+              </div>
+              <button
+                onClick={() => add(s.username)}
+                disabled={isAdded || busy === s.username}
+                className="px-3 py-1.5 text-[12px] font-semibold rounded-lg disabled:opacity-60"
+                style={{ color: isAdded ? '#6b7280' : '#fff', background: isAdded ? '#f3f4f6' : ACCENT }}
+              >
+                {isAdded ? 'Added' : busy === s.username ? '…' : 'Add'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function InviteCreators({ programId, existing, onAdded }: { programId: string; existing: Set<string>; onAdded: () => void }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<SearchCreator[]>([]);
