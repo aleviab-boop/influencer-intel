@@ -30,19 +30,28 @@ export default function SavedCreatorsPage() {
   const [brief, setBrief] = useState('');
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) setSaved(JSON.parse(raw));
-    } catch { /* ignore */ }
-    setLoaded(true);
+    const fromLocal = () => { try { const raw = localStorage.getItem(KEY); if (raw) setSaved(JSON.parse(raw)); } catch { /* ignore */ } };
+    fetch('/api/saved')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.creators) setSaved(d.creators); else fromLocal(); })
+      .catch(fromLocal)
+      .finally(() => setLoaded(true));
   }, []);
 
-  function persist(next: SavedCreator[]) {
-    setSaved(next);
-    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  function remove(u: string) {
+    setSaved((list) => {
+      const next = list.filter((s) => s.username !== u);
+      try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+    void fetch(`/api/saved?handle=${encodeURIComponent(u)}`, { method: 'DELETE' }).catch(() => {});
   }
-  const remove = (u: string) => persist(saved.filter((s) => s.username !== u));
-  const clearAll = () => { if (confirm('Remove all saved creators?')) persist([]); };
+  function clearAll() {
+    if (!confirm('Remove all saved creators?')) return;
+    setSaved([]);
+    try { localStorage.removeItem(KEY); } catch { /* ignore */ }
+    void fetch('/api/saved?all=1', { method: 'DELETE' }).catch(() => {});
+  }
 
   // Rank by brand-fit when a brief is typed: creators whose name/category/bio
   // mention the brief's keywords float up.

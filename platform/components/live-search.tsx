@@ -717,6 +717,17 @@ export function LiveSearch({
       const rawDone = localStorage.getItem('ii_followups_done');
       if (rawDone) setFollowupDone(JSON.parse(rawDone));
     } catch { /* ignore */ }
+    // Hydrate saved creators from the DB (durable / cross-device); the
+    // localStorage read above is the instant fallback.
+    fetch('/api/saved')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.creators) {
+          setSavedCreators(d.creators);
+          try { localStorage.setItem('ii_saved_creators', JSON.stringify(d.creators)); } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {});
   }, []);
 
   function markFollowupDone(handle: string) {
@@ -741,19 +752,27 @@ export function LiveSearch({
   const isSaved = (u: string) => savedCreators.some((s) => s.username.toLowerCase() === u.toLowerCase());
 
   function toggleSaved(p: LiveProfile) {
+    const exists = isSaved(p.username);
+    const entry = { username: p.username, full_name: p.full_name, followers: p.followers, profile_pic_url: p.profile_pic_url, category: p.category, email: p.email, phone: p.phone, biography: p.biography, engagement: liveStats[p.username]?.engagement ?? p.engagement ?? null };
     setSavedCreators((list) => {
-      const exists = list.some((s) => s.username.toLowerCase() === p.username.toLowerCase());
       const next = exists
         ? list.filter((s) => s.username.toLowerCase() !== p.username.toLowerCase())
-        : [{ username: p.username, full_name: p.full_name, followers: p.followers, profile_pic_url: p.profile_pic_url, category: p.category, email: p.email, phone: p.phone, biography: p.biography, engagement: liveStats[p.username]?.engagement ?? p.engagement ?? null }, ...list];
+        : [entry, ...list];
       try { localStorage.setItem('ii_saved_creators', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
+    // Persist to the DB (best-effort — the optimistic UI already updated).
+    if (exists) {
+      void fetch(`/api/saved?handle=${encodeURIComponent(p.username)}`, { method: 'DELETE' }).catch(() => {});
+    } else {
+      void fetch('/api/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creator: entry }) }).catch(() => {});
+    }
   }
 
   function clearSaved() {
     setSavedCreators([]);
     try { localStorage.removeItem('ii_saved_creators'); } catch { /* ignore */ }
+    void fetch('/api/saved?all=1', { method: 'DELETE' }).catch(() => {});
   }
 
   function markContacted(handle: string) {

@@ -496,7 +496,12 @@ function SavedCreatorsSegment({ programId, onAdded }: { programId: string; onAdd
   const [added, setAdded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    try { const raw = localStorage.getItem('ii_saved_creators'); if (raw) setSaved(JSON.parse(raw)); } catch { /* ignore */ }
+    fetch('/api/saved')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.creators) setSaved(d.creators); })
+      .catch(() => {
+        try { const raw = localStorage.getItem('ii_saved_creators'); if (raw) setSaved(JSON.parse(raw)); } catch { /* ignore */ }
+      });
   }, []);
 
   async function add(username: string) {
