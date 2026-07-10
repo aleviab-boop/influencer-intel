@@ -508,6 +508,7 @@ export function LiveSearch({
   initialSeed = '',
   initialMode = 'crawl',
   onSearchPrompt,
+  openSaved = false,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
@@ -516,6 +517,8 @@ export function LiveSearch({
   // searching in-place — so browser back/forward navigates between searches and
   // returning restores the last one. Unset (Scraper) → search in place.
   onSearchPrompt?: (prompt: string) => void;
+  // Opens the "Saved creators" panel (driven by the Features → Saved menu link).
+  openSaved?: boolean;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [seedText, setSeedText] = useState(initialSeed);
@@ -659,6 +662,8 @@ export function LiveSearch({
   // pinned creators that persist across searches (localStorage)
   const [savedCreators, setSavedCreators] = useState<SavedCreator[]>([]);
   const [showSaved, setShowSaved] = useState(false);
+  // Open the saved-creators panel when the host asks (Features → Saved link).
+  useEffect(() => { if (openSaved) setShowSaved(true); }, [openSaved]);
   const [shortlistBrief, setShortlistBrief] = useState('');
   // side-by-side compare
   const [compareSel, setCompareSel] = useState<Set<string>>(new Set());
@@ -2049,29 +2054,17 @@ export function LiveSearch({
         document.body,
       )}
 
-      {/* Floating actions: follow-up nudges + saved creators */}
-      {!showSaved && !showFollowups && (savedCreators.length > 0 || dueFollowups.length > 0) && (
+      {/* Floating follow-up nudges (saved creators now live under Features → Saved). */}
+      {!showSaved && !showFollowups && dueFollowups.length > 0 && (
         <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2.5">
-          {dueFollowups.length > 0 && (
-            <button
-              onClick={() => setShowFollowups(true)}
-              className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(245,158,11,0.45)] hover:-translate-y-0.5 transition-transform"
-              style={{ background: 'linear-gradient(135deg, #F59E0B, #F7B500)', animation: 'ii-fadeup .3s both' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-              {dueFollowups.length} follow-up{dueFollowups.length > 1 ? 's' : ''} due
-            </button>
-          )}
-          {savedCreators.length > 0 && (
-            <button
-              onClick={() => setShowSaved(true)}
-              className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(108,77,246,0.4)] hover:-translate-y-0.5 transition-transform"
-              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, animation: 'ii-fadeup .3s both' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>
-              {savedCreators.length} saved
-            </button>
-          )}
+          <button
+            onClick={() => setShowFollowups(true)}
+            className="flex items-center gap-2 pl-4 pr-5 py-3 rounded-full text-white text-[14px] font-semibold shadow-[0_12px_40px_rgba(245,158,11,0.45)] hover:-translate-y-0.5 transition-transform"
+            style={{ background: 'linear-gradient(135deg, #F59E0B, #F7B500)', animation: 'ii-fadeup .3s both' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            {dueFollowups.length} follow-up{dueFollowups.length > 1 ? 's' : ''} due
+          </button>
         </div>
       )}
 
