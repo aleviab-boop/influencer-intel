@@ -25,6 +25,23 @@ interface RecentData {
   accounts: Account[];
   activeCrawl: { target: string; started_at: string } | null;
 }
+interface Job {
+  id: string; job_type: string; target: string; status: string; attempts: number;
+  error: string | null; found: number | null;
+  queued_at: string | null; started_at: string | null; completed_at: string | null;
+}
+interface JobsData {
+  counts: { completed_24h: number; failed_24h: number; skipped_24h: number; queued: number; in_progress: number };
+  jobs: Job[];
+}
+
+const JOB_STATUS: Record<string, { fg: string; bg: string; label: string }> = {
+  completed: { fg: 'text-emerald-700', bg: 'bg-emerald-50', label: 'done' },
+  in_progress: { fg: 'text-sky-700', bg: 'bg-sky-50', label: 'crawling' },
+  queued: { fg: 'text-[#8a7fd6]', bg: 'bg-[#f3f0ff]', label: 'queued' },
+  failed: { fg: 'text-rose-700', bg: 'bg-rose-50', label: 'failed' },
+  skipped: { fg: 'text-[#999]', bg: 'bg-[#f4f4f6]', label: 'skipped' },
+};
 
 const ACCT_STATE: Record<Account['state'], { label: string; dot: string; fg: string; hint?: string }> = {
   ready: { label: 'ready', dot: 'bg-emerald-500 animate-pulse', fg: 'text-emerald-600' },
@@ -76,6 +93,7 @@ function timeUntil(iso: string | null): string | null {
 export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
   const recent = usePoll<RecentData>('/api/admin/recent-scrapes', 8_000);
+  const jobsData = usePoll<JobsData>('/api/admin/jobs', 8_000);
   const activeCrawl = recent?.activeCrawl ?? null;
   // The worker is "live" if it wrote a creator in the last ~3min (stats) OR it's
   // mid-crawl right now. A slow crawl can go minutes between DB writes, so trust
@@ -225,6 +243,48 @@ export default function AdminScraperPage() {
             Add / re-capture an account: <span className="font-mono text-[#666]">npm run scraper:capture</span> — it joins the rotation automatically.
           </div>
         </div>
+      </div>
+
+      {/* recent crawl jobs — what the worker has actually been doing */}
+      <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden shadow-[0_2px_16px_rgba(20,20,60,0.03)] mb-8">
+        <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555] flex items-center justify-between" style={{ background: 'linear-gradient(90deg, #faf9ff, #fff)' }}>
+          <span>Recent crawls</span>
+          {jobsData && (
+            <span className="text-[12px] font-normal text-[#999] flex items-center gap-2.5">
+              <span className="text-emerald-600">{jobsData.counts.completed_24h} done</span>
+              {jobsData.counts.failed_24h > 0 && <span className="text-rose-600">{jobsData.counts.failed_24h} failed</span>}
+              <span>{jobsData.counts.queued} queued</span>
+              {jobsData.counts.in_progress > 0 && <span className="text-sky-600">{jobsData.counts.in_progress} running</span>}
+              <span className="text-[#bbb]">· 24h</span>
+            </span>
+          )}
+        </div>
+        {(jobsData?.jobs.length ?? 0) === 0 ? (
+          <div className="px-5 py-8 text-center text-[13px] text-[#aaa]">No crawl jobs yet. Search below to start one.</div>
+        ) : (
+          <div className="divide-y divide-[#f5f5f8] max-h-[360px] overflow-y-auto">
+            {jobsData!.jobs.map((j) => {
+              const st = JOB_STATUS[j.status] ?? { fg: 'text-[#777]', bg: 'bg-[#f4f4f6]', label: j.status };
+              const when = j.completed_at ?? j.started_at ?? j.queued_at;
+              return (
+                <div key={j.id} className="px-5 py-2.5 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
+                  <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md ${st.fg} ${st.bg}`}>{st.label}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-[#222] truncate">{j.target}</div>
+                    {j.error && <div className="text-[11px] text-rose-500 truncate">{j.error}</div>}
+                  </div>
+                  {j.found != null && j.found > 0 && (
+                    <span className="shrink-0 text-[12px] tabular-nums text-[#666]">+{j.found}</span>
+                  )}
+                  {j.attempts > 1 && j.status !== 'completed' && (
+                    <span className="shrink-0 text-[11px] text-amber-600">×{j.attempts}</span>
+                  )}
+                  <span className="shrink-0 text-[12px] text-[#bbb] tabular-nums w-9 text-right">{when ? timeAgo(when) : '—'}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="text-[12px] font-semibold uppercase tracking-wider text-[#aab] mb-2.5">Crawl a niche live</div>
