@@ -1564,44 +1564,59 @@ export function LiveSearch({
 
           {/* filters + sort */}
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
-            <select
-              value={minFollowers}
-              onChange={(e) => setMinFollowers(Number(e.target.value))}
-              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
-            >
-              <option value={0}>Any followers</option>
-              <option value={1000}>1K+</option>
-              <option value={5000}>5K+</option>
-              <option value={10000}>10K+</option>
-              <option value={100000}>100K+</option>
-              <option value={1000000}>1M+</option>
-            </select>
-            <select
-              value={maxFollowers}
-              onChange={(e) => setMaxFollowers(Number(e.target.value))}
-              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
-              title="Cap follower count — useful for finding micro / nano creators"
-            >
-              <option value={0}>No max</option>
-              <option value={10000}>Under 10K</option>
-              <option value={50000}>Under 50K</option>
-              <option value={100000}>Under 100K</option>
-              <option value={500000}>Under 500K</option>
-              <option value={1000000}>Under 1M</option>
-            </select>
-            <select
-              value={minER}
-              onChange={(e) => setMinER(Number(e.target.value))}
-              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6]"
-              title="Minimum engagement rate"
-            >
-              <option value={0}>Any ER</option>
-              <option value={1}>1%+ ER</option>
-              <option value={2}>2%+ ER</option>
-              <option value={3}>3%+ ER</option>
-              <option value={5}>5%+ ER</option>
-              <option value={8}>8%+ ER</option>
-            </select>
+            <span className="inline-flex items-center gap-1">
+              <select
+                value={minFollowers}
+                onChange={(e) => setMinFollowers(Number(e.target.value))}
+                className={`px-2.5 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${minFollowers !== 0 ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9]'}`}
+              >
+                <option value={0}>Any followers</option>
+                <option value={1000}>1K+</option>
+                <option value={5000}>5K+</option>
+                <option value={10000}>10K+</option>
+                <option value={100000}>100K+</option>
+                <option value={1000000}>1M+</option>
+              </select>
+              {minFollowers !== 0 && (
+                <button onClick={() => setMinFollowers(0)} className="w-4 h-4 grid place-items-center rounded-full text-[#c9b9ff] hover:text-rose-600 hover:bg-rose-50 text-[13px] leading-none" title="Clear this filter">×</button>
+              )}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <select
+                value={maxFollowers}
+                onChange={(e) => setMaxFollowers(Number(e.target.value))}
+                className={`px-2.5 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${maxFollowers !== 0 ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9]'}`}
+                title="Cap follower count — useful for finding micro / nano creators"
+              >
+                <option value={0}>No max</option>
+                <option value={10000}>Under 10K</option>
+                <option value={50000}>Under 50K</option>
+                <option value={100000}>Under 100K</option>
+                <option value={500000}>Under 500K</option>
+                <option value={1000000}>Under 1M</option>
+              </select>
+              {maxFollowers !== 0 && (
+                <button onClick={() => setMaxFollowers(0)} className="w-4 h-4 grid place-items-center rounded-full text-[#c9b9ff] hover:text-rose-600 hover:bg-rose-50 text-[13px] leading-none" title="Clear this filter">×</button>
+              )}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <select
+                value={minER}
+                onChange={(e) => setMinER(Number(e.target.value))}
+                className={`px-2.5 py-1.5 rounded-lg border bg-white focus:outline-none focus:border-[#6C4DF6] ${minER !== 0 ? 'border-[#6C4DF6] text-[#6C4DF6] font-medium' : 'border-[#e3def9]'}`}
+                title="Minimum engagement rate"
+              >
+                <option value={0}>Any ER</option>
+                <option value={1}>1%+ ER</option>
+                <option value={2}>2%+ ER</option>
+                <option value={3}>3%+ ER</option>
+                <option value={5}>5%+ ER</option>
+                <option value={8}>8%+ ER</option>
+              </select>
+              {minER !== 0 && (
+                <button onClick={() => setMinER(0)} className="w-4 h-4 grid place-items-center rounded-full text-[#c9b9ff] hover:text-rose-600 hover:bg-rose-50 text-[13px] leading-none" title="Clear this filter">×</button>
+              )}
+            </span>
             <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white cursor-pointer select-none">
               <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="accent-[#6C4DF6]" />
               Verified only
