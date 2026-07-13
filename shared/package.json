@@ -12,7 +12,8 @@
     "./ig-graph": "./ig-graph/client.ts",
     "./ig-graph/types": "./ig-graph/types.ts",
     "./content-scorer": "./content-scorer/gemini-client.ts",
-    "./scoring": "./scoring/quality.ts"
+    "./scoring": "./scoring/quality.ts",
+    "./notify": "./notify/slack.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

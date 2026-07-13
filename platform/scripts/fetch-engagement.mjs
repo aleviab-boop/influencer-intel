@@ -20,6 +20,7 @@
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';
+import { notifySlack } from '@influencer-intel/shared/notify';
 
 const db = getBolticClient();
 const BATCH = Number(process.env.FETCH_BATCH ?? 150);
@@ -144,6 +145,10 @@ async function main() {
     const res = await enrich(handle);
     if (res.fatal === 'dead') {
       console.error(`[fetcher] session DEAD (401) at @${handle} — refresh IG_SESSIONID and re-run. Stopping.`);
+      await notifySlack(
+        `:rotating_light: *IG drawer cookie expired* — the Fetcher hit HTTP 401 at @${handle} and stopped. ` +
+          `Engagement backfill is paused and the profile drawer will show blank posts/ER until IG_SESSIONID is refreshed (local .env + Vercel).`,
+      );
       break;
     }
     if (res.rateLimited) {

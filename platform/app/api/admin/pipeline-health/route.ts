@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { igFetch } from '@/lib/ig-fetch';
+import { notifySlack } from '@influencer-intel/shared/notify';
 
 export const runtime = 'nodejs';
 
@@ -35,6 +36,30 @@ type Health = {
 
 let cache: { at: number; data: Health } | null = null;
 const TTL = 60_000;
+
+// Slack alert de-dup: ping the operator the moment the drawer cookie starts
+// getting rejected (401/403 = expired/logged-out session), but don't spam the
+// channel on every poll while it stays dead. Re-alert at most once an hour, and
+// arm a fresh alert once the cookie recovers (healthy again).
+let cookieDeadAlertedAt = 0;
+let cookieWasDead = false;
+const ALERT_COOLDOWN = 60 * 60_000; // 1h
+
+async function maybeAlertCookieDead(data: Health) {
+  if (data.status === 'cookie_dead') {
+    const now = Date.now();
+    if (!cookieWasDead || now - cookieDeadAlertedAt > ALERT_COOLDOWN) {
+      cookieDeadAlertedAt = now;
+      await notifySlack(
+        `:rotating_light: *IG drawer cookie rejected* — ${data.detail} (HTTP ${data.httpCode ?? '?'}). ` +
+          `Live posts / ER in the profile drawer will be blank until IG_SESSIONID is refreshed (local .env + Vercel).`,
+      );
+    }
+    cookieWasDead = true;
+  } else if (data.status === 'healthy') {
+    cookieWasDead = false; // recovered → re-arm the alert for the next death
+  }
+}
 
 export async function GET() {
   const relayConfigured = !!process.env.IG_RELAY?.trim();
@@ -72,5 +97,9 @@ export async function GET() {
   }
 
   cache = { at: Date.now(), data };
+  // Fire the Slack alert on the freshly-computed classification (not on cache
+  // hits — those return early above), so the operator hears about an expired
+  // cookie within one poll cycle.
+  await maybeAlertCookieDead(data);
   return NextResponse.json({ ...data, cached: false });
 }
