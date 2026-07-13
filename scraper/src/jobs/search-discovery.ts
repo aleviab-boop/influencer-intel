@@ -518,6 +518,25 @@ export async function handleSearchQuery(
   const profileText = (c: { username: string; full_name: string | null; biography: string | null; category: string | null }) =>
     `${c.username} ${c.full_name ?? ''} ${c.biography ?? ''} ${c.category ?? ''}`.toLowerCase();
 
+  // Does keyword `k` genuinely SUPPORT this candidate? Substring `.includes`
+  // was the precision leak that mis-tagged creators: "pune" matched "puneet",
+  // "goa" matched "goals", "kota" matched "kotak", "agra" matched "Agrawal",
+  // "art" matched "startup". We now require a WHOLE-WORD hit in the natural-
+  // language fields (name / bio / category) — where people write real words —
+  // and only allow a substring hit inside the HANDLE for tokens ≥5 chars, since
+  // creators concatenate real signals there (fashionkolkata, mumbaifoodie) while
+  // short tokens (art, goa, pune, kota, agra) collide with unrelated handles.
+  const supports = (
+    c: { username: string; full_name: string | null; biography: string | null; category: string | null },
+    k: string,
+  ): boolean => {
+    const nl = `${c.full_name ?? ''} ${c.biography ?? ''} ${c.category ?? ''}`.toLowerCase();
+    // keywords are pre-cleaned to [a-z0-9] only, so no regex escaping needed.
+    if (new RegExp(`(^|[^a-z])${k}([^a-z]|$)`).test(nl)) return true;
+    if (k.length >= 5 && c.username.toLowerCase().includes(k)) return true;
+    return false;
+  };
+
   const qualified = candidates.filter((c) => {
     // Drop KNOWN sub-5K (nano) — keep unknowns, let the profile-scraper decide.
     if (typeof c.follower_count === 'number' && c.follower_count < 5_000) return false;
@@ -542,7 +561,7 @@ export async function handleSearchQuery(
     const gateWords = nicheKeywords.length > 0 ? nicheKeywords : keywords;
     if (gateWords.length > 0) {
       const fromTopsearch = c.sources.includes('topsearch_user');
-      if (!fromTopsearch && !gateWords.some((k) => profileText(c).includes(k))) return false;
+      if (!fromTopsearch && !gateWords.some((k) => supports(c, k))) return false;
     }
     return true;
   });
@@ -556,9 +575,8 @@ export async function handleSearchQuery(
   // then a mid-tier follower sweet spot (10K-500K) — so shortlist-grade creators
   // beat both nano noise and mega generic accounts. Raw reach is only a tiebreak.
   const relScore = (c: { username: string; full_name: string | null; biography: string | null; category: string | null; follower_count: number | null; sources: string[] }): number => {
-    const id = profileText(c);
     let s = 0;
-    for (const k of keywords) if (id.includes(k)) s += 3;
+    for (const k of keywords) if (supports(c, k)) s += 3;
     s += Math.min(c.sources.length, 4);
     // Favour bigger creators (within the <3M cap) so higher-reach names rank up.
     const f = c.follower_count ?? 0;
@@ -623,7 +641,7 @@ export async function handleSearchQuery(
     // creator whose bio/name/category never mentions it. Blindly tagging every
     // keyword is what poisoned DB search (foreign accounts tagged "kolkata").
     // Append-only, deduped.
-    const matchedKeywords = keywords.filter((k) => profileText(c).includes(k));
+    const matchedKeywords = keywords.filter((k) => supports(c, k));
     try {
       await db.query(
         `UPDATE creators
