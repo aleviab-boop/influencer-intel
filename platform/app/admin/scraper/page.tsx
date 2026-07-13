@@ -35,6 +35,26 @@ interface JobsData {
   jobs: Job[];
 }
 
+interface PipelineHealth {
+  status: 'healthy' | 'rate_limited' | 'cookie_dead' | 'relay_down' | 'no_relay' | 'no_cookie' | 'error';
+  label: string;
+  detail: string;
+  httpCode: number | null;
+  relayConfigured: boolean;
+  cookieConfigured: boolean;
+  checkedAt: string;
+}
+// Live-data (cookie/relay/drawer) path status — colour + dot per state.
+const PIPELINE_UI: Record<PipelineHealth['status'], { fg: string; bg: string; bd: string; dot: string }> = {
+  healthy: { fg: 'text-emerald-700', bg: 'bg-emerald-50', bd: 'border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
+  rate_limited: { fg: 'text-amber-700', bg: 'bg-amber-50', bd: 'border-amber-200', dot: 'bg-amber-500' },
+  cookie_dead: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
+  relay_down: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
+  no_relay: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
+  no_cookie: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
+  error: { fg: 'text-[#777]', bg: 'bg-[#f4f4f6]', bd: 'border-[#e5e5ea]', dot: 'bg-[#bbb]' },
+};
+
 const JOB_STATUS: Record<string, { fg: string; bg: string; label: string }> = {
   completed: { fg: 'text-emerald-700', bg: 'bg-emerald-50', label: 'done' },
   in_progress: { fg: 'text-sky-700', bg: 'bg-sky-50', label: 'crawling' },
@@ -94,6 +114,9 @@ export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
   const recent = usePoll<RecentData>('/api/admin/recent-scrapes', 8_000);
   const jobsData = usePoll<JobsData>('/api/admin/jobs', 8_000);
+  // Live-data pipeline health (cookie/relay path). Polled gently — server caches
+  // ~60s so this never adds more than ~1 IG request/min.
+  const pipeline = usePoll<PipelineHealth>('/api/admin/pipeline-health', 30_000);
   const activeCrawl = recent?.activeCrawl ?? null;
   // The worker is "live" if it wrote a creator in the last ~3min (stats) OR it's
   // mid-crawl right now. A slow crawl can go minutes between DB writes, so trust
@@ -146,6 +169,26 @@ export default function AdminScraperPage() {
           </div>
         </div>
       )}
+
+      {/* live-data pipeline health (cookie/relay/drawer path) */}
+      {pipeline && (() => {
+        const ui = PIPELINE_UI[pipeline.status] ?? PIPELINE_UI.error;
+        return (
+          <div className={`mb-6 flex items-start gap-3 rounded-2xl border px-5 py-3.5 ${ui.bg} ${ui.bd}`}>
+            <span className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${ui.dot}`} />
+            <div className="min-w-0 flex-1">
+              <div className={`text-[13px] font-semibold ${ui.fg}`}>
+                Live data pipeline · {pipeline.label}
+                {pipeline.httpCode != null && <span className="font-normal text-[#999]"> · HTTP {pipeline.httpCode}</span>}
+              </div>
+              <div className="text-[12px] text-[#777] leading-relaxed mt-0.5">{pipeline.detail}</div>
+              <div className="text-[11px] text-[#bbb] mt-1">
+                relay {pipeline.relayConfigured ? 'configured' : 'not set'} · cookie {pipeline.cookieConfigured ? 'set' : 'missing'} · checked {timeAgo(pipeline.checkedAt)} ago
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* live status strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3.5 mb-7">
