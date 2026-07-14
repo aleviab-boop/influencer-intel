@@ -56,10 +56,17 @@ export async function POST(req: NextRequest) {
     void getBolticClient()
       .insert('agency_searches', { prompt, result_count: dbMatches.length })
       .catch(() => {});
-    if (dbMatches.length > 0) {
-      // dbMatches already arrive ranked by relevance (and the user's curated list
-      // first). Return instantly in that order — the client live-enriches each
-      // row's stats lazily as it scrolls into view (via /api/ig-stats).
+    // A prompt is "cold" when the Super Admin scraper has never crawled it before
+    // (no prior search_query job for it) — NOT merely when the DB is empty. This
+    // is the key distinction: "fashion influencer in guwahati" returns generic
+    // fashion creators from the DB that AREN'T from Guwahati, so a pure empty
+    // check would never fire. We instead crawl the first time the exact prompt is
+    // searched, to pull genuinely local, on-target creators.
+    const searchedBefore = await promptSearchedBefore(prompt);
+    if (searchedBefore && dbMatches.length > 0) {
+      // Known prompt that's already been crawled → serve the DB instantly, ranked
+      // by relevance (and the user's curated list first). The client live-enriches
+      // each row's stats lazily as it scrolls into view (via /api/ig-stats).
       const results = dbMatches.slice(0, max);
       return NextResponse.json({
         prompt,
@@ -74,12 +81,12 @@ export async function POST(req: NextRequest) {
         cold: false,
       });
     }
-    // COLD SEARCH — this prompt has never produced anything in the DB (e.g. the
-    // first time anyone searches "fashion influencer in guwahati"). Enqueue a
-    // deep worker crawl (topsearch + hashtags + chaining across the rotating
-    // accounts) so the DB fills for next time, THEN fall through to an immediate
-    // live crawl below so the user sees creators NOW instead of an empty state.
-    workerJobId = await enqueueSearchJob(prompt);
+    // NEW prompt (never crawled by the scraper) → enqueue a deep worker crawl
+    // (topsearch + hashtags + chaining across the rotating accounts) so the DB
+    // fills for next time, THEN fall through to an immediate live crawl below so
+    // the user sees genuinely on-target creators NOW. (If the prompt WAS crawled
+    // before but the DB is empty, we skip the duplicate enqueue and just live-crawl.)
+    if (!searchedBefore) workerJobId = await enqueueSearchJob(prompt);
     // (intentionally no return — execution continues into the live-first crawl)
   }
 
@@ -205,6 +212,25 @@ export async function POST(req: NextRequest) {
     job_id: workerJobId,
     cold: workerJobId != null,
   });
+}
+
+// Has the Super Admin scraper ever crawled this exact prompt? A prior
+// search_query job (queued or completed) means the DB already reflects a real
+// crawl for it, so we serve the DB instead of re-crawling. Case/space-insensitive.
+// On DB error we fail SAFE (return true) so a hiccup never triggers a crawl storm.
+async function promptSearchedBefore(prompt: string): Promise<boolean> {
+  try {
+    const rows = await getBolticClient().query<{ one: number }>(
+      `SELECT 1 AS one FROM scrape_jobs
+        WHERE job_type = 'search_query'
+          AND lower(trim(target_handle)) = lower(trim($1))
+        LIMIT 1`,
+      [prompt],
+    );
+    return rows.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 // Enqueue a deep worker search_query crawl (mirrors /api/crawl-search): a primary
