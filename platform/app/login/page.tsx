@@ -195,10 +195,10 @@ export default function LoginPage() {
             </p>
 
             {/* role selector */}
-            <div className="mt-6 grid grid-cols-3 gap-2">
-              <RoleTab active={role === 'agency'} onClick={() => setRole('agency')} title="Agency" sub="Brand / marketer" />
-              <RoleTab active={role === 'influencer'} onClick={() => setRole('influencer')} title="Influencer" sub="Creator" />
-              <RoleTab active={role === 'admin'} onClick={() => setRole('admin')} title="Admin" sub="Super admin" />
+            <div className="mt-6 grid grid-cols-3 gap-2.5">
+              <RoleTab active={role === 'agency'} onClick={() => setRole('agency')} title="Agency" sub="Brand / marketer" icon={ICONS.agency} />
+              <RoleTab active={role === 'influencer'} onClick={() => setRole('influencer')} title="Influencer" sub="Creator" icon={ICONS.influencer} />
+              <RoleTab active={role === 'admin'} onClick={() => setRole('admin')} title="Admin" sub="Super admin" icon={ICONS.admin} />
             </div>
 
             <form onSubmit={submit} className="mt-5 space-y-4">
@@ -249,11 +249,14 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full px-4 py-3 rounded-xl text-white text-[14px] font-semibold transition-all hover:brightness-105 disabled:opacity-70 flex items-center justify-center gap-2"
+                className="group w-full px-4 py-3 rounded-xl text-white text-[14px] font-semibold transition-all duration-300 hover:brightness-105 hover:-translate-y-0.5 hover:shadow-[0_14px_30px_rgba(108,77,246,0.35)] active:translate-y-0 disabled:opacity-70 disabled:hover:translate-y-0 flex items-center justify-center gap-2"
                 style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
               >
                 {loading && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                 {loading ? 'Logging in…' : role === 'admin' ? 'Enter admin panel' : `Log in as ${role === 'influencer' ? 'influencer' : 'agency'}`}
+                {!loading && (
+                  <svg className="transition-transform duration-300 group-hover:translate-x-1" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                )}
               </button>
 
               {role === 'influencer' && (
@@ -284,18 +287,37 @@ export default function LoginPage() {
   );
 }
 
-function RoleTab({ active, onClick, title, sub }: { active: boolean; onClick: () => void; title: string; sub: string }) {
+const ICONS = {
+  agency: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M3 12h18" /></svg>
+  ),
+  influencer: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.4 5.2L20 8l-4 4 1 6-5-2.8L7 18l1-6-4-4 5.6-.8z" /></svg>
+  ),
+  admin: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+  ),
+};
+
+function RoleTab({ active, onClick, title, sub, icon }: { active: boolean; onClick: () => void; title: string; sub: string; icon: React.ReactNode }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border-2 px-4 py-3 text-left transition-all duration-200 hover:-translate-y-0.5"
-      style={active ? { borderColor: ACCENT, background: ACCENT_SOFT, boxShadow: '0 6px 20px rgba(108,77,246,0.15)' } : { borderColor: '#e5e5e5', background: '#fff' }}
+      className={`group relative overflow-hidden rounded-xl border-2 px-3 py-3 text-left transition-all duration-300 ease-out hover:-translate-y-1 active:translate-y-0 ${active ? '' : 'hover:border-[#c9bdfb] hover:shadow-[0_12px_28px_rgba(108,77,246,0.16)]'}`}
+      style={active ? { borderColor: ACCENT, background: ACCENT_SOFT, boxShadow: '0 10px 26px rgba(108,77,246,0.18)' } : { borderColor: '#e6e6e6', background: '#fff' }}
     >
-      <div className="text-[14px] font-semibold text-ink-900">{title}</div>
-      <div className="text-[11px] text-ink-400">{sub}</div>
+      <span
+        className={`mb-2 inline-grid place-items-center w-8 h-8 rounded-lg transition-all duration-300 group-hover:scale-110 ${active ? 'text-white' : 'text-ink-400 group-hover:text-[#6C4DF6]'}`}
+        style={active ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, boxShadow: '0 6px 14px rgba(108,77,246,0.35)' } : { background: '#f3f0fd' }}
+      >
+        {icon}
+      </span>
+      <div className="text-[13.5px] font-semibold text-ink-900">{title}</div>
+      <div className="text-[11px] text-ink-400 truncate">{sub}</div>
+      <span className={`absolute top-2.5 right-2.5 w-2 h-2 rounded-full transition-all duration-300 ${active ? 'opacity-100 scale-100' : 'opacity-0 scale-0'}`} style={{ background: ACCENT }} />
     </button>
   );
 }
 
-const inp = 'w-full px-3.5 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-xl focus:outline-none focus:border-[#6C4DF6] focus:ring-4 focus:ring-[#6C4DF6]/10 transition-all';
+const inp = 'w-full px-3.5 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-xl hover:border-[#c9bdfb] focus:outline-none focus:border-[#6C4DF6] focus:ring-4 focus:ring-[#6C4DF6]/10 transition-all duration-200';
