@@ -7,6 +7,7 @@ import {
   tokenize,
   classifyPrompt,
   inferNiche,
+  STATE_CITIES,
   type LiveProfile,
 } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
@@ -38,6 +39,12 @@ export async function POST(req: NextRequest) {
   const tokens = tokenize(prompt);
   const mode = body?.mode === 'db' ? 'db' : 'live';
 
+  // Cold-search fallback: when a db-mode (Lander) search finds nothing in the
+  // database, we enqueue a deep worker crawl and fall through to an immediate
+  // live crawl. This id lets the client poll the worker for the richer finds it
+  // tags over the next minute or two.
+  let workerJobId: string | null = null;
+
   // mode 'db' → search only the existing creators database (no live crawl).
   if (mode === 'db') {
     // Lander toggle: 'instagram' = real scraper finds, 'trends' = uploaded
@@ -49,29 +56,31 @@ export async function POST(req: NextRequest) {
     void getBolticClient()
       .insert('agency_searches', { prompt, result_count: dbMatches.length })
       .catch(() => {});
-    if (dbMatches.length === 0) {
-      return NextResponse.json(
-        {
-          error: 'no_db',
-          message: 'Nothing in the database for that yet. The scraper is continuously adding creators — try a broader search or check back soon.',
-        },
-        { status: 422 },
-      );
+    if (dbMatches.length > 0) {
+      // dbMatches already arrive ranked by relevance (and the user's curated list
+      // first). Return instantly in that order — the client live-enriches each
+      // row's stats lazily as it scrolls into view (via /api/ig-stats).
+      const results = dbMatches.slice(0, max);
+      return NextResponse.json({
+        prompt,
+        tokens,
+        results,
+        from_db: results.length,
+        from_live: 0,
+        persisted: 0,
+        resolved_from_names: [],
+        auto_seeds: [],
+        job_id: null,
+        cold: false,
+      });
     }
-    // dbMatches already arrive ranked by relevance (and the user's curated list
-    // first). Return instantly in that order — the client live-enriches each
-    // row's stats lazily as it scrolls into view (via /api/ig-stats).
-    const results = dbMatches.slice(0, max);
-    return NextResponse.json({
-      prompt,
-      tokens,
-      results,
-      from_db: results.length,
-      from_live: 0,
-      persisted: 0,
-      resolved_from_names: [],
-      auto_seeds: [],
-    });
+    // COLD SEARCH — this prompt has never produced anything in the DB (e.g. the
+    // first time anyone searches "fashion influencer in guwahati"). Enqueue a
+    // deep worker crawl (topsearch + hashtags + chaining across the rotating
+    // accounts) so the DB fills for next time, THEN fall through to an immediate
+    // live crawl below so the user sees creators NOW instead of an empty state.
+    workerJobId = await enqueueSearchJob(prompt);
+    // (intentionally no return — execution continues into the live-first crawl)
   }
 
   // 1. Live-first: Instagram is the primary search. Resolve seeds (explicit
@@ -109,6 +118,25 @@ export async function POST(req: NextRequest) {
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0) {
+    // Cold Lander search where the live crawl also came back empty: don't error —
+    // the deep worker crawl is already queued, so return an empty set + the job id
+    // and let the client poll it as the worker tags fresh finds over the next
+    // minute or two.
+    if (workerJobId) {
+      return NextResponse.json({
+        prompt,
+        tokens,
+        results: [],
+        from_db: 0,
+        from_live: 0,
+        persisted: 0,
+        resolved_from_names: resolvedFromNames,
+        auto_seeds: autoSeeds,
+        job_id: workerJobId,
+        cold: true,
+        message: 'New search — crawling Instagram now. Fresh creators will appear here shortly.',
+      });
+    }
     return NextResponse.json(
       {
         error: 'no_seeds',
@@ -174,7 +202,57 @@ export async function POST(req: NextRequest) {
     persisted,
     resolved_from_names: resolvedFromNames,
     auto_seeds: autoSeeds,
+    job_id: workerJobId,
+    cold: workerJobId != null,
   });
+}
+
+// Enqueue a deep worker search_query crawl (mirrors /api/crawl-search): a primary
+// priority-1 job for the prompt, plus lower-priority sibling-city jobs when the
+// prompt names a state, so a cold search fills the DB broadly for next time.
+async function enqueueSearchJob(prompt: string): Promise<string | null> {
+  const db = getBolticClient();
+  let jobId: string | null = null;
+  try {
+    const job = await db.insert<{ id: string }>('scrape_jobs', {
+      job_type: 'search_query',
+      target_platform: 'instagram',
+      target_handle: prompt,
+      priority: 1,
+      status: 'queued',
+      attempts: 0,
+      queued_at: new Date().toISOString(),
+    });
+    jobId = job.id;
+  } catch (err) {
+    console.error('[discover-live] enqueue failed:', err);
+  }
+  // State fan-out: if the prompt names a state, queue its other cities (lower
+  // priority) so the whole state gets covered, not just the primary city.
+  try {
+    const lower = prompt.toLowerCase();
+    for (const [state, cities] of Object.entries(STATE_CITIES)) {
+      if (!new RegExp(`(^|[^a-z])${state}([^a-z]|$)`).test(lower)) continue;
+      for (const city of [...new Set(cities)].slice(1, 4)) {
+        const cityPrompt = prompt.replace(new RegExp(state, 'i'), city);
+        await db
+          .insert('scrape_jobs', {
+            job_type: 'search_query',
+            target_platform: 'instagram',
+            target_handle: cityPrompt,
+            priority: 3,
+            status: 'queued',
+            attempts: 0,
+            queued_at: new Date().toISOString(),
+          })
+          .catch(() => {});
+      }
+      break;
+    }
+  } catch (err) {
+    console.error('[discover-live] state fan-out failed:', err);
+  }
+  return jobId;
 }
 
 function toStringArray(v: unknown): string[] {

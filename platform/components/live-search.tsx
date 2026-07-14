@@ -1251,6 +1251,7 @@ export function LiveSearch({
     setLoading(true);
     setError(null);
     setNeedSeed(false);
+    crawlRun.current += 1; // cancel any in-flight cold-search poll from a prior search
     try {
       const r = await fetch('/api/discover-live', {
         method: 'POST',
@@ -1267,6 +1268,11 @@ export function LiveSearch({
         setRun(null);
       } else {
         setRun(d as RunResponse);
+        // Cold search: the server queued a deep worker crawl and returned its id.
+        // Poll it so the creators the worker tags stream in over the next minute
+        // or two (crawlRun.current was already bumped above, so pollCrawl picks up
+        // this run and self-cancels when a newer search starts).
+        if (d.job_id) void pollCrawl(d.job_id as string, (d.results ?? []) as LiveProfile[]);
       }
     } catch (err) {
       setError((err as Error).message);
