@@ -7,6 +7,7 @@ import {
   tokenize,
   classifyPrompt,
   inferNiche,
+  isLocationToken,
   STATE_CITIES,
   type LiveProfile,
 } from '@/lib/live-discovery';
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
       // Known prompt that's already been crawled → serve the DB instantly, ranked
       // by relevance (and the user's curated list first). The client live-enriches
       // each row's stats lazily as it scrolls into view (via /api/ig-stats).
-      const results = dbMatches.slice(0, max);
+      const results = leadWithLocals(dbMatches, tokens).slice(0, max);
       return NextResponse.json({
         prompt,
         tokens,
@@ -169,7 +170,9 @@ export async function POST(req: NextRequest) {
   }
   // Live mode = "search Instagram" from a username: lead with the crawled
   // network so the searched creator surfaces, then the database fills below.
-  const results = Array.from(byUser.values())
+  // First flag/keep genuine locals for a place query (live finds never carry the
+  // DB's geo flag) so a "…in <city>" search never leads with a global mega-account.
+  const results = leadWithLocals(Array.from(byUser.values()), tokens)
     .sort((a, b) => {
       // Location-matched creators lead, so a real local creator outranks a
       // bigger non-local one on a "...in <place>" query.
@@ -285,6 +288,26 @@ function toStringArray(v: unknown): string[] {
   return Array.isArray(v)
     ? v.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
     : [];
+}
+
+// For a location query ("...in pondicherry"), make sure genuinely-local creators
+// lead and global niche mega-creators don't. Flags loc_match on any result whose
+// profile text mentions the place (covers live-crawled finds, which never get the
+// DB's geo flag), then — when we have a solid set of locals — returns ONLY them so
+// the list isn't topped by a 2.5M global travel account that isn't from the city.
+// No-op for queries without a place token.
+function leadWithLocals(list: LiveProfile[], tokens: string[]): LiveProfile[] {
+  const locTokens = tokens.filter((t) => isLocationToken(t));
+  if (locTokens.length === 0) return list;
+  const wb = (t: string) => new RegExp(`(^|[^a-z])${t}([^a-z]|$)`);
+  for (const p of list) {
+    if (!p.loc_match) {
+      const text = `${p.username} ${p.full_name} ${p.biography} ${p.category}`.toLowerCase();
+      p.loc_match = locTokens.some((t) => wb(t).test(text));
+    }
+  }
+  const locals = list.filter((p) => p.loc_match);
+  return locals.length >= 5 ? locals : list;
 }
 
 async function persist(

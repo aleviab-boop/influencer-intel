@@ -72,7 +72,18 @@ export async function searchCreatorsInDb(
   // search. Only real place tokens match the location field, so this is inert
   // for queries without a location, and degrades gracefully when the DB has no
   // local creators (everyone is loc_hit=false → falls back to relevance).
-  const locExpr = tokens.map((_, i) => `${LOC_TXT} like $${i + 1}`).join(' or ');
+  // Location hit: a place token appears in the creator's geo field OR anywhere
+  // else in their profile (handle / name / bio / niche). Broadening beyond the
+  // geo column catches locals who state their city in bio/handle
+  // ("📍Pondicherry", "@pondicherrytravels") but were never geo-tagged — so a
+  // location search leads with genuine locals, not global niche mega-creators.
+  const locTokenIdx = tokens.map((t, i) => (isLocationToken(t) ? i : -1)).filter((i) => i >= 0);
+  const hasLocToken = locTokenIdx.length > 0;
+  const locHitExpr = hasLocToken
+    ? locTokenIdx
+        .map((i) => `(${LOC_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1} or ${BIO_TXT} like $${i + 1} or ${NICHE_TXT} like $${i + 1})`)
+        .join(' or ')
+    : 'false';
 
   // Location is a RANKING signal, not a hard filter: creators verified in the
   // queried city score higher (LOC_TXT is weighted 3 in tokenScore) and are the
@@ -117,20 +128,22 @@ export async function searchCreatorsInDb(
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
            engagement_rate, is_verified, profile_photo_url, source, gender,
-           (${scoreExpr}) as score, (${locExpr}) as loc_match
+           (${scoreExpr}) as score, (${locHitExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
       ${nicheRequired}
       ${bucketFilter}
       ${floor}
       ${genderFilter}
-    -- Bucket first (scraper finds before Excel imports), THEN weighted relevance:
-    -- a creator matching both the niche and the place ("comedy" + "mumbai")
-    -- outranks one matching only the place. Location is a tiebreak (locals lead
-    -- among equal scores), then reach.
+    -- Bucket first (scraper finds before Excel imports). Then, when the query
+    -- names a place, LOCALS LEAD — a creator based in / mentioning the queried
+    -- city outranks a bigger global account that merely matches the niche
+    -- (otherwise reach drags mega-celebs to the top of a local search). Weighted
+    -- relevance breaks ties, then reach. (locHitExpr is constant-false with no
+    -- place token, so non-location queries keep pure relevance ranking.)
     order by (${SOURCE_BUCKET}) asc,
+             (${locHitExpr}) desc,
              score desc,
-             (${locExpr}) desc,
              follower_count desc nulls last
     limit $${tokens.length + 1}
   `;
