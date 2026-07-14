@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MarketingNav, ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
 
-type Role = 'agency' | 'influencer';
+type Role = 'agency' | 'influencer' | 'admin';
 
 const PANEL: Record<Role, { headline: string; sub: string; points: string[] }> = {
   agency: {
@@ -26,6 +26,15 @@ const PANEL: Record<Role, { headline: string; sub: string; points: string[] }> =
       'On-time payouts, tracked end to end',
     ],
   },
+  admin: {
+    headline: 'Platform control center',
+    sub: 'Run the crawler, live-data pipeline and creator database.',
+    points: [
+      'Scraper & live-data pipeline health',
+      'Crawl jobs, accounts & coverage',
+      'Full creator database controls',
+    ],
+  },
 };
 
 export default function LoginPage() {
@@ -44,7 +53,7 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     setPlan(params.get('plan'));
     const r = params.get('role');
-    if (r === 'influencer' || r === 'agency') setRole(r);
+    if (r === 'influencer' || r === 'agency' || r === 'admin') setRole(r);
   }, []);
 
   // Clear fields/errors when switching roles — no pre-filled credentials.
@@ -58,6 +67,29 @@ export default function LoginPage() {
     e.preventDefault();
     if (loading) return;
     setError(null);
+
+    // Super-admin role authenticates against the separate admin gate and lands
+    // on the /admin control panel (not the agency/influencer app).
+    if (role === 'admin') {
+      if (!email.trim() || !password) { setError('Enter the admin email and password.'); return; }
+      setLoading(true);
+      try {
+        const r = await fetch('/api/admin/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), password }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
+      } catch {
+        setError('Could not reach the server. Try again.'); setLoading(false); return;
+      }
+      try { localStorage.setItem('ii_role', 'admin'); } catch { /* ignore */ }
+      const next = new URLSearchParams(window.location.search).get('next');
+      router.push(next && next.startsWith('/admin') ? next : '/admin');
+      return;
+    }
+
     // Agency role uses real email + password accounts.
     if (role === 'agency') {
       if (!email.trim() || !password) { setError('Enter your email and password.'); return; }
@@ -163,19 +195,20 @@ export default function LoginPage() {
             </p>
 
             {/* role selector */}
-            <div className="mt-6 grid grid-cols-2 gap-2">
+            <div className="mt-6 grid grid-cols-3 gap-2">
               <RoleTab active={role === 'agency'} onClick={() => setRole('agency')} title="Agency" sub="Brand / marketer" />
               <RoleTab active={role === 'influencer'} onClick={() => setRole('influencer')} title="Influencer" sub="Creator" />
+              <RoleTab active={role === 'admin'} onClick={() => setRole('admin')} title="Admin" sub="Super admin" />
             </div>
 
             <form onSubmit={submit} className="mt-5 space-y-4">
               <label className="block">
-                <span className="text-[12px] font-medium text-ink-500 mb-1.5 block">{role === 'agency' ? 'Work email' : 'Email'}</span>
+                <span className="text-[12px] font-medium text-ink-500 mb-1.5 block">{role === 'agency' ? 'Work email' : role === 'admin' ? 'Admin email' : 'Email'}</span>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={role === 'agency' ? 'you@brand.com' : 'you@email.com'}
+                  placeholder={role === 'agency' ? 'you@brand.com' : role === 'admin' ? 'admin@influencerintel.com' : 'you@email.com'}
                   className={inp}
                   autoFocus
                 />
@@ -220,7 +253,7 @@ export default function LoginPage() {
                 style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
               >
                 {loading && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                {loading ? 'Logging in…' : `Log in as ${role === 'influencer' ? 'influencer' : 'agency'}`}
+                {loading ? 'Logging in…' : role === 'admin' ? 'Enter admin panel' : `Log in as ${role === 'influencer' ? 'influencer' : 'agency'}`}
               </button>
 
               {role === 'influencer' && (
@@ -234,10 +267,16 @@ export default function LoginPage() {
               )}
             </form>
 
-            <p className="mt-6 text-center text-[13px] text-ink-500">New here? <Link href={`/signup?role=${role}`} className="font-semibold" style={{ color: ACCENT }}>Create an account</Link></p>
-            <p className="mt-1 text-center text-[11px] text-ink-400">
-              {role === 'agency' ? 'Agency demo login — agency@gmail.com / agency' : 'Demo login — any email gets you in.'}
-            </p>
+            {role === 'admin' ? (
+              <p className="mt-6 text-center text-[11px] text-ink-400">Restricted — platform staff only.</p>
+            ) : (
+              <>
+                <p className="mt-6 text-center text-[13px] text-ink-500">New here? <Link href={`/signup?role=${role}`} className="font-semibold" style={{ color: ACCENT }}>Create an account</Link></p>
+                <p className="mt-1 text-center text-[11px] text-ink-400">
+                  {role === 'agency' ? 'Agency demo login — agency@gmail.com / agency' : 'Demo login — any email gets you in.'}
+                </p>
+              </>
+            )}
           </div>
         </div>
       </main>
