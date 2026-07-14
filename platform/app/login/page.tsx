@@ -129,6 +129,9 @@ export default function LoginPage() {
         @keyframes ii-drift2 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(-50px,-30px) scale(1.15) } }
         @keyframes ii-drift3 { 0%,100% { transform: translate(0,0) } 50% { transform: translate(30px,-40px) } }
         @keyframes ii-spin { to { transform: rotate(360deg) } }
+        @keyframes ii-float { 0%,100% { transform: translate(0,0) } 50% { transform: translate(6px,-18px) } }
+        @keyframes ii-twinkle { 0%,100% { opacity:.15 } 50% { opacity:.6 } }
+        @keyframes ii-shimmer { 0% { transform: translateX(-160%) } 100% { transform: translateX(360%) } }
       `}</style>
       <MarketingNav />
       <main className="flex-1 grid place-items-center px-4 sm:px-6 py-10 relative overflow-hidden">
@@ -153,6 +156,24 @@ export default function LoginPage() {
           <div className="relative hidden md:flex flex-col justify-between p-9 text-white overflow-hidden" style={{ background: `linear-gradient(150deg, ${ACCENT}, #7c5cff 55%, #9b7bff)` }}>
             <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/15 blur-2xl" style={{ animation: 'ii-blob 9s ease-in-out infinite' }} />
             <div className="absolute -bottom-20 -left-10 w-72 h-72 rounded-full bg-black/10 blur-2xl" style={{ animation: 'ii-blob 11s ease-in-out infinite reverse' }} />
+
+            {/* floating particles + light shimmer sweep behind the content */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              <div className="absolute inset-0 rotate-12">
+                <div className="absolute top-0 h-full w-1/3" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent)', animation: 'ii-shimmer 7s ease-in-out infinite' }} />
+              </div>
+              {[
+                { l: '12%', t: '24%', s: 10, d: '0s', dur: '11s' },
+                { l: '80%', t: '30%', s: 7, d: '1.5s', dur: '9s' },
+                { l: '28%', t: '68%', s: 14, d: '.8s', dur: '13s' },
+                { l: '64%', t: '80%', s: 6, d: '2.2s', dur: '10s' },
+                { l: '86%', t: '58%', s: 9, d: '.4s', dur: '12s' },
+                { l: '20%', t: '46%', s: 5, d: '3s', dur: '8s' },
+                { l: '52%', t: '16%', s: 6, d: '1.1s', dur: '10s' },
+              ].map((p, i) => (
+                <span key={i} className="absolute rounded-full bg-white" style={{ left: p.l, top: p.t, width: p.s, height: p.s, animation: `ii-float ${p.dur} ease-in-out ${p.d} infinite, ii-twinkle ${p.dur} ease-in-out ${p.d} infinite` }} />
+              ))}
+            </div>
 
             <div className="relative flex items-center gap-2">
               <span className="w-9 h-9 rounded-xl grid place-items-center bg-white/90 backdrop-blur"><BrandMark size={26} /></span>
