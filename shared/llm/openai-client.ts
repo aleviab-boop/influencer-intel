@@ -239,40 +239,63 @@ Generate 30-50 candidate Instagram handles.`,
    * Prefers genuine local / mid-tier creators over global celebrities.
    */
   async suggestHandlesFromPrompt(prompt: string, max = 15): Promise<string[]> {
+    // Uses a web-search-enabled model so it actually BROWSES the web (creator
+    // lists, blogs, directories) for current, real handles — far better than a
+    // plain model guessing from training memory. Search models don't accept
+    // temperature / json response_format, so we prompt for JSON and parse
+    // leniently (they often reply with prose + citations).
     const res = await this.client.chat.completions.create({
-      model: this.classificationModel, // gpt-4o-mini
-      temperature: 0.3,
-      response_format: { type: 'json_object' },
+      model: 'gpt-4o-mini-search-preview',
+      web_search_options: { search_context_size: 'medium' },
       messages: [
         {
           role: 'system',
-          content: `You are an Instagram creator-research assistant for an INDIAN influencer-marketing platform. Given a search query, return REAL Instagram usernames of creators that genuinely match BOTH the niche and the location in the query.
+          content: `You are an Instagram creator-research assistant for an INDIAN influencer-marketing platform. Search the web to find REAL Instagram creators that match BOTH the niche and the location in the query.
 Rules:
 - INDIA ONLY. Only creators based in India, who are Indian and post for an Indian audience. NEVER suggest foreign / international / non-Indian creators or accounts based outside India. If unsure whether a creator is Indian, do not include them.
 - If the query names an Indian city, prioritise creators actually from that city; if no location is given, assume India-wide.
-- Only handles you are reasonably confident exist.
 - Prefer genuine local / mid-tier Indian creators (nano to ~1M followers) over big celebrities.
 - Exclude brands, news outlets, agencies, marketplaces, meme/fan pages.
-- Never invent or guess handles.
-Output strict JSON: { "handles": ["username1", "username2", ...] } with at most ${max} handles, no @ prefix.`,
+- Only real, existing handles you can find via search — never invent or guess.
+Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["username1","username2"]} with at most ${max} handles, no @ prefix.`,
         },
         { role: 'user', content: prompt },
       ],
     });
-    const content = res.choices[0]?.message?.content ?? '{}';
-    let parsed: { handles?: unknown };
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      return [];
+    const content = res.choices[0]?.message?.content ?? '';
+    return this.parseHandles(content, max);
+  }
+
+  /** Extract IG handles from an LLM reply — clean JSON first, else @mentions /
+   *  instagram.com links in prose (search models return citations + prose). */
+  private parseHandles(content: string, max: number): string[] {
+    const clean = (arr: unknown[]): string[] =>
+      Array.from(
+        new Set(
+          arr
+            .filter((h): h is string => typeof h === 'string')
+            .map((h) => h.replace(/^@/, '').toLowerCase().trim())
+            .filter((h) => /^[a-z0-9._]{2,30}$/.test(h)),
+        ),
+      ).slice(0, max);
+
+    // 1. JSON object with "handles"
+    const jsonMatch = content.match(/\{[\s\S]*?"handles"[\s\S]*?\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]) as { handles?: unknown };
+        if (Array.isArray(parsed.handles)) {
+          const out = clean(parsed.handles);
+          if (out.length) return out;
+        }
+      } catch {
+        /* fall through to text extraction */
+      }
     }
-    return Array.isArray(parsed.handles)
-      ? parsed.handles
-          .filter((h: unknown): h is string => typeof h === 'string')
-          .map((h) => h.replace(/^@/, '').toLowerCase().trim())
-          .filter((h) => /^[a-z0-9._]{2,30}$/.test(h))
-          .slice(0, max)
-      : [];
+    // 2. Fallback — pull @handles and instagram.com/handle out of the prose.
+    const fromAt = [...content.matchAll(/@([a-z0-9._]{2,30})/gi)].map((m) => m[1] ?? '');
+    const fromUrl = [...content.matchAll(/instagram\.com\/([a-z0-9._]{2,30})/gi)].map((m) => m[1] ?? '');
+    return clean([...fromAt, ...fromUrl]);
   }
 
   /**
