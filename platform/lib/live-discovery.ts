@@ -384,43 +384,6 @@ export function topicHandleCandidates(prompt: string): string[] {
   return Array.from(out);
 }
 
-// Instagram's topsearch returns real users IG itself ranks for a query — but
-// only for a LOGGED-IN session. With our authenticated cookie it works, so it's
-// a far more reliable seed source than guessing "<city><niche>" handles (which
-// only hits when such a handle happens to exist). Degrades to [] if the cookie
-// is dead/restricted, so callers safely fall back to handle-guessing.
-async function topsearchSeeds(prompt: string, budgetMs: number): Promise<NameMatch[]> {
-  const q = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t)).join(' ') || prompt;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), Math.min(10_000, budgetMs));
-  try {
-    const res = await igFetch(
-      `https://www.instagram.com/web/search/topsearch/?query=${encodeURIComponent(q)}`,
-      { headers: REQUEST_HEADERS, signal: ctrl.signal },
-    );
-    if (!res.ok) return [];
-    const json = (await res.json()) as {
-      users?: Array<{ user?: { username?: string; full_name?: string; follower_count?: number } }>;
-    };
-    const out: NameMatch[] = [];
-    for (const e of json?.users ?? []) {
-      const u = e?.user;
-      if (u?.username) {
-        out.push({
-          handle: u.username,
-          full_name: u.full_name ?? '',
-          followers: typeof u.follower_count === 'number' ? u.follower_count : 0,
-        });
-      }
-    }
-    return out;
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 export async function resolveTopicToSeeds(
   prompt: string,
   opts: { limit?: number; budgetMs?: number; delayMs?: number; maxProbes?: number } = {},
@@ -431,22 +394,13 @@ export async function resolveTopicToSeeds(
   const maxProbes = opts.maxProbes ?? 60;
   const startedAt = Date.now();
 
+  // NOTE: Instagram blocks its search + hashtag endpoints for a plain
+  // (non-browser) request even WITH a valid cookie (401 / redirect-to-login) —
+  // only web_profile_info is reachable. So the instant platform-side seed
+  // resolution can only PROBE guessed "<city><niche>" handles; genuine
+  // search-based discovery for an arbitrary niche+city has to run on the worker
+  // (full browser session), which the cold-search flow already queues.
   const matches: NameMatch[] = [];
-  const have = new Set<string>();
-  const add = (m: NameMatch) => {
-    const k = m.handle.toLowerCase();
-    if (!have.has(k)) { have.add(k); matches.push(m); }
-  };
-
-  // 1. Topsearch first — one authenticated call, IG's own ranked results for the
-  //    query. Reliable across niches, no dependence on a guessed handle existing.
-  for (const m of await topsearchSeeds(prompt, budgetMs)) {
-    if (matches.length >= limit) break;
-    add(m);
-  }
-
-  // 2. Supplement with handle-guessing — exact "<city><niche>" accounts topsearch
-  //    may rank below generic ones — within the remaining time budget.
   let probed = 0;
   for (const handle of topicHandleCandidates(prompt)) {
     if (matches.length >= limit || probed >= maxProbes) break;
@@ -455,7 +409,7 @@ export async function resolveTopicToSeeds(
     const user = await fetchProfile(handle, budgetMs - (Date.now() - startedAt));
     await sleep(delayMs);
     if (user?.username) {
-      add({
+      matches.push({
         handle: user.username,
         full_name: user.full_name ?? '',
         followers: user.edge_followed_by?.count ?? 0,
