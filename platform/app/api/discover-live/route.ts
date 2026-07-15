@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       // by relevance (and the user's curated list first). The client live-enriches
       // each row's stats lazily as it scrolls into view (via /api/ig-stats).
       const results = flagLocals(dbMatches, tokens).slice(0, max);
+      const place = extractPlace(prompt, tokens);
       return NextResponse.json({
         prompt,
         tokens,
@@ -80,6 +81,8 @@ export async function POST(req: NextRequest) {
         auto_seeds: [],
         job_id: null,
         cold: false,
+        place,
+        localsFound: place ? countLocals(results, place) : null,
       });
     }
     // NEW prompt (never crawled by the scraper) → enqueue a deep worker crawl
@@ -203,6 +206,7 @@ export async function POST(req: NextRequest) {
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
   const persisted = await persist(liveProfiles, { region: cls.region, niche, tags });
 
+  const place = extractPlace(prompt, tokens);
   return NextResponse.json({
     prompt,
     tokens,
@@ -214,6 +218,8 @@ export async function POST(req: NextRequest) {
     auto_seeds: autoSeeds,
     job_id: workerJobId,
     cold: workerJobId != null,
+    place,
+    localsFound: place ? countLocals(results, place) : null,
   });
 }
 
@@ -288,6 +294,25 @@ function toStringArray(v: unknown): string[] {
   return Array.isArray(v)
     ? v.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
     : [];
+}
+
+// The place a location query targets: a known city token, else the word after
+// "…in <place>" (covers small towns not in our city list, e.g. "…in varkala").
+function extractPlace(prompt: string, tokens: string[]): string | null {
+  const known = tokens.find((t) => isLocationToken(t));
+  if (known) return known;
+  const m = prompt.toLowerCase().match(/\bin\s+([a-z][a-z]{2,})\b\s*$/);
+  return m?.[1] ?? null;
+}
+
+// How many results are genuinely FROM the place — loc_match (geo/DB) or the place
+// word appearing in the profile text. Lets the UI warn "no locals found, showing
+// the broader niche" when a location search has zero true-local results.
+function countLocals(results: LiveProfile[], place: string): number {
+  const wb = new RegExp(`(^|[^a-z])${place}([^a-z]|$)`);
+  return results.filter(
+    (r) => r.loc_match || wb.test(`${r.username} ${r.full_name} ${r.biography} ${r.category}`.toLowerCase()),
+  ).length;
 }
 
 // For a location query ("...in pondicherry"), flag loc_match on any result whose

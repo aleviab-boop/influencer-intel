@@ -83,6 +83,8 @@ interface RunResponse {
   auto_seeds?: Array<{ handle: string; followers: number }>;
   from_db?: number;
   from_live?: number;
+  place?: string | null;
+  localsFound?: number | null;
 }
 
 function fmt(n: number): string {
@@ -1573,6 +1575,15 @@ export function LiveSearch({
       {/* results table */}
       {run && !loading && (
         <div className="mt-6">
+          {run.place && run.localsFound === 0 && run.results.length > 0 && (() => {
+            const niche = run.prompt.replace(/\s*\bin\b\s+.*$/i, '').trim() || 'creators';
+            return (
+              <div className="mb-3 flex items-start gap-2 px-3.5 py-2.5 rounded-xl border border-amber-200 bg-amber-50 text-[13px] text-amber-800">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+                <span>No <b>{niche}</b> from <b className="capitalize">{run.place}</b> found — showing the closest {niche} matches instead.</span>
+              </div>
+            );
+          })()}
           <div className="flex items-center justify-between mb-3">
             <div className="text-[14px] text-[#555]">
               <span className="font-semibold text-[#111]">{shown.length}</span>
