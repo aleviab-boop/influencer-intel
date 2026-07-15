@@ -419,6 +419,34 @@ export async function resolveTopicToSeeds(
   return matches.sort((a, b) => b.followers - a.followers);
 }
 
+// Validate a list of (possibly AI-suggested) handles against Instagram and
+// return scored LiveProfiles for the ones that actually exist. Non-existent or
+// renamed handles resolve to null via web_profile_info and are dropped — which
+// is exactly how we discard LLM hallucinations. Capped + throttled to protect
+// the session, and stops early if it runs out of time budget.
+export async function profilesFromHandles(
+  handles: string[],
+  tokens: string[],
+  opts: { max?: number; delayMs?: number; budgetMs?: number } = {},
+): Promise<LiveProfile[]> {
+  const max = opts.max ?? 12;
+  const delayMs = opts.delayMs ?? 350;
+  const budgetMs = opts.budgetMs ?? 16_000;
+  const startedAt = Date.now();
+  const seen = new Set<string>();
+  const out: LiveProfile[] = [];
+  for (const raw of handles) {
+    const h = raw.trim().toLowerCase().replace(/^@/, '');
+    if (!/^[a-z0-9._]{2,30}$/.test(h) || seen.has(h)) continue;
+    seen.add(h);
+    if (out.length >= max || Date.now() - startedAt > budgetMs) break;
+    const user = await fetchProfile(h, budgetMs - (Date.now() - startedAt));
+    await sleep(delayMs);
+    if (user?.username) out.push(summarize(user, tokens));
+  }
+  return out;
+}
+
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 const PHONE_RE = /(?:\+?91[\s-]?)?[6-9]\d{9}/;
 

@@ -232,6 +232,48 @@ Generate 30-50 candidate Instagram handles.`,
   }
 
   /**
+   * Suggest REAL Instagram handles for a plain-English prompt (e.g. "fashion
+   * influencer in guwahati"). Instagram blocks keyword search for our session,
+   * so we let the model name creators it knows; every handle is validated
+   * against Instagram afterwards, so hallucinations are dropped downstream.
+   * Prefers genuine local / mid-tier creators over global celebrities.
+   */
+  async suggestHandlesFromPrompt(prompt: string, max = 15): Promise<string[]> {
+    const res = await this.client.chat.completions.create({
+      model: this.classificationModel, // gpt-4o-mini
+      temperature: 0.3,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are an Instagram creator-research assistant. Given a search query, return REAL Instagram usernames of creators that genuinely match BOTH the niche and the location in the query.
+Rules:
+- Only handles you are reasonably confident exist.
+- Prefer genuine local / mid-tier creators (nano to ~1M followers) over global celebrities.
+- Exclude brands, news outlets, agencies, marketplaces, meme/fan pages.
+- Never invent or guess handles.
+Output strict JSON: { "handles": ["username1", "username2", ...] } with at most ${max} handles, no @ prefix.`,
+        },
+        { role: 'user', content: prompt },
+      ],
+    });
+    const content = res.choices[0]?.message?.content ?? '{}';
+    let parsed: { handles?: unknown };
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return [];
+    }
+    return Array.isArray(parsed.handles)
+      ? parsed.handles
+          .filter((h: unknown): h is string => typeof h === 'string')
+          .map((h) => h.replace(/^@/, '').toLowerCase().trim())
+          .filter((h) => /^[a-z0-9._]{2,30}$/.test(h))
+          .slice(0, max)
+      : [];
+  }
+
+  /**
    * Generate 12-15 diverse natural-language search queries from a brief.
    * These run against IG's topsearch endpoint to surface real, IG-ranked
    * users — way better than hallucinated handles. Mix:

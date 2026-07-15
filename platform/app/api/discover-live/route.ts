@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
+import { getOpenAIClient } from '@influencer-intel/shared/llm';
 import {
   liveDiscover,
   resolveNameToSeeds,
   resolveTopicToSeeds,
+  profilesFromHandles,
   tokenize,
   classifyPrompt,
   inferNiche,
@@ -114,6 +116,25 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // 1b. AI-assisted discovery (Lander searches). Instagram blocks keyword search
+  //     for our session, so OpenAI names REAL handles for the niche+location; we
+  //     validate each against Instagram (dropping hallucinations) and use them
+  //     BOTH as crawl seeds and as results. Best-effort — never blocks the flow.
+  let aiProfiles: LiveProfile[] = [];
+  if (mode === 'db') {
+    try {
+      const handles = await getOpenAIClient().suggestHandlesFromPrompt(prompt, 15);
+      if (handles.length > 0) {
+        aiProfiles = (await profilesFromHandles(handles, tokens, { max: 12 })).map(
+          (p) => ({ ...p, from: 'live' as const }),
+        );
+        for (const p of aiProfiles) if (!seeds.includes(p.username)) seeds.push(p.username);
+      }
+    } catch (err) {
+      console.error('[discover-live] AI suggest failed:', err);
+    }
+  }
+
   const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
   if (uniqueSeeds.length > 0) {
     try {
@@ -128,7 +149,7 @@ export async function POST(req: NextRequest) {
   const dbMatches = await searchCreatorsInDb(tokens, max);
 
   // 3. Nothing anywhere → ask for a starting point.
-  if (dbMatches.length === 0 && liveProfiles.length === 0) {
+  if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {
     // Cold Lander search where the live crawl also came back empty: don't error —
     // the deep worker crawl is already queued, so return an empty set + the job id
     // and let the client poll it as the worker tags fresh finds over the next
@@ -164,7 +185,7 @@ export async function POST(req: NextRequest) {
   //    prompt first, then reach (followers) — regardless of source. Dedupe by
   //    handle, keeping the higher-scored / richer row.
   const byUser = new Map<string, LiveProfile>();
-  for (const p of [...liveProfiles, ...dbMatches]) {
+  for (const p of [...aiProfiles, ...liveProfiles, ...dbMatches]) {
     const key = p.username.toLowerCase();
     const ex = byUser.get(key);
     if (!ex || p.score > ex.score || (p.score === ex.score && p.followers > ex.followers)) {
@@ -204,7 +225,8 @@ export async function POST(req: NextRequest) {
   const cls = classifyPrompt(prompt);
   const niche = cls.niche ?? inferNiche(liveProfiles.length ? liveProfiles : dbMatches);
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
-  const persisted = await persist(liveProfiles, { region: cls.region, niche, tags });
+  // Persist both AI-found and crawled creators so the DB keeps building.
+  const persisted = await persist([...aiProfiles, ...liveProfiles], { region: cls.region, niche, tags });
 
   const place = extractPlace(prompt, tokens);
   return NextResponse.json({
@@ -213,6 +235,7 @@ export async function POST(req: NextRequest) {
     results,
     from_db: results.filter((r) => r.from === 'db').length,
     from_live: results.filter((r) => r.from === 'live').length,
+    from_ai: aiProfiles.length,
     persisted,
     resolved_from_names: resolvedFromNames,
     auto_seeds: autoSeeds,
