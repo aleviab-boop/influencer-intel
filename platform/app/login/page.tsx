@@ -86,7 +86,9 @@ export default function LoginPage() {
       }
       try { localStorage.setItem('ii_role', 'admin'); } catch { /* ignore */ }
       const next = new URLSearchParams(window.location.search).get('next');
-      router.push(next && next.startsWith('/admin') ? next : '/admin');
+      // Never bounce back to the (deleted) /admin/login — land on the panel.
+      const dest = next && next.startsWith('/admin') && next !== '/admin/login' ? next : '/admin';
+      router.push(dest);
       return;
     }
 

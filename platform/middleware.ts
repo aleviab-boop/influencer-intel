@@ -23,8 +23,10 @@ export async function middleware(req: NextRequest) {
   if (!valid) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
+    url.search = ''; // drop any stale query
     url.searchParams.set('role', 'admin');
-    url.searchParams.set('next', pathname);
+    // Preserve where they were headed — but never the deleted /admin/login.
+    if (pathname !== '/admin/login') url.searchParams.set('next', pathname);
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
