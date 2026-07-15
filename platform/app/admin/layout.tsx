@@ -54,9 +54,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isActive = (href: string) =>
     href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
 
-  // The login page renders bare (no sidebar) — you're not signed in yet.
-  if (pathname === '/admin/login') return <>{children}</>;
-
   return (
     <div className="min-h-screen flex bg-[#fafafc] text-[#111] font-sans">
       {/* sidebar */}
@@ -114,7 +111,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'sign_out' }),
               }).catch(() => {});
-              window.location.href = '/admin/login';
+              window.location.href = '/login?role=admin';
             }}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-[#888] hover:bg-rose-50 hover:text-rose-600 transition-colors"
           >
