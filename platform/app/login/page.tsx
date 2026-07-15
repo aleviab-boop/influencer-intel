@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MarketingNav, ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
+import { ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
 
 type Role = 'agency' | 'influencer' | 'admin';
 
@@ -135,7 +135,6 @@ export default function LoginPage() {
         @keyframes ii-twinkle { 0%,100% { opacity:.15 } 50% { opacity:.6 } }
         @keyframes ii-shimmer { 0% { transform: translateX(-160%) } 100% { transform: translateX(360%) } }
       `}</style>
-      <MarketingNav />
       <main className="flex-1 grid place-items-center px-4 sm:px-6 py-10 relative overflow-hidden">
         <div className="absolute inset-0" style={{ background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 55% at 90% 6%, rgba(247,181,0,.15), transparent 60%), radial-gradient(55% 50% at 60% 0%, rgba(236,72,153,.12), transparent 55%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
 
