@@ -83,7 +83,11 @@ interface LiveUser {
   };
 }
 
-async function fetchLiveUser(handle: string): Promise<LiveUser | null> {
+// Returns the live user when available, plus `notFound` = IG DEFINITIVELY says
+// this handle doesn't exist (404, or 200 with a null user). That's distinct from
+// a throttle (401/429/network), where the account may well be real — we must NOT
+// prune on those. Only a definitive not-found lets us clean up a hallucinated stub.
+async function fetchLiveUser(handle: string): Promise<{ user: LiveUser | null; notFound: boolean }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12_000);
   try {
@@ -91,13 +95,37 @@ async function fetchLiveUser(handle: string): Promise<LiveUser | null> {
       headers: REQUEST_HEADERS,
       signal: ctrl.signal,
     });
-    if (!res.ok) return null; // 401 (no cookie) / 404 / 429 → fall back to DB
+    if (res.status === 404) return { user: null, notFound: true }; // confirmed gone
+    if (!res.ok) return { user: null, notFound: false }; // 401 (no cookie) / 429 → throttle, keep
     const json = (await res.json()) as { data?: { user?: LiveUser } };
-    return json?.data?.user ?? null;
+    const user = json?.data?.user ?? null;
+    return { user, notFound: user == null }; // 200 but no user → also confirmed gone
   } catch {
-    return null; // network error / abort / relay down / non-JSON login wall
+    return { user: null, notFound: false }; // network error / abort / relay down → throttle, keep
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// A stub we couldn't verify at discovery time just came back DEFINITIVELY 404 on
+// enrichment → it was an AI hallucination. Soft-delete it (is_active = false) so
+// it drops out of search, but ONLY if it's a sparse, never-enriched scrape stub.
+// A real creator (has reach, was scraped before, richer data, or is curated) is
+// never touched — a transient 404 on them shouldn't wipe them.
+async function pruneHallucinatedStub(handle: string): Promise<void> {
+  try {
+    await getBolticClient().query(
+      `UPDATE creators SET is_active = false
+       WHERE platform = 'instagram' AND lower(handle) = lower($1)
+         AND is_active = true
+         AND source = 'scrape'                    -- never curated / imported / icmp
+         AND last_scraped_at IS NULL              -- never successfully enriched
+         AND coalesce(follower_count, 0) = 0      -- no real reach on record
+         AND coalesce(data_completeness, 0) <= 3  -- a sparse stub, not a full row`,
+      [handle],
+    );
+  } catch {
+    /* best-effort cleanup — never break the request */
   }
 }
 
@@ -369,7 +397,7 @@ export async function GET(req: NextRequest) {
   // 1) LIVE via the cookie scraper (through the residential relay/proxy). This is
   //    the primary path: real followers, recent posts, live ER, reel-forecast
   //    inputs. Falls through to the DB if it fails.
-  const u = await fetchLiveUser(handle);
+  const { user: u, notFound } = await fetchLiveUser(handle);
   if (u && u.username) {
     const edges = u.edge_owner_to_timeline_media?.edges ?? [];
     const followers = u.edge_followed_by?.count ?? 0;
@@ -490,6 +518,10 @@ export async function GET(req: NextRequest) {
       refreshing: false,
     });
   }
+
+  // Live fetch DEFINITIVELY 404'd → if this was an un-enriched hallucinated stub,
+  // retire it in the background so it stops polluting future searches.
+  if (notFound) after(() => pruneHallucinatedStub(handle));
 
   // 2) DB fallback (worker-discovered row or a prior live persist).
   return dbProfile(handle);
