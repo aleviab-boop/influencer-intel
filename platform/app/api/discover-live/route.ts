@@ -420,8 +420,8 @@ async function persist(
           const rows = await db.query<{ id: string }>(
             `INSERT INTO creators
                (platform, handle, profile_url, display_name, primary_category,
-                profile_photo_url, is_verified, data_completeness, source, data_tier, is_active, first_indexed_at)
-             VALUES ('instagram', $1, $2, $3, $4, $5, $6, $7, 'scrape', 'tier_c', true, NOW())
+                profile_photo_url, is_verified, data_completeness, is_indian, source, data_tier, is_active, first_indexed_at)
+             VALUES ('instagram', $1, $2, $3, $4, $5, $6, $7, true, 'scrape', 'tier_c', true, NOW())
              ON CONFLICT (platform, handle) DO UPDATE SET
                display_name      = COALESCE(creators.display_name, EXCLUDED.display_name),
                primary_category  = COALESCE(creators.primary_category, EXCLUDED.primary_category),
@@ -457,6 +457,12 @@ async function persist(
               // store the freshly computed engagement (as a ratio) when we have it
               ...(p.engagement > 0 ? { engagement_rate: p.engagement / 100 } : {}),
               data_completeness: cscore,
+              // This is an India-first platform: the AI suggester is India-only
+              // (+ India relevance filter) and the crawl is seeded from Indian
+              // creators, so anything surfaced here is an Indian creator. The old
+              // deep-scraper set this flag; the discovery path never did, which is
+              // why Indian% read artificially low (~34%).
+              is_indian: true,
               source: 'scrape',
               data_tier: 'tier_c',
               is_active: true,
