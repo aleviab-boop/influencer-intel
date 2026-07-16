@@ -30,8 +30,12 @@ export async function GET() {
   ] = await Promise.all([
     one(`SELECT count(*)::int AS n FROM creators WHERE platform='instagram'`),
     one(`SELECT count(*)::int AS n FROM creators WHERE platform='instagram' AND is_active = true`),
-    one(`SELECT count(*)::int AS n FROM creators WHERE last_scraped_at > NOW() - INTERVAL '24 hours'`),
-    one(`SELECT count(*)::int AS n FROM creators WHERE last_scraped_at > NOW() - INTERVAL '1 hour'`),
+    // Count BOTH freshly-discovered (first_indexed_at, set by search/crawl
+    // persist) AND freshly-enriched (last_scraped_at, set by the drawer live
+    // fetch). The old query only saw last_scraped_at, so hundreds of creators
+    // added by search discovery never showed up — the number looked frozen.
+    one(`SELECT count(*)::int AS n FROM creators WHERE platform='instagram' AND (last_scraped_at > NOW() - INTERVAL '24 hours' OR first_indexed_at > NOW() - INTERVAL '24 hours')`),
+    one(`SELECT count(*)::int AS n FROM creators WHERE platform='instagram' AND (last_scraped_at > NOW() - INTERVAL '1 hour' OR first_indexed_at > NOW() - INTERVAL '1 hour')`),
     one(`SELECT count(*)::int AS n FROM scrape_jobs WHERE status='queued'`),
     one(`SELECT count(*)::int AS n FROM scrape_jobs WHERE status='in_progress'`),
     one(`SELECT count(*)::int AS n FROM scrape_jobs WHERE status='completed' AND completed_at > NOW() - INTERVAL '24 hours'`),
