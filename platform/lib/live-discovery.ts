@@ -492,11 +492,22 @@ export async function profilesFromHandles(
   const startedAt = Date.now();
   const seen = new Set<string>();
   const out: LiveProfile[] = [];
+  // `max`/`budgetMs` now cap only how many handles we LIVE-VALIDATE against IG
+  // (the slow, rate-limited part) — NOT how many we keep. Every handle the prompt
+  // surfaces is kept: validated ones with full data, the rest as stubs the caller
+  // persists and enriches later. Only handles IG confirms as non-existent are
+  // dropped (the hallucination filter). So "whatever comes up — 10, 15, 20 —"
+  // all lands in the DB.
+  let validated = 0;
   for (const raw of handles) {
     const h = raw.trim().toLowerCase().replace(/^@/, '');
     if (!/^[a-z0-9._]{2,30}$/.test(h) || seen.has(h)) continue;
     seen.add(h);
-    if (out.length >= max || Date.now() - startedAt > budgetMs) break;
+    if (validated >= max || Date.now() - startedAt > budgetMs) {
+      out.push(stubProfile(h, tokens)); // over validation budget → keep as stub, don't drop
+      continue;
+    }
+    validated++;
     const { user, status } = await fetchProfileWithStatus(h, budgetMs - (Date.now() - startedAt));
     await sleep(delayMs);
     if (user?.username) {
