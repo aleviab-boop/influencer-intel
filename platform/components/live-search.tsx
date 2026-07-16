@@ -24,6 +24,7 @@ interface LiveProfile {
   link?: string | null;
   creator_id?: string;
   from?: 'db' | 'live';
+  from_ai?: boolean;
   loc_match?: boolean;
   curated?: boolean;
   gender?: 'female' | 'male' | 'unknown' | null;
@@ -1786,7 +1787,11 @@ export function LiveSearch({
                               {p.is_verified && (
                                 <span title="verified" style={{ color: ACCENT }}>✔</span>
                               )}
-                              {p.from === 'db' && (
+                              {p.from_ai ? (
+                                <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#f3ecff] text-[#7C3AED] border border-[#e2d4ff]" title="Surfaced by AI web search">
+                                  AI
+                                </span>
+                              ) : p.from === 'db' && (
                                 <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#eef] text-[#6C4DF6]" title="from your database">
                                   DB
                                 </span>

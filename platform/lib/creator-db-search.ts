@@ -12,6 +12,20 @@ import { extractContact, expandStateTokens, isLocationToken, type LiveProfile } 
 // than a stray substring in someone's bio. Ranking by this weighted relevance
 // (instead of by follower count) stops mega-celebrities from burying smaller,
 // better-matched creators.
+// Role-words that describe WHAT a creator is, not WHICH niche. They recur
+// across unrelated verticals ("hair artist", "makeup artist", "tattoo artist"),
+// so on their own they qualify almost anyone — a search for "tattoo artist"
+// must be anchored by the SPECIFIC term ("tattoo"), with "artist" only adding
+// score, never gating a row in. Kept deliberately narrow: real niches
+// (photographer, chef, gamer, designer, model…) are NOT listed here.
+const GENERIC_NICHE = new Set([
+  'artist', 'artists', 'creator', 'creators', 'influencer', 'influencers',
+  'blogger', 'bloggers', 'vlogger', 'vloggers', 'content', 'official',
+  'page', 'pages', 'account', 'star', 'stars', 'guy', 'guys', 'girl',
+  'girls', 'boy', 'boys', 'video', 'videos', 'reel', 'reels', 'daily',
+  'world', 'love', 'best', 'top', 'the', 'and', 'for', 'with', 'your', 'you',
+]);
+
 const LOC_TXT = `lower(coalesce(region,'') || ' ' || coalesce(primary_city,''))`;
 const NICHE_TXT = `lower(coalesce(genre,'') || ' ' || coalesce(niche,'') || ' ' || coalesce(primary_category,'') || ' ' || coalesce(array_to_string(tags, ' '), ''))`;
 const ID_TXT = `lower(coalesce(handle,'') || ' ' || coalesce(display_name,''))`;
@@ -100,8 +114,15 @@ export async function searchCreatorsInDb(
   const nicheIdx = tokens
     .map((t, i) => (isLocationToken(t) ? -1 : i))
     .filter((i) => i >= 0);
-  const nicheRequired = nicheIdx.length
-    ? `and (${nicheIdx.map((i) => `(${NICHE_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1})`).join(' or ')})`
+  // Anchor the gate on the SPECIFIC niche tokens ("tattoo", "vegan", "saree")
+  // and drop the generic role-words ("artist", "creator") from the requirement,
+  // so a Pune HAIR artist can't satisfy a "tattoo artist" query just by matching
+  // "artist". When the query is *only* generic words we fall back to the full
+  // set (something still has to match). Generics keep contributing to `score`.
+  const specificIdx = nicheIdx.filter((i) => !GENERIC_NICHE.has((tokens[i] ?? '').toLowerCase()));
+  const gateIdx = specificIdx.length ? specificIdx : nicheIdx;
+  const nicheRequired = gateIdx.length
+    ? `and (${gateIdx.map((i) => `(${NICHE_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1})`).join(' or ')})`
     : '';
 
   // Source bucket: the browser scraper's own finds come FIRST, then the
