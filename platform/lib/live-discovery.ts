@@ -63,6 +63,8 @@ export interface LiveProfile {
   loc_match?: boolean; // matched a place token in the location field (DB search)
   curated?: boolean; // from the user's own curated/imported list (source='manual')
   gender?: 'female' | 'male' | 'unknown' | null; // creator's inferred gender
+  unverified?: boolean; // AI-suggested but not yet confirmed on IG (cookie down)
+  from_ai?: boolean; // surfaced by the OpenAI web-search suggester
 }
 
 export interface LiveDiscoveryResult {
@@ -138,6 +140,28 @@ async function fetchProfile(username: string, budgetMs: number): Promise<RawUser
     return json?.data?.user ?? null;
   } catch {
     return null; // network error / abort / non-JSON login wall
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Like fetchProfile but also reports the HTTP status, so callers can tell a
+// genuine 404 (handle doesn't exist) apart from a 401/429/timeout (couldn't
+// verify because the session is throttled/down). status 200 with a null user
+// also means "doesn't exist"; status 0 means network/abort.
+async function fetchProfileWithStatus(
+  username: string,
+  budgetMs: number,
+): Promise<{ user: RawUser | null; status: number }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Math.min(12_000, budgetMs));
+  try {
+    const res = await igFetch(PROFILE_URL(username), { headers: REQUEST_HEADERS, signal: ctrl.signal });
+    if (!res.ok) return { user: null, status: res.status };
+    const json = (await res.json()) as { data?: { user?: RawUser } };
+    return { user: json?.data?.user ?? null, status: 200 };
+  } catch {
+    return { user: null, status: 0 };
   } finally {
     clearTimeout(timer);
   }
@@ -420,10 +444,13 @@ export async function resolveTopicToSeeds(
 }
 
 // Validate a list of (possibly AI-suggested) handles against Instagram and
-// return scored LiveProfiles for the ones that actually exist. Non-existent or
-// renamed handles resolve to null via web_profile_info and are dropped — which
-// is exactly how we discard LLM hallucinations. Capped + throttled to protect
-// the session, and stops early if it runs out of time budget.
+// return scored LiveProfiles. Degrades gracefully so a throttled/dead cookie
+// doesn't wipe out real, web-sourced AI suggestions:
+//   200 + user     → fully validated & enriched (followers, bio, ER)
+//   404 / 200 null  → handle doesn't exist → DROPPED (this filters hallucinations)
+//   401/429/timeout → couldn't verify (cookie down) → kept as an UNVERIFIED stub
+//                     (marked, enriched later via the drawer / a future search)
+// Capped + throttled to protect the session, stops early on time budget.
 export async function profilesFromHandles(
   handles: string[],
   tokens: string[],
@@ -440,11 +467,38 @@ export async function profilesFromHandles(
     if (!/^[a-z0-9._]{2,30}$/.test(h) || seen.has(h)) continue;
     seen.add(h);
     if (out.length >= max || Date.now() - startedAt > budgetMs) break;
-    const user = await fetchProfile(h, budgetMs - (Date.now() - startedAt));
+    const { user, status } = await fetchProfileWithStatus(h, budgetMs - (Date.now() - startedAt));
     await sleep(delayMs);
-    if (user?.username) out.push(summarize(user, tokens));
+    if (user?.username) {
+      out.push({ ...summarize(user, tokens), from_ai: true });
+    } else if (status === 404 || status === 200) {
+      continue; // confirmed not to exist → drop (real hallucination filter)
+    } else {
+      out.push(stubProfile(h, tokens)); // couldn't verify → keep, enrich later
+    }
   }
   return out;
+}
+
+// A minimal, unverified profile for an AI-suggested handle we couldn't confirm
+// on Instagram right now (session throttled/down). Scored off the handle text
+// so niche/city tokens still rank it. Enriched later when the cookie recovers.
+function stubProfile(username: string, tokens: string[]): LiveProfile {
+  const prof: Omit<LiveProfile, 'score'> = {
+    username,
+    full_name: '',
+    biography: '',
+    category: '',
+    followers: 0,
+    is_private: false,
+    is_verified: false,
+    profile_pic_url: null,
+    engagement: 0,
+    email: null,
+    phone: null,
+    link: null,
+  };
+  return { ...prof, score: scoreProfile(prof, tokens), unverified: true, from_ai: true };
 }
 
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;

@@ -225,8 +225,12 @@ export async function POST(req: NextRequest) {
   const cls = classifyPrompt(prompt);
   const niche = cls.niche ?? inferNiche(liveProfiles.length ? liveProfiles : dbMatches);
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
-  // Persist both AI-found and crawled creators so the DB keeps building.
-  const persisted = await persist([...aiProfiles, ...liveProfiles], { region: cls.region, niche, tags });
+  // Persist both AI-found and crawled creators so the DB keeps building — but
+  // NOT unverified AI stubs (their empty fields would clobber real DB rows).
+  const persisted = await persist(
+    [...aiProfiles.filter((p) => !p.unverified), ...liveProfiles],
+    { region: cls.region, niche, tags },
+  );
 
   const place = extractPlace(prompt, tokens);
   return NextResponse.json({
