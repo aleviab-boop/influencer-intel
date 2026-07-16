@@ -235,10 +235,13 @@ export async function POST(req: NextRequest) {
   const cls = classifyPrompt(prompt);
   const niche = cls.niche ?? inferNiche(liveProfiles.length ? liveProfiles : dbMatches);
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
-  // Persist both AI-found and crawled creators so the DB keeps building — but
-  // NOT unverified AI stubs (their empty fields would clobber real DB rows).
+  // Persist EVERY creator surfaced by the search — AI-found (verified AND
+  // unverified), plus crawled — so the DB keeps building in the background. The
+  // unverified ones (IG was throttled/timed out, so we couldn't confirm them
+  // this run) are stored fill-only inside persist(), so their empty fields can
+  // never clobber a real existing row; a later search / worker crawl enriches them.
   const persisted = await persist(
-    [...aiProfiles.filter((p) => !p.unverified), ...liveProfiles],
+    [...aiProfiles, ...liveProfiles],
     { region: cls.region, niche, tags },
   );
 
@@ -381,29 +384,60 @@ async function persist(
     const db = getBolticClient();
     for (const p of results) {
       try {
-        const row = await db.upsert<{ id: string }>(
-          'creators',
-          {
-            platform: 'instagram',
-            handle: p.username,
-            profile_url: `https://www.instagram.com/${p.username}/`,
-            display_name: p.full_name || null,
-            bio: p.biography || null,
-            primary_category: p.category || null,
-            profile_photo_url: p.profile_pic_url,
-            is_verified: p.is_verified,
-            follower_count: p.followers || null,
-            // store the freshly computed engagement (as a ratio) when we have it
-            ...(p.engagement > 0 ? { engagement_rate: p.engagement / 100 } : {}),
-            source: 'scrape',
-            data_tier: 'tier_c',
-            is_active: true,
-            first_indexed_at: new Date().toISOString(),
-          },
-          ['platform', 'handle'],
-        );
-        if (row?.id) {
-          p.creator_id = row.id; // so the client can recruit it
+        let id: string | undefined;
+        if (p.unverified) {
+          // Unverified AI find — IG was throttled / timed out, so it's plausibly
+          // real but unconfirmed this run. Store the handle so it lands in the DB
+          // (findable + enrichable in the background), but FILL-ONLY: on conflict
+          // we COALESCE, so an empty stub can never overwrite a real row's data.
+          // followers/bio/engagement are left unset for a later real scrape.
+          const rows = await db.query<{ id: string }>(
+            `INSERT INTO creators
+               (platform, handle, profile_url, display_name, primary_category,
+                profile_photo_url, is_verified, source, data_tier, is_active, first_indexed_at)
+             VALUES ('instagram', $1, $2, $3, $4, $5, $6, 'scrape', 'tier_c', true, NOW())
+             ON CONFLICT (platform, handle) DO UPDATE SET
+               display_name      = COALESCE(creators.display_name, EXCLUDED.display_name),
+               primary_category  = COALESCE(creators.primary_category, EXCLUDED.primary_category),
+               profile_photo_url = COALESCE(creators.profile_photo_url, EXCLUDED.profile_photo_url)
+             RETURNING id`,
+            [
+              p.username,
+              `https://www.instagram.com/${p.username}/`,
+              p.full_name || null,
+              p.category || null,
+              p.profile_pic_url,
+              p.is_verified,
+            ],
+          );
+          id = rows[0]?.id;
+        } else {
+          // Verified / crawled creator — full fresh data, safe to refresh the row.
+          const row = await db.upsert<{ id: string }>(
+            'creators',
+            {
+              platform: 'instagram',
+              handle: p.username,
+              profile_url: `https://www.instagram.com/${p.username}/`,
+              display_name: p.full_name || null,
+              bio: p.biography || null,
+              primary_category: p.category || null,
+              profile_photo_url: p.profile_pic_url,
+              is_verified: p.is_verified,
+              follower_count: p.followers || null,
+              // store the freshly computed engagement (as a ratio) when we have it
+              ...(p.engagement > 0 ? { engagement_rate: p.engagement / 100 } : {}),
+              source: 'scrape',
+              data_tier: 'tier_c',
+              is_active: true,
+              first_indexed_at: new Date().toISOString(),
+            },
+            ['platform', 'handle'],
+          );
+          id = row?.id;
+        }
+        if (id) {
+          p.creator_id = id; // so the client can recruit it
           // Tag with the search's niche/region — fill-only, never clobbering
           // curated data, so these creators are findable in future searches.
           if (hasTag) {
@@ -415,7 +449,7 @@ async function persist(
                  tags   = CASE WHEN tags IS NULL OR cardinality(tags) = 0
                                THEN $5::text[] ELSE tags END
                WHERE id = $1`,
-              [row.id, ctx.niche, ctx.niche, ctx.region, ctx.tags],
+              [id, ctx.niche, ctx.niche, ctx.region, ctx.tags],
             );
           }
         }
