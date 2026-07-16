@@ -45,7 +45,6 @@ interface Row {
   gender: string | null;
   score: number | string;
   loc_match: boolean | null;
-  ai_found: boolean | null;
 }
 
 export async function searchCreatorsInDb(
@@ -129,8 +128,7 @@ export async function searchCreatorsInDb(
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
            engagement_rate, is_verified, profile_photo_url, source, gender,
-           (${scoreExpr}) as score, (${locHitExpr}) as loc_match,
-           ('ai-found' = any(coalesce(tags, '{}'::text[]))) as ai_found
+           (${scoreExpr}) as score, (${locHitExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
       ${nicheRequired}
@@ -179,7 +177,6 @@ export async function searchCreatorsInDb(
       creator_id: r.id,
       from: 'db' as const,
       loc_match: Boolean(r.loc_match),
-      from_ai: Boolean(r.ai_found), // previously surfaced by the OpenAI suggester
       curated: r.source === 'manual',
       gender: (r.gender === 'female' || r.gender === 'male' ? r.gender : null) as 'female' | 'male' | null,
       };

@@ -67,23 +67,10 @@ export async function POST(req: NextRequest) {
     // searched, to pull genuinely local, on-target creators.
     const searchedBefore = await promptSearchedBefore(prompt);
     if (searchedBefore && dbMatches.length > 0) {
-      // Known prompt that's already been crawled → serve the DB instantly. Lead
-      // with creators OpenAI previously surfaced (tagged ai-found → from_ai), then
-      // locals, then curated, then relevance. Stats live-enrich lazily on scroll.
-      const results = flagLocals(dbMatches, tokens)
-        .sort((a, b) => {
-          const ar = a.from_ai ? 0 : 1;
-          const br = b.from_ai ? 0 : 1;
-          if (ar !== br) return ar - br;
-          const am = a.loc_match ? 0 : 1;
-          const bm = b.loc_match ? 0 : 1;
-          if (am !== bm) return am - bm;
-          const ac = a.curated ? 0 : 1;
-          const bc = b.curated ? 0 : 1;
-          if (ac !== bc) return ac - bc;
-          return b.score - a.score || b.followers - a.followers;
-        })
-        .slice(0, max);
+      // Known prompt that's already been crawled → serve the DB instantly, ranked
+      // by relevance (locals + curated first, from the SQL order). The client
+      // live-enriches each row's stats lazily as it scrolls into view.
+      const results = flagLocals(dbMatches, tokens).slice(0, max);
       const place = extractPlace(prompt, tokens);
       return NextResponse.json({
         prompt,
@@ -250,23 +237,10 @@ export async function POST(req: NextRequest) {
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
   // Persist both AI-found and crawled creators so the DB keeps building — but
   // NOT unverified AI stubs (their empty fields would clobber real DB rows).
-  const aiVerified = aiProfiles.filter((p) => !p.unverified);
-  const persisted = await persist([...aiVerified, ...liveProfiles], { region: cls.region, niche, tags });
-  // Tag the OpenAI-found creators with 'ai-found' so DB-served (repeat) searches
-  // surface them first (creator-db-search maps this tag → from_ai).
-  if (aiVerified.length > 0) {
-    try {
-      await getBolticClient().query(
-        `UPDATE creators
-           SET tags = (SELECT array_agg(DISTINCT t)
-                       FROM unnest(coalesce(tags, '{}'::text[]) || ARRAY['ai-found']) AS t)
-         WHERE platform = 'instagram' AND lower(handle) = ANY($1::text[])`,
-        [aiVerified.map((p) => p.username.toLowerCase())],
-      );
-    } catch (err) {
-      console.error('[discover-live] ai-found tagging failed:', err);
-    }
-  }
+  const persisted = await persist(
+    [...aiProfiles.filter((p) => !p.unverified), ...liveProfiles],
+    { region: cls.region, niche, tags },
+  );
 
   const place = extractPlace(prompt, tokens);
   return NextResponse.json({
