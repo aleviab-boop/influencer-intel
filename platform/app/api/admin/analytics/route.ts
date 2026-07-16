@@ -108,18 +108,24 @@ export async function GET(req: NextRequest) {
     rows<{ b: string; n: number }>(
       `SELECT coalesce(quality_band,'unset') b, count(*)::int n FROM creators GROUP BY 1 ORDER BY 2 DESC`,
     ),
+    // Freshness keys off the most-recent "we touched this creator" timestamp —
+    // GREATEST(last_scraped_at, first_indexed_at) (Postgres GREATEST ignores
+    // NULLs). So a creator DISCOVERED via search (first_indexed_at, no live
+    // enrichment yet) counts as fresh instead of being invisible, and these
+    // cards move as searches run — while a creator we discovered long ago and
+    // never refreshed correctly shows as stale.
     row(
-      `SELECT count(*) FILTER (WHERE last_scraped_at > now()-interval '24 hours')::int d1,
-              count(*) FILTER (WHERE last_scraped_at > now()-interval '7 days')::int d7,
-              count(*) FILTER (WHERE last_scraped_at > now()-interval '30 days')::int d30,
-              count(*) FILTER (WHERE last_scraped_at IS NOT NULL AND last_scraped_at < now()-interval '30 days')::int stale30,
-              count(*) FILTER (WHERE last_scraped_at IS NOT NULL AND last_scraped_at < now()-interval '90 days')::int stale90
+      `SELECT count(*) FILTER (WHERE GREATEST(last_scraped_at, first_indexed_at) > now()-interval '24 hours')::int d1,
+              count(*) FILTER (WHERE GREATEST(last_scraped_at, first_indexed_at) > now()-interval '7 days')::int d7,
+              count(*) FILTER (WHERE GREATEST(last_scraped_at, first_indexed_at) > now()-interval '30 days')::int d30,
+              count(*) FILTER (WHERE GREATEST(last_scraped_at, first_indexed_at) IS NOT NULL AND GREATEST(last_scraped_at, first_indexed_at) < now()-interval '30 days')::int stale30,
+              count(*) FILTER (WHERE GREATEST(last_scraped_at, first_indexed_at) IS NOT NULL AND GREATEST(last_scraped_at, first_indexed_at) < now()-interval '90 days')::int stale90
        FROM creators`,
       { d1: 0, d7: 0, d30: 0, stale30: 0, stale90: 0 },
     ),
     rows<{ d: string; n: number }>(
-      `SELECT to_char(date_trunc('day', last_scraped_at),'YYYY-MM-DD') d, count(*)::int n
-       FROM creators WHERE last_scraped_at > now()-interval '30 days'
+      `SELECT to_char(date_trunc('day', GREATEST(last_scraped_at, first_indexed_at)),'YYYY-MM-DD') d, count(*)::int n
+       FROM creators WHERE GREATEST(last_scraped_at, first_indexed_at) > now()-interval '30 days'
        GROUP BY 1 ORDER BY 1`,
     ),
     rows<{ status: string; n: number }>(
