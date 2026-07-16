@@ -96,54 +96,64 @@ export async function POST(req: NextRequest) {
     // (intentionally no return — execution continues into the live-first crawl)
   }
 
-  // 1. Live-first: Instagram is the primary search. Resolve seeds (explicit
-  //    handles, names, or auto-derived from the prompt) and crawl live.
+  // 1. Live-first: Instagram is the primary search. The AI-suggest pipeline and
+  //    the live-crawl pipeline are independent, so we run them CONCURRENTLY on
+  //    tight budgets to stay well under Vercel's 60s function limit.
   const resolvedFromNames: Array<{ name: string; handle: string; followers: number }> = [];
   const autoSeeds: Array<{ handle: string; followers: number }> = [];
   let liveProfiles: LiveProfile[] = [];
+  let aiProfiles: LiveProfile[] = [];
 
+  // Explicit @handles from a typed name resolve first (fast, rarely used).
   for (const name of names) {
-    const matches = await resolveNameToSeeds(name);
-    for (const m of matches) {
+    for (const m of await resolveNameToSeeds(name)) {
       seeds.push(m.handle);
       resolvedFromNames.push({ name, handle: m.handle, followers: m.followers });
     }
   }
-  if (seeds.length === 0 && names.length === 0) {
-    for (const m of await resolveTopicToSeeds(prompt)) {
-      seeds.push(m.handle);
-      autoSeeds.push({ handle: m.handle, followers: m.followers });
-    }
-  }
 
-  // 1b. AI-assisted discovery (Lander searches). Instagram blocks keyword search
-  //     for our session, so OpenAI names REAL handles for the niche+location; we
-  //     validate each against Instagram (dropping hallucinations) and use them
-  //     BOTH as crawl seeds and as results. Best-effort — never blocks the flow.
-  let aiProfiles: LiveProfile[] = [];
-  if (mode === 'db') {
+  const withTimeout = <T,>(p: Promise<T>, ms: number, fb: T): Promise<T> =>
+    Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fb), ms))]);
+
+  // Pipeline A — OpenAI web-search names real handles for the niche+location;
+  // each is validated against Instagram (hallucinations dropped, throttled ones
+  // kept as stubs). Only on Lander (db-mode) searches.
+  const aiPipeline = (async () => {
+    if (mode !== 'db') return;
     try {
-      const handles = await getOpenAIClient().suggestHandlesFromPrompt(prompt, 15);
-      if (handles.length > 0) {
-        aiProfiles = (await profilesFromHandles(handles, tokens, { max: 12 })).map(
-          (p) => ({ ...p, from: 'live' as const }),
-        );
-        for (const p of aiProfiles) if (!seeds.includes(p.username)) seeds.push(p.username);
-      }
+      const handles = await withTimeout(
+        getOpenAIClient().suggestHandlesFromPrompt(prompt, 15).catch(() => [] as string[]),
+        18_000,
+        [] as string[],
+      );
+      if (handles.length === 0) return;
+      aiProfiles = (await profilesFromHandles(handles, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })).map(
+        (p) => ({ ...p, from: 'live' as const }),
+      );
     } catch (err) {
       console.error('[discover-live] AI suggest failed:', err);
     }
-  }
+  })();
 
-  const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
-  if (uniqueSeeds.length > 0) {
+  // Pipeline B — resolve topic seeds (handle-guessing) and crawl their network.
+  const crawlPipeline = (async () => {
+    if (seeds.length === 0 && names.length === 0) {
+      for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
+        seeds.push(m.handle);
+        autoSeeds.push({ handle: m.handle, followers: m.followers });
+      }
+    }
+    const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
+    if (uniqueSeeds.length === 0) return;
     try {
-      const run = await liveDiscover(prompt, uniqueSeeds, { depth, max });
+      const run = await liveDiscover(prompt, uniqueSeeds, { depth, max, budgetMs: 15_000 });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
     } catch (err) {
       console.error('[discover-live] crawl failed:', err);
     }
-  }
+  })();
+
+  await Promise.all([aiPipeline, crawlPipeline]);
 
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
