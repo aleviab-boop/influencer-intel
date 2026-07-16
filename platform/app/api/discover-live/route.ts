@@ -67,10 +67,23 @@ export async function POST(req: NextRequest) {
     // searched, to pull genuinely local, on-target creators.
     const searchedBefore = await promptSearchedBefore(prompt);
     if (searchedBefore && dbMatches.length > 0) {
-      // Known prompt that's already been crawled → serve the DB instantly, ranked
-      // by relevance (and the user's curated list first). The client live-enriches
-      // each row's stats lazily as it scrolls into view (via /api/ig-stats).
-      const results = flagLocals(dbMatches, tokens).slice(0, max);
+      // Known prompt that's already been crawled → serve the DB instantly. Lead
+      // with creators OpenAI previously surfaced (tagged ai-found → from_ai), then
+      // locals, then curated, then relevance. Stats live-enrich lazily on scroll.
+      const results = flagLocals(dbMatches, tokens)
+        .sort((a, b) => {
+          const ar = a.from_ai ? 0 : 1;
+          const br = b.from_ai ? 0 : 1;
+          if (ar !== br) return ar - br;
+          const am = a.loc_match ? 0 : 1;
+          const bm = b.loc_match ? 0 : 1;
+          if (am !== bm) return am - bm;
+          const ac = a.curated ? 0 : 1;
+          const bc = b.curated ? 0 : 1;
+          if (ac !== bc) return ac - bc;
+          return b.score - a.score || b.followers - a.followers;
+        })
+        .slice(0, max);
       const place = extractPlace(prompt, tokens);
       return NextResponse.json({
         prompt,
@@ -191,40 +204,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Merge live + database and rank by genuine quality — relevance to the
-  //    prompt first, then reach (followers) — regardless of source. Dedupe by
-  //    handle, keeping the higher-scored / richer row.
+  // 4. Merge + rank by SOURCE PRIORITY. On the Lander (db mode) the order is
+  //    ① OpenAI-found ▸ ② database ▸ ③ live crawl. On the scraper page (live/
+  //    username mode) the crawled network still leads, DB fills below.
+  //    Dedupe by handle — keep the AI marker if any source was AI, and the
+  //    richer (higher-follower / higher-score) row's data.
+  const srcRank = (p: LiveProfile): number =>
+    mode === 'db'
+      ? p.from_ai ? 0 : p.from === 'db' ? 1 : 2
+      : p.from === 'live' ? 0 : 1;
   const byUser = new Map<string, LiveProfile>();
-  for (const p of [...aiProfiles, ...liveProfiles, ...dbMatches]) {
+  for (const p of [...aiProfiles, ...dbMatches, ...liveProfiles]) {
     const key = p.username.toLowerCase();
     const ex = byUser.get(key);
-    if (!ex || p.score > ex.score || (p.score === ex.score && p.followers > ex.followers)) {
+    if (!ex) {
       byUser.set(key, p);
+      continue;
     }
+    const richer = p.followers > ex.followers || (p.followers === ex.followers && p.score > ex.score) ? p : ex;
+    byUser.set(key, { ...richer, from_ai: p.from_ai || ex.from_ai, loc_match: p.loc_match || ex.loc_match });
   }
-  // Live mode = "search Instagram" from a username: lead with the crawled
-  // network so the searched creator surfaces, then the database fills below.
-  // First flag/keep genuine locals for a place query (live finds never carry the
-  // DB's geo flag) so a "…in <city>" search never leads with a global mega-account.
   const results = flagLocals(Array.from(byUser.values()), tokens)
     .sort((a, b) => {
-      // Location-matched creators lead, so a real local creator outranks a
-      // bigger non-local one on a "...in <place>" query.
+      // ① Source priority: OpenAI first, then DB, then live crawl.
+      const sr = srcRank(a) - srcRank(b);
+      if (sr !== 0) return sr;
+      // ② Within a source, genuine locals lead a "…in <place>" query.
       const am = a.loc_match ? 0 : 1;
       const bm = b.loc_match ? 0 : 1;
       if (am !== bm) return am - bm;
-      // Among location matches, the user's own curated/imported creators lead —
-      // otherwise reach alone drags scraped mega-celebs above curated locals.
-      // (Only applied within the location bucket so plain username crawls, which
-      // have no location intent, still surface the crawled network first.)
-      if (a.loc_match && b.loc_match) {
-        const ac = a.curated ? 0 : 1;
-        const bc = b.curated ? 0 : 1;
-        if (ac !== bc) return ac - bc;
-      }
-      const al = a.from === 'live' ? 0 : 1;
-      const bl = b.from === 'live' ? 0 : 1;
-      if (al !== bl) return al - bl;
+      // ③ Curated (user's own imported list) next.
+      const ac = a.curated ? 0 : 1;
+      const bc = b.curated ? 0 : 1;
+      if (ac !== bc) return ac - bc;
+      // ④ Then relevance, then reach.
       return b.score - a.score || b.followers - a.followers;
     })
     .slice(0, max);
@@ -237,10 +250,23 @@ export async function POST(req: NextRequest) {
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
   // Persist both AI-found and crawled creators so the DB keeps building — but
   // NOT unverified AI stubs (their empty fields would clobber real DB rows).
-  const persisted = await persist(
-    [...aiProfiles.filter((p) => !p.unverified), ...liveProfiles],
-    { region: cls.region, niche, tags },
-  );
+  const aiVerified = aiProfiles.filter((p) => !p.unverified);
+  const persisted = await persist([...aiVerified, ...liveProfiles], { region: cls.region, niche, tags });
+  // Tag the OpenAI-found creators with 'ai-found' so DB-served (repeat) searches
+  // surface them first (creator-db-search maps this tag → from_ai).
+  if (aiVerified.length > 0) {
+    try {
+      await getBolticClient().query(
+        `UPDATE creators
+           SET tags = (SELECT array_agg(DISTINCT t)
+                       FROM unnest(coalesce(tags, '{}'::text[]) || ARRAY['ai-found']) AS t)
+         WHERE platform = 'instagram' AND lower(handle) = ANY($1::text[])`,
+        [aiVerified.map((p) => p.username.toLowerCase())],
+      );
+    } catch (err) {
+      console.error('[discover-live] ai-found tagging failed:', err);
+    }
+  }
 
   const place = extractPlace(prompt, tokens);
   return NextResponse.json({
