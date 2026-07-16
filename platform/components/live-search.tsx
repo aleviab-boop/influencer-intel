@@ -28,6 +28,7 @@ interface LiveProfile {
   loc_match?: boolean;
   curated?: boolean;
   gender?: 'female' | 'male' | 'unknown' | null;
+  completeness?: number; // 0–10 data-completeness score from the API
 }
 
 interface Program {
@@ -352,6 +353,26 @@ function brandFit(profile: ProfileData, engagement: number | null, brief: string
   if (conflict) factors.push({ key: 'conflict', label: 'Competitor conflict', value: 15, detail: `Recently collaborated with ${blacklistHits.map((h) => h.brand).join(', ')} — score penalised.` });
 
   return { score, band, color, verdict, factors, matched, missed };
+}
+
+// Account data-completeness score (0–10): how much of a creator's profile we
+// hold, NOT how good/relevant they are. Mirrors completenessScore() on the
+// server, but recomputed client-side so it reflects any live-enriched stats.
+// The two real metrics (reach, engagement) count double.
+function dataScore(p: {
+  full_name?: string; biography?: string; category?: string;
+  profile_pic_url?: string | null; followers?: number; engagement?: number | null;
+  email?: string | null; phone?: string | null; link?: string | null;
+}): number {
+  let s = 0;
+  if ((p.followers ?? 0) > 0) s += 2;
+  if ((p.engagement ?? 0) > 0) s += 2;
+  if (p.biography && p.biography.trim()) s += 2;
+  if (p.category && p.category.trim()) s += 1;
+  if (p.full_name && p.full_name.trim()) s += 1;
+  if (p.profile_pic_url) s += 1;
+  if (p.email || p.phone || p.link) s += 1;
+  return s; // 0..10
 }
 
 // Lightweight fit for a search-results row: the full Brand Fit card needs recent
@@ -1735,6 +1756,7 @@ export function LiveSearch({
                     <th className="px-3 py-2.5 font-medium text-right">Followers</th>
                     <th className="px-3 py-2.5 font-medium text-right">Eng.</th>
                     <th className="px-3 py-2.5 font-medium text-center" title="How well each creator matches your search brief — relevance + engagement. Open a profile for the full breakdown.">Fit</th>
+                    <th className="px-3 py-2.5 font-medium text-center" title="Account data score (0–10): how complete our data on this creator is — followers, engagement, bio, name, category, photo, contact. A low score means we're still enriching them, not that they're low quality.">Data</th>
                     <th className="px-3 py-2.5 font-medium"></th>
                   </tr>
                 </thead>
@@ -1747,7 +1769,7 @@ export function LiveSearch({
                     <Fragment key={p.username}>
                     {showTierDivider && i === exactMatchCount && (
                       <tr>
-                        <td colSpan={8} className="px-3 pt-5 pb-2">
+                        <td colSpan={9} className="px-3 pt-5 pb-2">
                           <div className="flex items-center gap-3">
                             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">Also relevant to this niche</span>
                             <span className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, #e3def9, transparent)' }} />
@@ -1853,6 +1875,20 @@ export function LiveSearch({
                           );
                         })()}
                       </td>
+                      <td className="px-3 py-3 text-center">
+                        {(() => {
+                          // Data-completeness score (0–10) — recomputed from any live-enriched
+                          // stats so it climbs as the row fills in. Colour: green = rich data,
+                          // amber = partial, grey = sparse (a stub still being enriched).
+                          const ds = dataScore({ ...p, ...(liveStats[p.username] ?? {}) });
+                          const c = ds >= 8 ? { bg: '#ecfdf5', fg: '#059669' } : ds >= 5 ? { bg: '#fff7ed', fg: '#b45309' } : { bg: '#f4f4f7', fg: '#8a8a99' };
+                          return (
+                            <span className="inline-block text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums" style={{ background: c.bg, color: c.fg }} title={`Account data score ${ds}/10 — how complete our data on this creator is. Low = still enriching, not low quality.`}>
+                              {ds}/10
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -1897,7 +1933,7 @@ export function LiveSearch({
                     </tr>
                     {profileFor === p.username && (
                       <tr>
-                        <td colSpan={8} className="p-0 bg-[#faf9ff]">
+                        <td colSpan={9} className="p-0 bg-[#faf9ff]">
                           {/* Pin the drawer to the left edge and size it to the
                               visible width so it stays fully on screen even when
                               the table scrolls horizontally. */}

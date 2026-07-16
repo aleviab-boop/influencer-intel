@@ -10,6 +10,7 @@ import {
   classifyPrompt,
   inferNiche,
   isLocationToken,
+  completenessScore,
   STATE_CITIES,
   type LiveProfile,
 } from '@/lib/live-discovery';
@@ -70,7 +71,9 @@ export async function POST(req: NextRequest) {
       // Known prompt that's already been crawled → serve the DB instantly, ranked
       // by relevance (locals + curated first, from the SQL order). The client
       // live-enriches each row's stats lazily as it scrolls into view.
-      const results = flagLocals(dbMatches, tokens).slice(0, max);
+      const results = flagLocals(dbMatches, tokens)
+        .slice(0, max)
+        .map((p) => ({ ...p, completeness: completenessScore(p) }));
       const place = extractPlace(prompt, tokens);
       return NextResponse.json({
         prompt,
@@ -227,7 +230,8 @@ export async function POST(req: NextRequest) {
       // ④ Then relevance, then reach.
       return b.score - a.score || b.followers - a.followers;
     })
-    .slice(0, max);
+    .slice(0, max)
+    .map((p) => ({ ...p, completeness: completenessScore(p) }));
 
   // Tag saved creators with the search's region/niche. When the prompt has no
   // niche (e.g. a bare seed handle), infer it from the crawled network so a
@@ -385,6 +389,7 @@ async function persist(
     for (const p of results) {
       try {
         let id: string | undefined;
+        const cscore = completenessScore(p); // 0–10, stored so it's queryable/sortable
         if (p.unverified) {
           // Unverified AI find — IG was throttled / timed out, so it's plausibly
           // real but unconfirmed this run. Store the handle so it lands in the DB
@@ -394,12 +399,14 @@ async function persist(
           const rows = await db.query<{ id: string }>(
             `INSERT INTO creators
                (platform, handle, profile_url, display_name, primary_category,
-                profile_photo_url, is_verified, source, data_tier, is_active, first_indexed_at)
-             VALUES ('instagram', $1, $2, $3, $4, $5, $6, 'scrape', 'tier_c', true, NOW())
+                profile_photo_url, is_verified, data_completeness, source, data_tier, is_active, first_indexed_at)
+             VALUES ('instagram', $1, $2, $3, $4, $5, $6, $7, 'scrape', 'tier_c', true, NOW())
              ON CONFLICT (platform, handle) DO UPDATE SET
                display_name      = COALESCE(creators.display_name, EXCLUDED.display_name),
                primary_category  = COALESCE(creators.primary_category, EXCLUDED.primary_category),
-               profile_photo_url = COALESCE(creators.profile_photo_url, EXCLUDED.profile_photo_url)
+               profile_photo_url = COALESCE(creators.profile_photo_url, EXCLUDED.profile_photo_url),
+               -- keep the richer completeness score (a later enrichment only raises it)
+               data_completeness = GREATEST(COALESCE(creators.data_completeness, 0), EXCLUDED.data_completeness)
              RETURNING id`,
             [
               p.username,
@@ -408,6 +415,7 @@ async function persist(
               p.category || null,
               p.profile_pic_url,
               p.is_verified,
+              cscore,
             ],
           );
           id = rows[0]?.id;
@@ -427,6 +435,7 @@ async function persist(
               follower_count: p.followers || null,
               // store the freshly computed engagement (as a ratio) when we have it
               ...(p.engagement > 0 ? { engagement_rate: p.engagement / 100 } : {}),
+              data_completeness: cscore,
               source: 'scrape',
               data_tier: 'tier_c',
               is_active: true,

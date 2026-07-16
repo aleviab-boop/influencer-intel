@@ -65,6 +65,36 @@ export interface LiveProfile {
   gender?: 'female' | 'male' | 'unknown' | null; // creator's inferred gender
   unverified?: boolean; // AI-suggested but not yet confirmed on IG (cookie down)
   from_ai?: boolean; // surfaced by the OpenAI web-search suggester
+  completeness?: number; // 0–10 data-completeness score (how many fields we hold)
+}
+
+// Data-completeness score (0–10): how much of a creator's profile we actually
+// hold, NOT how relevant/good they are. A fully-enriched row (followers, ER,
+// bio, name, category, photo, contact) scores 10; each missing field knocks it
+// down, so an un-enriched stub (just a handle) sits near 0. The two real metrics
+// an agency ranks on — reach and engagement — are weighted double. We still
+// STORE every creator regardless of score; this just surfaces how complete they
+// are so partial rows are visible-but-flagged rather than hidden.
+export function completenessScore(p: {
+  full_name?: string | null;
+  biography?: string | null;
+  category?: string | null;
+  profile_pic_url?: string | null;
+  followers?: number | null;
+  engagement?: number | null;
+  email?: string | null;
+  phone?: string | null;
+  link?: string | null;
+}): number {
+  let s = 0;
+  if ((p.followers ?? 0) > 0) s += 2;              // reach — key metric
+  if ((p.engagement ?? 0) > 0) s += 2;             // engagement — key metric
+  if (p.biography && p.biography.trim()) s += 2;   // bio
+  if (p.category && p.category.trim()) s += 1;     // niche/category
+  if (p.full_name && p.full_name.trim()) s += 1;   // display name
+  if (p.profile_pic_url) s += 1;                   // avatar
+  if (p.email || p.phone || p.link) s += 1;        // reachable contact
+  return s; // 0..10
 }
 
 export interface LiveDiscoveryResult {
