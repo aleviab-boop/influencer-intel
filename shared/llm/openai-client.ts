@@ -89,6 +89,56 @@ Output ONLY JSON: { "results": [ { "handle": "...", "gender": "female"|"male"|"u
   }
 
   /**
+   * Verify whether each candidate creator genuinely matches a search brief
+   * (right NICHE + India-based / right city). Used to filter the noise that
+   * slips through AI web-search suggestions — e.g. a makeup artist or a foreign
+   * account surfacing for an "aquascaping in bangalore" query. Judges from the
+   * bio/name/category we already fetched (NOT an existence check — Instagram
+   * validation handles that). Returns handle → keep?. Fail-OPEN: on any error
+   * the map is empty and the caller keeps everything; a thin/empty bio also
+   * defaults to keep, so we never discard an unenriched account we can't judge.
+   */
+  async verifyProfileRelevance(
+    prompt: string,
+    items: Array<{ handle: string; name?: string | null; bio?: string | null; category?: string | null }>,
+  ): Promise<Record<string, boolean>> {
+    if (items.length === 0) return {};
+    const payload = items.slice(0, 30).map((i) => ({
+      handle: i.handle,
+      name: (i.name ?? '').slice(0, 60),
+      bio: (i.bio ?? '').slice(0, 220),
+      category: (i.category ?? '').slice(0, 40),
+    }));
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.classificationModel,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You verify whether each Instagram creator genuinely MATCHES a search brief for an INDIAN influencer-marketing platform. Given the brief and a list of creators (handle, name, bio, category), decide for EACH whether they are a real fit.
+Mark relevant = true ONLY if BOTH hold:
+1. NICHE — their bio / name / category clearly shows they create content in the brief's niche or topic. A merely ADJACENT or different field is NOT a match (e.g. a MAKEUP artist is NOT relevant to an "aquascaping" brief; a generic "fishing/angler" page is NOT "aquascaping").
+2. LOCATION — they are based in India, and (if the brief names a city/region) plausibly in or near it. An empty / unknown location is acceptable. A clearly FOREIGN creator (bio in another language, or based in e.g. France, Spain, the US) is NOT relevant.
+When the bio is empty or too thin to judge, default relevant = true — never discard an unenriched account we simply can't assess yet.
+Output ONLY JSON: { "results": [ { "handle": "...", "relevant": true|false, "reason": "<=6 words" } ] } — one entry per input handle.`,
+          },
+          { role: 'user', content: JSON.stringify({ brief: prompt, creators: payload }) },
+        ],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(raw) as { results?: Array<{ handle?: string; relevant?: boolean }> };
+      const out: Record<string, boolean> = {};
+      for (const r of parsed.results ?? []) {
+        if (r.handle) out[r.handle.toLowerCase()] = r.relevant !== false; // default keep
+      }
+      return out;
+    } catch {
+      return {}; // fail-open — caller keeps everything on any error
+    }
+  }
+
+  /**
    * Parse a free-text brief to structured spec via gpt-4o-mini with JSON mode.
    */
   async parseBrief(rawText: string): Promise<{

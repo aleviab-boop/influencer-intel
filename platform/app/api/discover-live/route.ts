@@ -130,9 +130,30 @@ export async function POST(req: NextRequest) {
         [] as string[],
       );
       if (handles.length === 0) return;
-      aiProfiles = (await profilesFromHandles(handles, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })).map(
+      let cand = (await profilesFromHandles(handles, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })).map(
         (p) => ({ ...p, from: 'live' as const }),
       );
+      // OpenAI relevance check: web-search suggestions sometimes include an
+      // off-niche account (a makeup artist for an "aquascaping" query) or a
+      // foreign one — validation confirms they EXIST but not that they FIT. One
+      // cheap classification pass over the fetched bios drops the mismatches.
+      // Fail-open (empty verdict → keep all); thin/empty stubs default to keep.
+      try {
+        const verdict = await withTimeout(
+          getOpenAIClient().verifyProfileRelevance(
+            prompt,
+            cand.map((p) => ({ handle: p.username, name: p.full_name, bio: p.biography, category: p.category })),
+          ),
+          8_000,
+          {} as Record<string, boolean>,
+        );
+        if (Object.keys(verdict).length > 0) {
+          cand = cand.filter((p) => verdict[p.username.toLowerCase()] !== false);
+        }
+      } catch (err) {
+        console.error('[discover-live] AI relevance verify failed:', err);
+      }
+      aiProfiles = cand;
     } catch (err) {
       console.error('[discover-live] AI suggest failed:', err);
     }
