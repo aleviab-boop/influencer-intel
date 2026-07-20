@@ -43,14 +43,17 @@ export async function GET() {
     one(`SELECT count(*)::int AS n FROM service_accounts WHERE platform='instagram' AND status='active' AND storage_state IS NOT NULL AND (storage_expires_at IS NULL OR storage_expires_at > now())`),
   ]);
 
-  // Is the worker "live"? A creator scraped in the last ~3 minutes means it's
-  // actively running. (in_progress count can be stale — jobs left mid-flight
-  // when a worker is killed never flip status — so we don't trust it here.)
-  const lastScrape = await db
-    .query<{ t: string | null }>(`SELECT max(last_scraped_at) AS t FROM creators`)
+  // Is the worker "live"? Read its liveness HEARTBEAT — the crawl worker stamps
+  // worker_heartbeat every ~15s while its loop runs, so a beat within the last
+  // ~90s means it's genuinely up. (The old proxy — max last_scraped_at — also
+  // moved on plain search/discovery writes, so it showed "live" even when the
+  // crawl worker was dead. The heartbeat only moves when the worker itself runs.)
+  const lastBeat = await db
+    .query<{ t: string | null }>(`SELECT beat_at AS t FROM worker_heartbeat WHERE worker = 'main'`)
     .then((r) => r[0]?.t ?? null)
     .catch(() => null);
-  const workerLive = !!(lastScrape && Date.now() - new Date(lastScrape).getTime() < 3 * 60 * 1000);
+  const workerLive = !!(lastBeat && Date.now() - new Date(lastBeat).getTime() < 90 * 1000);
+  const lastScrape = lastBeat;
 
   return NextResponse.json({
     creators: { total: totalCreators, active: activeCreators },

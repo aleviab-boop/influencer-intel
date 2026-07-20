@@ -4,6 +4,7 @@
 
 import type { Page } from 'playwright-core';
 import type { ScrapeJob } from '@influencer-intel/shared/types';
+import { getBolticClient } from '@influencer-intel/shared/db';
 import { config, assertConfig } from './config.js';
 import { JobQueue } from './queue/worker.js';
 import { AccountPool } from './queue/account-pool.js';
@@ -39,6 +40,25 @@ async function probeAccount(page: Page): Promise<'ok' | 'throttled' | 'dead'> {
     return 'ok';
   } catch {
     return 'ok';
+  }
+}
+
+// Liveness heartbeat: the worker stamps `worker_heartbeat` every ~15s while its
+// loop runs. The admin dashboard reads this to show "Worker live" — a TRUE
+// signal of the crawl worker being up, instead of the old proxy (max
+// last_scraped_at), which also lit up on plain search/discovery writes and so
+// masked a dead worker. Best-effort — a heartbeat failure never stops the loop.
+let lastBeatAt = 0;
+async function beat(): Promise<void> {
+  if (Date.now() - lastBeatAt < 15_000) return;
+  lastBeatAt = Date.now();
+  try {
+    await getBolticClient().query(
+      `INSERT INTO worker_heartbeat (worker, beat_at) VALUES ('main', now())
+       ON CONFLICT (worker) DO UPDATE SET beat_at = now()`,
+    );
+  } catch {
+    /* heartbeat is best-effort — never break the crawl loop */
   }
 }
 
@@ -88,6 +108,7 @@ export async function run(): Promise<void> {
   };
 
   while (!stopping) {
+    await beat(); // stamp worker liveness (throttled to ~15s)
     // Periodically re-sync the pool from the DB so accounts you capture/revive
     // join rotation on their own, and removed/expired ones drop — no manual
     // worker restart needed.
