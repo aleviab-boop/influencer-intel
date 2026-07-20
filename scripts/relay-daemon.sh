@@ -37,7 +37,13 @@ cloudflared tunnel --url http://localhost:8787 2>&1 | while IFS= read -r line; d
   case "$line" in
     *trycloudflare.com*)
       url=$(echo "$line" | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
-      [ -n "$url" ] && echo "$url" > /tmp/ig-tunnel-url.txt && echo "[daemon] tunnel URL -> $url  (set Vercel IG_RELAY to this)"
+      if [ -n "$url" ]; then
+        echo "$url" > /tmp/ig-tunnel-url.txt
+        # Write the fresh URL to the DB so the deployed platform picks it up
+        # automatically (cached ~60s) — no Vercel edit, no redeploy needed.
+        node scripts/set-relay-url.mjs "$url" >> /tmp/relay-url-write.log 2>&1
+        echo "[daemon] tunnel URL -> $url  (written to DB → platform self-updates)"
+      fi
       ;;
   esac
 done
