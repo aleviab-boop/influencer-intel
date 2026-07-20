@@ -240,7 +240,13 @@ export async function POST(req: NextRequest) {
       // ① Source priority: OpenAI first, then DB, then live crawl.
       const sr = srcRank(a) - srcRank(b);
       if (sr !== 0) return sr;
-      // ② Within a source, genuine locals lead a "…in <place>" query.
+      // ② India-first: known-foreign creators (is_indian === false, e.g. old
+      // seeded French/Australian craft pages that match a broad token) sink below
+      // everYone else. AI/live finds and unflagged rows are treated as Indian.
+      const af = a.is_indian === false ? 1 : 0;
+      const bf = b.is_indian === false ? 1 : 0;
+      if (af !== bf) return af - bf;
+      // ③ Within a source, genuine locals lead a "…in <place>" query.
       const am = a.loc_match ? 0 : 1;
       const bm = b.loc_match ? 0 : 1;
       if (am !== bm) return am - bm;

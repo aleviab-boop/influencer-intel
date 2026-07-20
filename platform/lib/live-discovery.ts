@@ -66,6 +66,7 @@ export interface LiveProfile {
   unverified?: boolean; // AI-suggested but not yet confirmed on IG (cookie down)
   from_ai?: boolean; // surfaced by the OpenAI web-search suggester
   completeness?: number; // 0–10 data-completeness score (how many fields we hold)
+  is_indian?: boolean; // false = known-foreign (sinks in ranking); India-only platform
 }
 
 // Data-completeness score (0–10): how much of a creator's profile we actually

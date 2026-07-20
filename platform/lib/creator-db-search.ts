@@ -57,6 +57,7 @@ interface Row {
   profile_photo_url: string | null;
   source: string | null;
   gender: string | null;
+  is_indian: boolean | null;
   score: number | string;
   loc_match: boolean | null;
 }
@@ -148,7 +149,7 @@ export async function searchCreatorsInDb(
 
   const sql = `
     select id, handle, display_name, bio, primary_category, follower_count,
-           engagement_rate, is_verified, profile_photo_url, source, gender,
+           engagement_rate, is_verified, profile_photo_url, source, gender, is_indian,
            (${scoreExpr}) as score, (${locHitExpr}) as loc_match
     from creators
     where platform = 'instagram' and is_active = true and (${whereAny})
@@ -156,13 +157,15 @@ export async function searchCreatorsInDb(
       ${bucketFilter}
       ${floor}
       ${genderFilter}
-    -- Bucket first (scraper finds before Excel imports). Then, when the query
-    -- names a place, LOCALS LEAD — a creator based in / mentioning the queried
-    -- city outranks a bigger global account that merely matches the niche
-    -- (otherwise reach drags mega-celebs to the top of a local search). Weighted
-    -- relevance breaks ties, then reach. (locHitExpr is constant-false with no
-    -- place token, so non-location queries keep pure relevance ranking.)
+    -- Bucket first (scraper finds before Excel imports). Then INDIA-FIRST: this is
+    -- an India-only platform, so foreign creators (is_indian=false) sink below all
+    -- Indian/unflagged ones — a broad token like "artisan" no longer leads with a
+    -- French charcuterie or an Australian craft page. (Ranked, not filtered:
+    -- is_indian is only ~half-populated, so a hard filter would also hide genuine
+    -- Indian creators not yet flagged; sinking only the KNOWN-foreign is safe.)
+    -- Then LOCALS LEAD when the query names a place, weighted relevance, then reach.
     order by (${SOURCE_BUCKET}) asc,
+             (case when is_indian = false then 1 else 0 end) asc,
              (${locHitExpr}) desc,
              score desc,
              follower_count desc nulls last
@@ -200,6 +203,8 @@ export async function searchCreatorsInDb(
       loc_match: Boolean(r.loc_match),
       curated: r.source === 'manual',
       gender: (r.gender === 'female' || r.gender === 'male' ? r.gender : null) as 'female' | 'male' | null,
+      // false = known-foreign (sinks in ranking); true/undefined = Indian or not-yet-classified
+      is_indian: r.is_indian === false ? false : true,
       };
     })
     .filter((p) => p.username && p.score > 0);
