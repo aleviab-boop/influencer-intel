@@ -10,7 +10,7 @@
   "scripts": {
     "scraper:dev": "npm --workspace scraper run dev",
     "scraper:start": "npm --workspace scraper run start",
-    "scraper:capture": "npm --workspace scraper run capture-session",
+    "scraper:capture": "npm --workspace scraper run capture-session --",
     "platform:dev": "npm --workspace platform run dev",
     "platform:build": "npm --workspace platform run build",
     "platform:start": "npm --workspace platform run start",

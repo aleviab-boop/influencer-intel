@@ -36,9 +36,12 @@ const { getBolticClient } = await import('@influencer-intel/shared/db');
 const { config } = await import('../config.js');
 
 async function main() {
-  const handle = process.env.SERVICE_ACCOUNT_HANDLE;
+  // Handle can be passed as a CLI arg — `npm run scraper:capture -- <handle>` —
+  // so any account can be revived without editing .env. Falls back to the
+  // SERVICE_ACCOUNT_HANDLE env var for backward compatibility.
+  const handle = (process.argv[2] || process.env.SERVICE_ACCOUNT_HANDLE)?.trim().replace(/^@/, '');
   if (!handle) {
-    console.error('SERVICE_ACCOUNT_HANDLE env var required (set in .env).');
+    console.error('Pass a handle:  npm run scraper:capture -- <handle>   (or set SERVICE_ACCOUNT_HANDLE in .env)');
     process.exit(1);
   }
 
