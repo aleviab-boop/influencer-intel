@@ -29,6 +29,11 @@ exec caffeinate -i bash -c '
     sleep 2
   fi
 
+  # Operational monitor: curl the watchdog every 5 min while this keeper runs, so
+  # Slack alerts fire frequently regardless of Vercel cron plan limits. The
+  # endpoint self-dedups, so this and the Vercel cron together never double-ping.
+  ( while true; do curl -s -m20 "https://influencer-intel-platform.vercel.app/api/cron/monitor" >/dev/null 2>&1; sleep 300; done ) &
+
   # keep a tunnel alive; on every (re)start, publish the fresh URL to the DB
   while true; do
     pkill -f "cloudflared tunnel --url http://localhost:8787" 2>/dev/null; sleep 1
