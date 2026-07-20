@@ -12,8 +12,32 @@ import { getBolticClient } from '@influencer-intel/shared/db';
 //
 // When neither is set, this behaves exactly like a normal fetch (works locally).
 
-const RELAY = process.env.IG_RELAY?.trim();
 const RELAY_KEY = process.env.IG_RELAY_KEY?.trim() ?? '';
+
+// The relay URL is read from the DB (system_config.relay_url), NOT a fixed env
+// var. Why: the free Cloudflare quick-tunnel gets a NEW URL every time it
+// restarts (reboot/sleep/drop), and hardcoding it in Vercel meant repasting the
+// URL + redeploying on every churn. Now the on-host daemon writes the fresh URL
+// to the DB whenever the tunnel restarts, and this reads it (cached ~60s) — so
+// the churn propagates itself and live data self-heals with zero manual steps.
+// Falls back to the IG_RELAY env var if the DB has no value.
+let relayCache: { at: number; url: string | undefined } | null = null;
+const RELAY_TTL = 60_000;
+async function relayUrl(): Promise<string | undefined> {
+  if (relayCache && Date.now() - relayCache.at < RELAY_TTL) return relayCache.url;
+  let url = process.env.IG_RELAY?.trim() || undefined;
+  try {
+    const rows = await getBolticClient().query<{ value: string | null }>(
+      `SELECT value FROM system_config WHERE key = 'relay_url'`,
+    );
+    const dbUrl = rows[0]?.value?.trim();
+    if (dbUrl) url = dbUrl; // DB wins when present
+  } catch {
+    /* DB unreachable → keep the env fallback */
+  }
+  relayCache = { at: Date.now(), url };
+  return url;
+}
 
 // Instagram now requires a logged-in session for its data endpoints (web_
 // profile_info returns 401 anonymously). We reuse real browser sessions: the
@@ -100,11 +124,11 @@ function headersToObject(h: HeadersInit | undefined): Record<string, string> {
   return h as Record<string, string>;
 }
 
-function sendOnce(url: string, init: RequestInit, authedHeaders: Record<string, string>): Promise<Response> {
+function sendOnce(url: string, init: RequestInit, authedHeaders: Record<string, string>, relay: string | undefined): Promise<Response> {
   // Relay takes priority: send the request to the home-IP relay, which fetches
   // Instagram and streams the (status-preserving) response back.
-  if (RELAY) {
-    return fetch(RELAY, {
+  if (relay) {
+    return fetch(relay, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -121,6 +145,7 @@ function sendOnce(url: string, init: RequestInit, authedHeaders: Record<string, 
 
 export async function igFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const baseHeaders = headersToObject(init.headers);
+  const relay = await relayUrl(); // current tunnel URL from DB (self-updating), env fallback
 
   // Candidate cookies to try, in order: rotating pool accounts first, env cookie
   // last as a fallback. Rotating the START point spreads load across accounts so
@@ -139,7 +164,7 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
   const maxTries = Math.min(candidates.length, 3);
   let res!: Response;
   for (let i = 0; i < maxTries; i++) {
-    res = await sendOnce(url, init, withAuth(baseHeaders, candidates[i]!));
+    res = await sendOnce(url, init, withAuth(baseHeaders, candidates[i]!), relay);
     if (res.status !== 401 && res.status !== 403) break; // success or non-auth error → stop
   }
   return res;
