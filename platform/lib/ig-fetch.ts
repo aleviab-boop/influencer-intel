@@ -165,7 +165,12 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
   let res!: Response;
   for (let i = 0; i < maxTries; i++) {
     res = await sendOnce(url, init, withAuth(baseHeaders, candidates[i]!), relay);
-    if (res.status !== 401 && res.status !== 403) break; // success or non-auth error → stop
+    // Fail over to the next account on a dead cookie (401/403) OR a throttle
+    // (429): a 429 means THAT session is rate-limited, so retrying with a
+    // different, un-throttled account recovers the request instead of returning
+    // 429. The retry uses a DIFFERENT account, so it never adds load to the
+    // throttled one. Any other status (200, 404, 5xx) → stop.
+    if (res.status !== 401 && res.status !== 403 && res.status !== 429) break;
   }
   return res;
 }
