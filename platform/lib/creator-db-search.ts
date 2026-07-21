@@ -28,6 +28,14 @@ const GENERIC_NICHE = new Set([
 
 const LOC_TXT = `lower(coalesce(region,'') || ' ' || coalesce(primary_city,''))`;
 const NICHE_TXT = `lower(coalesce(genre,'') || ' ' || coalesce(niche,'') || ' ' || coalesce(primary_category,'') || ' ' || coalesce(array_to_string(tags, ' '), ''))`;
+// NICHE_STRICT is NICHE_TXT WITHOUT tags — used for the niche GATE only. The
+// discovery crawler blindly tags every find with the search keywords, so a
+// Mumbai real-estate account crawled under a "home baker" search ends up tagged
+// "baker" and would otherwise pass a "sourdough baker" gate. Gating on the
+// genuine classification fields (genre/niche/category) + handle/name keeps that
+// noise out. Tags still feed the relevance SCORE (via NICHE_TXT) — they just
+// can't admit a row THROUGH the gate on their own.
+const NICHE_STRICT = `lower(coalesce(genre,'') || ' ' || coalesce(niche,'') || ' ' || coalesce(primary_category,''))`;
 const ID_TXT = `lower(coalesce(handle,'') || ' ' || coalesce(display_name,''))`;
 const BIO_TXT = `lower(coalesce(bio,''))`;
 
@@ -123,7 +131,7 @@ export async function searchCreatorsInDb(
   const specificIdx = nicheIdx.filter((i) => !GENERIC_NICHE.has((tokens[i] ?? '').toLowerCase()));
   const gateIdx = specificIdx.length ? specificIdx : nicheIdx;
   const nicheRequired = gateIdx.length
-    ? `and (${gateIdx.map((i) => `(${NICHE_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1})`).join(' or ')})`
+    ? `and (${gateIdx.map((i) => `(${NICHE_STRICT} like $${i + 1} or ${ID_TXT} like $${i + 1})`).join(' or ')})`
     : '';
 
   // Source bucket: the browser scraper's own finds come FIRST, then the
