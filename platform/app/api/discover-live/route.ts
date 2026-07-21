@@ -221,6 +221,12 @@ export async function POST(req: NextRequest) {
     byUser.set(key, { ...richer, from_ai: p.from_ai || ex.from_ai, loc_match: p.loc_match || ex.loc_match });
   }
   const results = flagLocals(Array.from(byUser.values()), tokens)
+    // Only DISPLAY creators we actually have data for — no un-enriched stubs
+    // (a stub is an AI-suggested handle we couldn't validate live yet: 0
+    // followers / unverified). They're still SAVED and enriched in the
+    // background; they just don't clutter the results until they have real
+    // numbers, then they show up on a later search.
+    .filter((p) => p.followers > 0 && !p.unverified)
     .sort((a, b) => {
       // ① Source priority: OpenAI first, then DB, then live crawl.
       const sr = srcRank(a) - srcRank(b);
