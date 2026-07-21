@@ -1588,7 +1588,7 @@ export function LiveSearch({
       {loading && (
         <div className="mt-10 flex flex-col items-center justify-center">
           <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
-          <div className="mt-3 text-[13px] text-[#888]">Finding starting points & crawling Instagram…</div>
+          <div className="mt-3 text-[13px] text-[#888]">{sourceBucket === 'trends' ? 'Loading curated Trends creators…' : 'Finding starting points & crawling Instagram…'}</div>
         </div>
       )}
 

@@ -64,6 +64,41 @@ export async function POST(req: NextRequest) {
     void getBolticClient()
       .insert('agency_searches', { prompt, result_count: dbMatches.length })
       .catch(() => {});
+
+    // TRENDS is a CURATED bucket — the creators imported from the campaign Excel
+    // sheets — so it must be an instant DB read and NOTHING else. It must never
+    // trigger a live Instagram crawl, an OpenAI web search, or a worker job
+    // (those are the Instagram bucket's job). Return the curated matches straight
+    // away so pressing "Trends" shows the sheet immediately instead of crawling.
+    if (bucket === 'trends') {
+      const place0 = extractPlace(prompt, tokens);
+      const trendsResults = flagLocals(dbMatches, tokens)
+        .filter((p) => p.followers > 0 && !p.unverified)
+        .sort((a, b) => {
+          const am = a.loc_match ? 0 : 1;
+          const bm = b.loc_match ? 0 : 1;
+          if (am !== bm) return am - bm;
+          return b.score - a.score || b.followers - a.followers;
+        })
+        .slice(0, max)
+        .map((p) => ({ ...p, completeness: completenessScore(p) }));
+      return NextResponse.json({
+        prompt,
+        tokens,
+        results: trendsResults,
+        from_db: trendsResults.length,
+        from_live: 0,
+        from_ai: 0,
+        persisted: 0,
+        resolved_from_names: [],
+        auto_seeds: [],
+        job_id: null,
+        cold: false,
+        place: place0,
+        localsFound: place0 ? countLocals(trendsResults, place0) : null,
+      });
+    }
+
     // A prompt is "cold" when the Super Admin scraper has never crawled it before
     // (no prior search_query job for it) — NOT merely when the DB is empty. This
     // is the key distinction: "fashion influencer in guwahati" returns generic
