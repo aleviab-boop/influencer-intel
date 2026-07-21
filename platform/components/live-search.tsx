@@ -884,7 +884,7 @@ export function LiveSearch({
     }
   }
   // recently searched — auto-tracked in localStorage, most-recent-first, capped.
-  const RECENT_MAX = 10;
+  const RECENT_MAX = 5;
   const [recent, setRecent] = useState<string[]>([]);
   const autoRan = useRef(false);
 
@@ -1479,7 +1479,7 @@ export function LiveSearch({
       {recent.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-[12px] text-[#999]">Recent:</span>
-          {recent.map((p) => (
+          {recent.slice(0, RECENT_MAX).map((p) => (
             <span key={p} className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full border border-[#e3def9] bg-white text-[12px]">
               <button onClick={() => runRecent(p)} className="hover:underline" style={{ color: ACCENT }} title="Search again">
                 {p}
