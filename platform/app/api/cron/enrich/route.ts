@@ -56,8 +56,12 @@ export async function GET(req: NextRequest) {
   }
   const db = getBolticClient();
 
-  // SAFETY GATE 1: need >= 2 healthy accounts so enrichment never runs the pool
-  // dry (and never competes with live search on a single cookie).
+  // SAFETY GATE 1: need >= 3 healthy accounts before enrichment runs, so a small
+  // pool is reserved ENTIRELY for user-facing live search. With only 1-2 accounts,
+  // background enrichment (5 fetches / 2 min) competes for the same cookies and
+  // pushes them into 429 rate-limiting — starving live search. Requiring headroom
+  // (3+) means enrichment only runs when there's spare capacity, and pauses itself
+  // the moment the pool shrinks, letting throttled accounts recover.
   let ready = 0;
   try {
     const r = await db.query<{ n: number }>(
@@ -68,7 +72,7 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'db' }, { status: 500 });
   }
-  if (ready < 2) return NextResponse.json({ skipped: 'need >= 2 healthy accounts', ready });
+  if (ready < 3) return NextResponse.json({ skipped: 'need >= 3 healthy accounts (small pool reserved for live search)', ready });
 
   // Pick a batch of un-enriched stubs (newest discoveries first — most likely
   // to be searched/relevant soon).
