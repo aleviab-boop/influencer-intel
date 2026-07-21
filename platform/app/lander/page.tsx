@@ -87,6 +87,9 @@ function LanderContent() {
   // View is driven by the URL so "Home" (→ /lander) always resets to the hero.
   const query = params.get('prompt');
   const seed = params.get('seed') ?? '';
+  // Which source tab to open on, persisted in the URL so a refresh restores it
+  // (?bucket=trends) instead of snapping back to Instagram and re-crawling.
+  const initialBucket = params.get('bucket') === 'trends' ? 'trends' : 'instagram';
   // The agency lander searches the DATABASE — the admin Scraper page is what
   // crawls Instagram live and fills that database. So the lander is instant and
   // never hits Instagram itself.
@@ -118,7 +121,17 @@ function LanderContent() {
               initialPrompt={query ?? ''}
               initialSeed={seed}
               initialMode={mode}
-              onSearchPrompt={(q) => router.push(`/lander?prompt=${encodeURIComponent(q)}`)}
+              initialBucket={initialBucket}
+              onSearchPrompt={(q) => {
+                const qs = new URLSearchParams();
+                qs.set('prompt', q);
+                // Preserve the current tab so searching a new prompt while on
+                // Trends stays on Trends (read fresh from the URL, which the tab
+                // toggle keeps in sync via replaceState).
+                const b = typeof window !== 'undefined' ? new URL(window.location.href).searchParams.get('bucket') : null;
+                if (b === 'trends') qs.set('bucket', b);
+                router.push(`/lander?${qs.toString()}`);
+              }}
             />
           </div>
         ) : (

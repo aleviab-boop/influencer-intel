@@ -531,11 +531,16 @@ export function LiveSearch({
   initialPrompt = '',
   initialSeed = '',
   initialMode = 'crawl',
+  initialBucket = 'instagram',
   onSearchPrompt,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
   initialMode?: 'db' | 'live' | 'crawl';
+  // Which source tab to open on (Lander). Persisted in the URL (?bucket=trends)
+  // so a refresh restores the tab you were on instead of snapping back to
+  // Instagram (which would re-run a live crawl).
+  initialBucket?: 'instagram' | 'trends';
   // When set (the Lander), a new search pushes the prompt to the URL instead of
   // searching in-place — so browser back/forward navigates between searches and
   // returning restores the last one. Unset (Scraper) → search in place.
@@ -562,7 +567,7 @@ export function LiveSearch({
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
   // 'trends' = creators uploaded from the campaign Excel sheets.
-  const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>('instagram');
+  const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>(initialBucket);
   // Per-bucket result cache so toggling Instagram ↔ Trends and back RESTORES the
   // exact list you already saw instead of re-searching (the DB search re-ranks,
   // so a re-run returned a different/mixed list). Reset on a fresh prompt search.
@@ -1546,6 +1551,15 @@ export function LiveSearch({
                     bucketCache.current[sourceBucket] = run;
                     const cached = bucketCache.current[val];
                     setSourceBucket(val);
+                    // Persist the tab in the URL (?bucket=trends) via replaceState —
+                    // no navigation/remount, but a refresh now restores THIS tab
+                    // instead of snapping back to Instagram (and re-crawling).
+                    if (typeof window !== 'undefined') {
+                      const u = new URL(window.location.href);
+                      if (val === 'instagram') u.searchParams.delete('bucket');
+                      else u.searchParams.set('bucket', val);
+                      window.history.replaceState(null, '', u.toString());
+                    }
                     if (cached) { setRun(cached); setError(null); return; } // restore — no re-search, no mix-up
                     void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
                   }}
