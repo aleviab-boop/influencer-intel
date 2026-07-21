@@ -202,6 +202,7 @@ export async function run(): Promise<void> {
       const health = await probeAccount(driver.page);
       if (health === 'throttled') pool.penalizeCurrent();
       else if (health === 'dead') pool.markCurrentDead();
+      else pool.reportAlive(); // healthy probe → clear any stray dead-strike streak
     }
 
     // Proactive rotation: after each job, hand off to the least-used ready

@@ -134,6 +134,12 @@ export class JobQueue {
     this.pool?.markCurrentDead();
   }
 
+  /** A handler completed successfully on the active account — clear any dead-strike
+   * streak so scattered, non-consecutive 401/403s never park a healthy account. */
+  markAccountAlive(): void {
+    this.pool?.reportAlive();
+  }
+
   private maybeResetActions(): void {
     if (Date.now() > this.hourReset) {
       this.actionsThisHour = 0;

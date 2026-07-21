@@ -459,10 +459,17 @@ export async function handleSearchQuery(
     console.warn(`[search] "${query}": ${rateLimited} × HTTP 429 — cooling down this account & rotating`);
     queue.penalizeAccount();
   }
-  // Dead/expired session (401) → park this account (needs re-capture) and rotate.
-  if ((harvest as { sessionDead?: boolean })?.sessionDead) {
-    console.warn(`[search] "${query}": session appears DEAD (401) — parking this account & rotating to another`);
+  // Dead-signal (401/403). This is only PROVISIONAL now: a single one is usually
+  // a transient IG block, so markAccountDead() just cools the account down and
+  // counts a strike — it only parks after several CONSECUTIVE strikes. But if
+  // this same crawl ALSO returned real candidates, the session clearly still
+  // works, so we treat that as alive (clear the streak) and ignore the blip.
+  const gotCandidates = ((harvest?.candidates ?? []) as unknown[]).length > 0;
+  if ((harvest as { sessionDead?: boolean })?.sessionDead && !gotCandidates) {
+    console.warn(`[search] "${query}": dead-signal (401/403) with no results — flagging this account (parks only after repeated strikes) & rotating`);
     queue.markAccountDead();
+  } else if (gotCandidates) {
+    queue.markAccountAlive(); // real data came back → session is healthy
   }
 
   if (harvest?.error) {

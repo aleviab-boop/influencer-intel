@@ -14,6 +14,15 @@ import { notifySlack } from '../notify-slack.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DEFAULT_COOLDOWN_MS = 90 * 60 * 1000; // rest a 429'd account for 90 min
+// A single 401/403 from IG is very often a TRANSIENT soft-block/challenge under
+// load, NOT a genuinely dead login — and the old code parked (force-expired) the
+// account on the first one, which is why accounts "died early" and needed a
+// manual re-capture far short of their 30-day cookie life. We now require this
+// many CONSECUTIVE dead-signals before concluding the session is truly gone;
+// any successful request in between resets the streak. Below the threshold a
+// dead-signal is treated like a throttle (short cooldown + rotate) so the
+// account gets a chance to recover on its own.
+const DEAD_STRIKES_TO_PARK = 3;
 
 interface AcctState {
   account: ServiceAccount;
@@ -21,6 +30,7 @@ interface AcctState {
   hourResetAt: number;
   cooldownUntil: number; // epoch ms; 0 = not cooling
   totalActions: number;
+  deadStrikes: number; // consecutive 401/403 signals; reset on any success
 }
 
 // The active, session-bearing accounts eligible for rotation. Shared by the
@@ -54,6 +64,7 @@ export class AccountPool {
       hourResetAt: now + HOUR_MS,
       cooldownUntil: cooldownMs(a),
       totalActions: 0,
+      deadStrikes: 0,
     }));
     // Start on the first account that isn't currently cooling down.
     const firstReady = pool.states.findIndex((s) => now >= s.cooldownUntil);
@@ -90,6 +101,7 @@ export class AccountPool {
         hourResetAt: now + HOUR_MS,
         cooldownUntil: cooldownMs(a),
         totalActions: 0,
+        deadStrikes: 0,
       };
     });
 
@@ -143,17 +155,37 @@ export class AccountPool {
     void this.persist(s);
   }
 
-  /** The active account's SESSION is dead (401 — expired/invalid login). Unlike a
-   * 429, resting won't fix it — it needs a manual re-capture. Park it out of
-   * rotation (long cooldown) and mark its stored session expired so the pool
-   * drops it on the next load. The orchestrator then rotates to another account. */
-  markCurrentDead(): void {
+  /** The active account answered a request successfully → clear its dead-strike
+   * streak, so a later isolated 401/403 starts counting from zero again and a
+   * healthy account is never parked by scattered, non-consecutive blips. */
+  reportAlive(): void {
     const s = this.states[this.idx]!;
+    if (s.deadStrikes) {
+      console.log(`[pool] @${s.account.handle} responded OK → clearing ${s.deadStrikes} dead-strike(s)`);
+      s.deadStrikes = 0;
+    }
+  }
+
+  /** A dead-signal (401/403) on the active account. A SINGLE one is usually a
+   * transient IG block/challenge, not a genuinely dead login — so we only PARK
+   * (force-expire, needs manual re-capture) after DEAD_STRIKES_TO_PARK
+   * CONSECUTIVE signals. Below that we just cool the account down like a 429 and
+   * rotate, giving it a chance to recover on its own. Returns true iff it was
+   * actually parked. This is the fix for accounts "dying early". */
+  markCurrentDead(): boolean {
+    const s = this.states[this.idx]!;
+    s.deadStrikes += 1;
+    if (s.deadStrikes < DEAD_STRIKES_TO_PARK) {
+      s.cooldownUntil = Date.now() + DEFAULT_COOLDOWN_MS; // rest & retry, don't park
+      console.warn(`[pool] @${s.account.handle} dead-signal ${s.deadStrikes}/${DEAD_STRIKES_TO_PARK} (401/403) → cooling down ${Math.round(DEFAULT_COOLDOWN_MS / 60000)}min, NOT parked yet`);
+      void this.persist(s);
+      return false;
+    }
     s.cooldownUntil = Date.now() + 30 * 24 * HOUR_MS; // effectively parked
-    console.warn(`[pool] @${s.account.handle} session DEAD (401) → parking it. Re-capture with: SERVICE_ACCOUNT_HANDLE=${s.account.handle} npm run scraper:capture`);
+    console.warn(`[pool] @${s.account.handle} session DEAD (confirmed after ${s.deadStrikes} consecutive 401/403) → parking it. Re-capture with: SERVICE_ACCOUNT_HANDLE=${s.account.handle} npm run scraper:capture`);
     // Ping the operator so a dead account is re-captured promptly (no-op if no webhook).
     void notifySlack(
-      `:warning: IG scraper account *@${s.account.handle}* session died (401) — parked out of rotation.\n` +
+      `:warning: IG scraper account *@${s.account.handle}* session died (confirmed after ${s.deadStrikes} consecutive 401/403) — parked out of rotation.\n` +
       `Re-capture it: \`SERVICE_ACCOUNT_HANDLE=${s.account.handle} npm run scraper:capture\``,
     );
     void (async () => {
@@ -171,6 +203,7 @@ export class AccountPool {
         /* best-effort */
       }
     })();
+    return true;
   }
 
   /**
