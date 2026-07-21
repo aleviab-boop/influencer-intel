@@ -1138,14 +1138,21 @@ export function LiveSearch({
         return (baseOrder.get(a.username) ?? 0) - (baseOrder.get(b.username) ?? 0);
       });
     }
+    // Group into source sections in pipeline order: AI web search → previous DB
+    // searches → live Instagram crawl. Stable sort keeps the within-section
+    // ranking computed above.
+    const grpRank = (p: LiveProfile) => (p.from_ai ? 0 : p.from === 'db' ? 1 : 2);
+    sorted.sort((a, b) => grpRank(a) - grpRank(b));
     return sorted;
   })();
 
-  // Tier boundary: on a location search (relevance sort), the exact city+niche
-  // matches lead (loc_match) and the niche-related creators follow — insert a
-  // divider between them. Only when there's a genuine mix of both.
-  const exactMatchCount = shown.filter((p) => p.loc_match).length;
-  const showTierDivider = sortBy === 'relevance' && exactMatchCount > 0 && exactMatchCount < shown.length;
+  // Source-section headers shown above the first row of each group.
+  const groupOf = (p: LiveProfile): 'ai' | 'db' | 'live' => (p.from_ai ? 'ai' : p.from === 'db' ? 'db' : 'live');
+  const GROUP_LABEL: Record<'ai' | 'db' | 'live', string> = {
+    ai: 'AI web search',
+    db: 'Based on previous searches',
+    live: 'Live from Instagram',
+  };
 
   function pickSuggestion(s: string) {
     setPrompt(s);
@@ -1767,11 +1774,11 @@ export function LiveSearch({
                     const p = live ? { ...pRaw, ...live } : pRaw;
                     return (
                     <Fragment key={p.username}>
-                    {showTierDivider && i === exactMatchCount && (
+                    {(i === 0 || groupOf(shown[i - 1]!) !== groupOf(p)) && (
                       <tr>
                         <td colSpan={9} className="px-3 pt-5 pb-2">
                           <div className="flex items-center gap-3">
-                            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">Also relevant to this niche</span>
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">{GROUP_LABEL[groupOf(p)]}</span>
                             <span className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, #e3def9, transparent)' }} />
                           </div>
                         </td>
