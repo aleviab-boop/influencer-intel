@@ -70,7 +70,7 @@ const ACCT_STATE: Record<Account['state'], { label: string; dot: string; fg: str
   expired: { label: 'expired', dot: 'bg-[#c1c1cc]', fg: 'text-[#999]', hint: 'session expired — re-capture' },
 };
 
-function usePoll<T>(url: string, intervalMs = 8_000): T | null {
+function usePoll<T>(url: string, intervalMs = 8_000, refreshKey = 0): T | null {
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
     let alive = true;
@@ -78,7 +78,7 @@ function usePoll<T>(url: string, intervalMs = 8_000): T | null {
     load();
     const t = setInterval(load, intervalMs);
     return () => { alive = false; clearInterval(t); };
-  }, [url, intervalMs]);
+  }, [url, intervalMs, refreshKey]); // bumping refreshKey forces an immediate reload
   return data;
 }
 
@@ -111,14 +111,27 @@ function timeUntil(iso: string | null): string | null {
 }
 
 export default function AdminScraperPage() {
-  const stats = usePoll<Stats>('/api/admin/stats');
+  // Bumping this forces stats + jobs to reload immediately (e.g. right after a
+  // cancel) so the list and counts update live instead of waiting for the poll.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const stats = usePoll<Stats>('/api/admin/stats', 8_000, refreshKey);
   const recent = usePoll<RecentData>('/api/admin/recent-scrapes', 8_000);
-  const jobsData = usePoll<JobsData>('/api/admin/jobs', 8_000);
+  const jobsData = usePoll<JobsData>('/api/admin/jobs', 8_000, refreshKey);
   // Cancel a queued crawl so it doesn't sit in the queue burning account budget.
   const [cancelled, setCancelled] = useState<Set<string>>(new Set());
   async function cancelJob(id: string) {
-    setCancelled((s) => new Set(s).add(id)); // hide immediately; the poll reconciles
-    try { await fetch(`/api/admin/jobs?id=${id}`, { method: 'DELETE' }); } catch { /* poll will reconcile */ }
+    setCancelled((s) => new Set(s).add(id)); // hide immediately
+    try {
+      const r = await fetch(`/api/admin/jobs?id=${id}`, { method: 'DELETE' });
+      if (r.ok) {
+        setRefreshKey((n) => n + 1); // delete persisted → refetch so list + counts update live
+      } else {
+        // delete failed → un-hide so the UI stays truthful (it's still queued)
+        setCancelled((s) => { const n = new Set(s); n.delete(id); return n; });
+      }
+    } catch {
+      setCancelled((s) => { const n = new Set(s); n.delete(id); return n; });
+    }
   }
   // Live-data pipeline health (cookie/relay path). Polled gently — server caches
   // ~60s so this never adds more than ~1 IG request/min.
@@ -302,7 +315,7 @@ export default function AdminScraperPage() {
             <span className="text-[12px] font-normal text-[#999] flex items-center gap-2.5">
               <span className="text-emerald-600">{jobsData.counts.completed_24h} done</span>
               {jobsData.counts.failed_24h > 0 && <span className="text-rose-600">{jobsData.counts.failed_24h} failed</span>}
-              <span>{jobsData.counts.queued} queued</span>
+              <span>{Math.max(0, jobsData.counts.queued - jobsData.jobs.filter((j) => j.status === 'queued' && cancelled.has(j.id)).length)} queued</span>
               {jobsData.counts.in_progress > 0 && <span className="text-sky-600">{jobsData.counts.in_progress} running</span>}
               <span className="text-[#bbb]">· 24h</span>
             </span>
