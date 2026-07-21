@@ -174,7 +174,7 @@ export async function searchCreatorsInDb(
     -- Then LOCALS LEAD when the query names a place, weighted relevance, then reach.
     order by (${SOURCE_BUCKET}) asc,
              (case when is_indian = false then 1 else 0 end) asc,
-             (${locHitExpr}) desc,
+             ${hasLocToken ? `(${locHitExpr}) desc,` : ''}
              score desc,
              follower_count desc nulls last
     limit $${tokens.length + 1}
