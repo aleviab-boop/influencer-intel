@@ -36,7 +36,7 @@ exec caffeinate -i bash -c '
   ( while true; do
       curl -s -m20 "https://influencer-intel-platform.vercel.app/api/cron/monitor" >/dev/null 2>&1
       curl -s -m30 "https://influencer-intel-platform.vercel.app/api/cron/enrich"  >/dev/null 2>&1
-      sleep 300
+      sleep 120
     done ) &
 
   # keep a tunnel alive; on every (re)start, publish the fresh URL to the DB

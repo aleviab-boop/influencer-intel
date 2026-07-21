@@ -28,7 +28,10 @@ const HEADERS: Record<string, string> = {
 const PROFILE_URL = (u: string) =>
   `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(u)}`;
 
-const BATCH = 12; // per run — still safe: it stops the instant it sees a 429
+// Batch is paired with the ~2-min trigger interval in run-relay.sh: 5 every 2min
+// ≈ 150/hr total (~75/account across 2 accounts) — under the safe rate, just more
+// responsive than one big batch every 5 min. Still stops instantly on a 429.
+const BATCH = 5;
 const DELAY_MS = 700; // pace between fetches
 
 interface IGUser {
