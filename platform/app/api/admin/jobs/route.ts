@@ -1,7 +1,25 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 
 export const runtime = 'nodejs';
+
+// DELETE /api/admin/jobs?id=<jobId>
+//   Cancel a QUEUED crawl so it doesn't sit in the queue burning account budget.
+//   Guarded to status='queued' only — never touches an in-progress crawl or the
+//   completed/failed history.
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id')?.trim();
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  try {
+    const rows = await getBolticClient().query<{ id: string }>(
+      `DELETE FROM scrape_jobs WHERE id = $1 AND status = 'queued' RETURNING id`,
+      [id],
+    );
+    return NextResponse.json({ deleted: rows.length }); // 0 if it wasn't queued (already running/done)
+  } catch {
+    return NextResponse.json({ error: 'delete failed' }, { status: 500 });
+  }
+}
 
 // GET /api/admin/jobs
 //   Recent crawl jobs so the admin can see what the worker has actually been

@@ -114,6 +114,12 @@ export default function AdminScraperPage() {
   const stats = usePoll<Stats>('/api/admin/stats');
   const recent = usePoll<RecentData>('/api/admin/recent-scrapes', 8_000);
   const jobsData = usePoll<JobsData>('/api/admin/jobs', 8_000);
+  // Cancel a queued crawl so it doesn't sit in the queue burning account budget.
+  const [cancelled, setCancelled] = useState<Set<string>>(new Set());
+  async function cancelJob(id: string) {
+    setCancelled((s) => new Set(s).add(id)); // hide immediately; the poll reconciles
+    try { await fetch(`/api/admin/jobs?id=${id}`, { method: 'DELETE' }); } catch { /* poll will reconcile */ }
+  }
   // Live-data pipeline health (cookie/relay path). Polled gently — server caches
   // ~60s so this never adds more than ~1 IG request/min.
   const pipeline = usePoll<PipelineHealth>('/api/admin/pipeline-health', 30_000);
@@ -306,11 +312,11 @@ export default function AdminScraperPage() {
           <div className="px-5 py-8 text-center text-[13px] text-[#aaa]">No crawl jobs yet. Search below to start one.</div>
         ) : (
           <div className="divide-y divide-[#f5f5f8] max-h-[360px] overflow-y-auto">
-            {jobsData!.jobs.map((j) => {
+            {jobsData!.jobs.filter((j) => !cancelled.has(j.id)).map((j) => {
               const st = JOB_STATUS[j.status] ?? { fg: 'text-[#777]', bg: 'bg-[#f4f4f6]', label: j.status };
               const when = j.completed_at ?? j.started_at ?? j.queued_at;
               return (
-                <div key={j.id} className="px-5 py-2.5 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
+                <div key={j.id} className="px-5 py-2.5 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors group">
                   <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-md ${st.fg} ${st.bg}`}>{st.label}</span>
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] text-[#222] truncate">{j.target}</div>
@@ -321,6 +327,15 @@ export default function AdminScraperPage() {
                   )}
                   {j.attempts > 1 && j.status !== 'completed' && (
                     <span className="shrink-0 text-[11px] text-amber-600">×{j.attempts}</span>
+                  )}
+                  {j.status === 'queued' && (
+                    <button
+                      onClick={() => cancelJob(j.id)}
+                      title="Cancel this queued crawl (frees account budget)"
+                      className="shrink-0 w-6 h-6 grid place-items-center rounded-md text-[#c9c4dd] hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
                   )}
                   <span className="shrink-0 text-[12px] text-[#bbb] tabular-nums w-9 text-right">{when ? timeAgo(when) : '—'}</span>
                 </div>
