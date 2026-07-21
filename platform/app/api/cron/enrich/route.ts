@@ -28,8 +28,8 @@ const HEADERS: Record<string, string> = {
 const PROFILE_URL = (u: string) =>
   `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(u)}`;
 
-const BATCH = 5; // tiny batch per run — gentle on the shared IP
-const DELAY_MS = 800; // pace between fetches
+const BATCH = 12; // per run — still safe: it stops the instant it sees a 429
+const DELAY_MS = 700; // pace between fetches
 
 interface IGUser {
   full_name?: string;
