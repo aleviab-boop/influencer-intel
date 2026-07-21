@@ -11,6 +11,7 @@ import {
   inferNiche,
   isLocationToken,
   completenessScore,
+  extractContact,
   STATE_CITIES,
   type LiveProfile,
 } from '@/lib/live-discovery';
@@ -28,6 +29,60 @@ export const maxDuration = 60;
 // and lead with those results. The creators database is supplementary — it
 // tops up the live results and surfaces curated profiles below them. New live
 // profiles are persisted so the database keeps growing.
+
+// Data-backed lookup for OpenAI-suggested handles: any that already exist in our
+// creators DB (with real follower data) come back INSTANTLY and deterministically
+// — no live IG fetch, no throttle, and the same every run. This is what lets the
+// "AI web search" section reliably fill up to ~10 accounts and stay stable across
+// refreshes, instead of depending on how many handles happen to validate live.
+async function dbBackedAiProfiles(handles: string[]): Promise<LiveProfile[]> {
+  const norm = Array.from(
+    new Set(handles.map((h) => h.trim().toLowerCase().replace(/^@/, '')).filter((h) => /^[a-z0-9._]{2,30}$/.test(h))),
+  );
+  if (norm.length === 0) return [];
+  try {
+    const rows = await getBolticClient().query<{
+      id: string; handle: string; display_name: string | null; bio: string | null;
+      primary_category: string | null; follower_count: number | string | null;
+      engagement_rate: number | string | null; is_verified: boolean | null;
+      profile_photo_url: string | null; gender: string | null; is_indian: boolean | null;
+    }>(
+      `SELECT id, handle, display_name, bio, primary_category, follower_count, engagement_rate,
+              is_verified, profile_photo_url, gender, is_indian
+         FROM creators
+        WHERE platform = 'instagram' AND is_active = true
+          AND coalesce(follower_count, 0) > 0
+          AND lower(handle) = ANY($1)`,
+      [norm],
+    );
+    return rows.map((r) => {
+      const contact = extractContact(r.bio);
+      return {
+        username: r.handle,
+        full_name: r.display_name ?? '',
+        biography: r.bio ?? '',
+        category: r.primary_category ?? '',
+        followers: Number(r.follower_count ?? 0),
+        is_private: false,
+        is_verified: Boolean(r.is_verified),
+        profile_pic_url: r.profile_photo_url ?? null,
+        score: 1,
+        engagement: r.engagement_rate != null ? Math.round(Number(r.engagement_rate) * 1000) / 10 : 0,
+        email: contact.email,
+        phone: contact.phone,
+        link: contact.link,
+        creator_id: r.id,
+        from: 'live' as const,
+        from_ai: true,
+        gender: (r.gender === 'female' || r.gender === 'male' ? r.gender : null) as 'female' | 'male' | null,
+        is_indian: r.is_indian === false ? false : true,
+      } as LiveProfile;
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
@@ -140,15 +195,33 @@ export async function POST(req: NextRequest) {
   const aiPipeline = (async () => {
     if (mode !== 'db') return;
     try {
+      // Ask for MORE than 10 so that after relevance-filtering we still have
+      // enough to fill the section (OpenAI over-suggests; some don't fit).
       const handles = await withTimeout(
-        getOpenAIClient().suggestHandlesFromPrompt(prompt, 15).catch(() => [] as string[]),
+        getOpenAIClient().suggestHandlesFromPrompt(prompt, 20).catch(() => [] as string[]),
         18_000,
         [] as string[],
       );
       if (handles.length === 0) return;
-      let cand = (await profilesFromHandles(handles, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })).map(
-        (p) => ({ ...p, from: 'live' as const }),
-      );
+
+      // DB-FIRST: handles we already have (with real data) resolve instantly and
+      // deterministically. Only the handles NOT in the DB need a live IG fetch —
+      // far fewer, so validation finishes within budget and barely touches the
+      // account pool. This is what makes the AI section reliably ~10 and stable.
+      const dbBacked = await dbBackedAiProfiles(handles);
+      const haveHandles = new Set(dbBacked.map((p) => p.username.toLowerCase()));
+      const missing = handles.filter((h) => !haveHandles.has(h.trim().toLowerCase().replace(/^@/, '')));
+      const liveValidated = (
+        await profilesFromHandles(missing, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })
+      ).map((p) => ({ ...p, from: 'live' as const }));
+
+      // Merge, DB-backed first (data-backed + stable), then live finds. Dedupe.
+      const merged = new Map<string, LiveProfile>();
+      for (const p of [...dbBacked, ...liveValidated]) {
+        const k = p.username.toLowerCase();
+        if (!merged.has(k)) merged.set(k, p);
+      }
+      let cand = Array.from(merged.values());
       // OpenAI relevance check: web-search suggestions sometimes include an
       // off-niche account (a makeup artist for an "aquascaping" query) or a
       // foreign one — validation confirms they EXIST but not that they FIT. One
