@@ -922,15 +922,6 @@ export function LiveSearch({
     void search({ promptOverride: p });
   }
 
-  function toggleSelect(username: string) {
-    setSelected((s) => {
-      const n = new Set(s);
-      if (n.has(username)) n.delete(username);
-      else n.add(username);
-      return n;
-    });
-  }
-
   async function openDraft(p: LiveProfile, channel: 'dm' | 'email' = 'dm', lang: 'auto' | 'english' | 'hinglish' | 'hindi' = draftLang, followup = false) {
     setDraftFor(p);
     setDraftChannel(channel);
@@ -1747,16 +1738,6 @@ export function LiveSearch({
               <table className="w-full text-left border-collapse [&_th]:px-2 [&_td]:px-2">
                 <thead>
                   <tr className="bg-[#faf9ff] text-[12px] uppercase tracking-wider text-[#888]">
-                    <th className="px-3 py-2.5 w-8">
-                      <input
-                        type="checkbox"
-                        className="accent-[#6C4DF6]"
-                        checked={shown.length > 0 && shown.every((p) => selected.has(p.username))}
-                        onChange={(e) =>
-                          setSelected(e.target.checked ? new Set(shown.map((p) => p.username)) : new Set())
-                        }
-                      />
-                    </th>
                     <th className="px-3 py-2.5 font-medium w-10">#</th>
                     <th className="px-3 py-2.5 font-medium">Creator</th>
                     <th className="px-3 py-2.5 font-medium">Category</th>
@@ -1776,7 +1757,7 @@ export function LiveSearch({
                     <Fragment key={p.username}>
                     {(i === 0 || groupOf(shown[i - 1]!) !== groupOf(p)) && (
                       <tr>
-                        <td colSpan={9} className="px-3 pt-5 pb-2">
+                        <td colSpan={8} className="px-3 pt-5 pb-2">
                           <div className="flex items-center gap-3">
                             <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">{GROUP_LABEL[groupOf(p)]}</span>
                             <span className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, #e3def9, transparent)' }} />
@@ -1789,14 +1770,6 @@ export function LiveSearch({
                       ref={(el) => { if (el) rowObserver().observe(el); }}
                       className={`hover:bg-[#fafaff] ${selected.has(p.username) || profileFor === p.username ? 'bg-[#faf9ff]' : ''}`}
                     >
-                      <td className="px-3 py-3">
-                        <input
-                          type="checkbox"
-                          className="accent-[#6C4DF6]"
-                          checked={selected.has(p.username)}
-                          onChange={() => toggleSelect(p.username)}
-                        />
-                      </td>
                       <td className="px-3 py-3 text-[13px] text-[#aaa] tabular-nums">{i + 1}</td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-3 min-w-0">
