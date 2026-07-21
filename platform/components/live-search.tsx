@@ -527,6 +527,24 @@ function parseSeedInput(raw: string): { seeds: string[]; names: string[] } {
   return { seeds, names };
 }
 
+// Refresh-persistence cache (Lander). Keyed by tab + prompt so each bucket keeps
+// its own list, and stored in sessionStorage so it survives a page reload but is
+// wiped when the tab closes (never stale across sessions).
+function resultCacheKey(prompt: string, bucket: 'instagram' | 'trends'): string {
+  return `livesearch:${bucket}:${prompt.trim().toLowerCase()}`;
+}
+function readResultCache(prompt: string, bucket: 'instagram' | 'trends'): RunResponse | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(resultCacheKey(prompt, bucket));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as RunResponse;
+    return v && Array.isArray(v.results) && v.results.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function LiveSearch({
   initialPrompt = '',
   initialSeed = '',
@@ -1209,6 +1227,12 @@ export function LiveSearch({
       const p = initialPrompt.trim();
       if (p.length >= 2 || initialSeed.trim().length >= 2) {
         setPrompt(initialPrompt);
+        // Refresh persistence: restore the exact list from the last time this
+        // prompt+tab was viewed (kept in sessionStorage) instead of re-running
+        // the live pipeline — which is non-deterministic (IG throttle/validation)
+        // and would return fewer/different creators, "losing" what was there.
+        const restored = readResultCache(p, sourceBucket);
+        if (restored) { setRun(restored); return; }
         void search({ mode: initialMode, promptOverride: initialPrompt, seedOverride: initialMode === 'db' ? '' : (initialSeed || undefined) });
       }
       return;
@@ -1220,6 +1244,17 @@ export function LiveSearch({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialPrompt, initialSeed]);
+
+  // Persist the current result set (per prompt+tab) so a page refresh restores
+  // it verbatim. Lander only; sessionStorage clears when the tab closes, so this
+  // never goes stale beyond the current session. Writes on every `run` update, so
+  // creators that stream in during a live crawl are captured in the saved list.
+  useEffect(() => {
+    if (!onSearchPrompt || typeof window === 'undefined') return;
+    if (run && run.prompt && Array.isArray(run.results) && run.results.length > 0) {
+      try { sessionStorage.setItem(resultCacheKey(run.prompt, sourceBucket), JSON.stringify(run)); } catch { /* quota / disabled */ }
+    }
+  }, [run, sourceBucket, onSearchPrompt]);
 
   async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male' }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
