@@ -48,6 +48,10 @@ export async function POST(req: NextRequest) {
   // live crawl. This id lets the client poll the worker for the richer finds it
   // tags over the next minute or two.
   let workerJobId: string | null = null;
+  // Hoisted so the crawl pipeline below can read it. A prompt is "cold" the first
+  // time it's searched. Flow: OpenAI web search + DB run on EVERY search; the live
+  // Instagram crawl runs ONLY on a cold (never-searched) prompt.
+  let searchedBefore = false;
 
   // mode 'db' → search only the existing creators database (no live crawl).
   if (mode === 'db') {
@@ -66,37 +70,14 @@ export async function POST(req: NextRequest) {
     // fashion creators from the DB that AREN'T from Guwahati, so a pure empty
     // check would never fire. We instead crawl the first time the exact prompt is
     // searched, to pull genuinely local, on-target creators.
-    const searchedBefore = await promptSearchedBefore(prompt);
-    if (searchedBefore && dbMatches.length > 0) {
-      // Known prompt that's already been crawled → serve the DB instantly, ranked
-      // by relevance (locals + curated first, from the SQL order). The client
-      // live-enriches each row's stats lazily as it scrolls into view.
-      const results = flagLocals(dbMatches, tokens)
-        .slice(0, max)
-        .map((p) => ({ ...p, completeness: completenessScore(p) }));
-      const place = extractPlace(prompt, tokens);
-      return NextResponse.json({
-        prompt,
-        tokens,
-        results,
-        from_db: results.length,
-        from_live: 0,
-        persisted: 0,
-        resolved_from_names: [],
-        auto_seeds: [],
-        job_id: null,
-        cold: false,
-        place,
-        localsFound: place ? countLocals(results, place) : null,
-      });
-    }
-    // NEW prompt (never crawled by the scraper) → enqueue a deep worker crawl
-    // (topsearch + hashtags + chaining across the rotating accounts) so the DB
-    // fills for next time, THEN fall through to an immediate live crawl below so
-    // the user sees genuinely on-target creators NOW. (If the prompt WAS crawled
-    // before but the DB is empty, we skip the duplicate enqueue and just live-crawl.)
+    searchedBefore = await promptSearchedBefore(prompt);
+    // OpenAI web search + the DB now run on EVERY search (below) — so AI-found
+    // creators show even for repeat prompts, and even when the account/relay side
+    // is throttled (the OpenAI suggester doesn't depend on IG accounts, so it
+    // "never dies"). We only enqueue a deep worker crawl for a genuinely NEW
+    // prompt, so we don't re-crawl — and re-throttle accounts on — a known one.
     if (!searchedBefore) workerJobId = await enqueueSearchJob(prompt);
-    // (intentionally no return — execution continues into the live-first crawl)
+    // (no early return — execution continues into the AI + crawl pipelines)
   }
 
   // 1. Live-first: Instagram is the primary search. The AI-suggest pipeline and
@@ -161,6 +142,10 @@ export async function POST(req: NextRequest) {
 
   // Pipeline B — resolve topic seeds (handle-guessing) and crawl their network.
   const crawlPipeline = (async () => {
+    // Live Instagram crawl runs ONLY for a cold prompt. Known prompts get OpenAI
+    // + DB (already crawled once), so we don't burn account budget re-crawling —
+    // "then do scraping, and throttle accounts accordingly."
+    if (mode === 'db' && searchedBefore) return;
     if (seeds.length === 0 && names.length === 0) {
       for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
         seeds.push(m.handle);
