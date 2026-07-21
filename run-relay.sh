@@ -29,10 +29,15 @@ exec caffeinate -i bash -c '
     sleep 2
   fi
 
-  # Operational monitor: curl the watchdog every 5 min while this keeper runs, so
-  # Slack alerts fire frequently regardless of Vercel cron plan limits. The
-  # endpoint self-dedups, so this and the Vercel cron together never double-ping.
-  ( while true; do curl -s -m20 "https://influencer-intel-platform.vercel.app/api/cron/monitor" >/dev/null 2>&1; sleep 300; done ) &
+  # Every 5 min while this keeper runs: (1) the operational monitor (Slack alerts),
+  # and (2) background stub-enrichment — both self-gate/self-dedup, so this is the
+  # trigger regardless of Vercel cron plan limits. Enrichment pauses itself when
+  # fewer than 2 accounts are healthy and backs off on any throttle.
+  ( while true; do
+      curl -s -m20 "https://influencer-intel-platform.vercel.app/api/cron/monitor" >/dev/null 2>&1
+      curl -s -m30 "https://influencer-intel-platform.vercel.app/api/cron/enrich"  >/dev/null 2>&1
+      sleep 300
+    done ) &
 
   # keep a tunnel alive; on every (re)start, publish the fresh URL to the DB
   while true; do
