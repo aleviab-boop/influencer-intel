@@ -1729,7 +1729,9 @@ export function LiveSearch({
                 </span>
               ) : run.results.length === 0
                 ? initialMode === 'db'
-                  ? 'Nothing in the database matches that yet — try a broader search.'
+                  ? sourceBucket === 'trends'
+                    ? 'No creators in your Trends DB match this. Trends only shows the curated campaign sheets shared with you — switch to Instagram to discover new creators live.'
+                    : 'Nothing in the database matches that yet — try a broader search.'
                   : 'No creators found for that yet. Make sure the worker is running, or try a broader prompt.'
                 : 'No profiles match these filters. Loosen them to see more.'}
             </div>
