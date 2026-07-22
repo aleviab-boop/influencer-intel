@@ -24,6 +24,13 @@ const GENERIC_NICHE = new Set([
   'page', 'pages', 'account', 'star', 'stars', 'guy', 'guys', 'girl',
   'girls', 'boy', 'boys', 'video', 'videos', 'reel', 'reels', 'daily',
   'world', 'love', 'best', 'top', 'the', 'and', 'for', 'with', 'your', 'you',
+  // Weak "container/context" modifiers: they recur across unrelated niches
+  // ("home baker", "home decor", "home gardening"; "studio", "shop", "online"),
+  // so on their own they'd admit anyone with the word in their handle/niche.
+  // Anchor the gate on the SPECIFIC term instead ("baker"), and let these only
+  // add to score. Fixes e.g. a "home baker" search pulling in home-gardeners.
+  'home', 'homes', 'studio', 'studios', 'shop', 'shops', 'store',
+  'stores', 'online', 'india', 'indian', 'life', 'diaries', 'diary',
 ]);
 
 const LOC_TXT = `lower(coalesce(region,'') || ' ' || coalesce(primary_city,''))`;
