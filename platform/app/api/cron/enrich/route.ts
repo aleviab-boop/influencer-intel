@@ -113,9 +113,11 @@ export async function GET(req: NextRequest) {
       user = j?.data?.user ?? null;
     }
 
-    if (!user) {
-      // Confirmed non-existent (404, or 200 with null user) → AI hallucination.
-      // Retire it (guarded to sparse never-enriched scrape stubs only).
+    // Only a CLEAN 404 means the account really doesn't exist → safe to retire
+    // the stub (guarded to sparse never-enriched scrape stubs). We do NOT prune
+    // on a 200-with-null-user, because IG returns that under soft-throttle too —
+    // pruning then would delete a REAL account.
+    if (res.status === 404) {
       try {
         await db.query(
           `UPDATE creators SET is_active=false
@@ -124,7 +126,33 @@ export async function GET(req: NextRequest) {
         );
         pruned++;
       } catch { /* skip */ }
-    } else {
+      await sleep(DELAY_MS);
+      continue;
+    }
+
+    // SOFT-THROTTLE GUARD: IG can return 200 but with the profile STRIPPED — a
+    // null user, or (the case we saw) an established account reported as 0
+    // followers (e.g. a 200K roaster read as "3 followers"). Trusting that would
+    // (a) overwrite a real creator's follower_count with 0, and (b) look like a
+    // hallucination on later passes. So a stripped/degraded read is treated as a
+    // throttle signal: save nothing, prune nothing, leave the stub untouched for
+    // a later healthy run, and STOP the batch so we don't corrupt a whole page.
+    const followersRaw = user?.edge_followed_by?.count ?? 0;
+    const established = Boolean(
+      user && (user.is_verified || (user.edge_owner_to_timeline_media?.edges?.length ?? 0) > 0 || (user.biography && user.biography.trim() !== '') || (user.category_name && user.category_name.trim() !== '')),
+    );
+    if (!user || (followersRaw === 0 && established)) {
+      throttled = true; // stripped/degraded → back off, don't trust it
+      break;
+    }
+    // A genuine 0-follower (empty, not established) account: skip without saving
+    // or pruning — nothing to enrich, and it may just be new. Leave it as a stub.
+    if (followersRaw === 0) {
+      await sleep(DELAY_MS);
+      continue;
+    }
+
+    {
       const followers = user.edge_followed_by?.count ?? 0;
       const photo = user.profile_pic_url_hd ?? user.profile_pic_url ?? null;
       // Live ER from recent posts, if the payload carries them.
