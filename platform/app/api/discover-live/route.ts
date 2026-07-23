@@ -281,25 +281,6 @@ export async function POST(req: NextRequest) {
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
 
-  // GUARANTEE ~10 HEALTHY in the AI/top section. OpenAI names ~15-20 handles, but
-  // under account throttle only a few confirm live (the rest come back as hidden
-  // 0-follower stubs). So when the confirmed AI set is thin, we top it up with the
-  // best DB niche matches (real, data-backed) — promoted into the AI group so the
-  // top of the results reliably shows ~10 healthy creators instead of 1-2. Deduped
-  // against what's already there, so nothing shows twice.
-  if (mode === 'db') {
-    const AI_TARGET = 10;
-    const healthyAi = aiProfiles.filter((p) => p.followers > 0 && !p.unverified).length;
-    if (healthyAi < AI_TARGET) {
-      const have = new Set(aiProfiles.map((p) => p.username.toLowerCase()));
-      const topUp = dbMatches
-        .filter((p) => p.followers > 0 && !have.has(p.username.toLowerCase()))
-        .slice(0, AI_TARGET - healthyAi)
-        .map((p) => ({ ...p, from_ai: true }));
-      aiProfiles = [...aiProfiles, ...topUp];
-    }
-  }
-
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {
     // Cold Lander search where the live crawl also came back empty: don't error —
