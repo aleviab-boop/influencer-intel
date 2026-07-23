@@ -1317,20 +1317,43 @@ export function LiveSearch({
     setError(null);
     setNeedSeed(false);
     crawlRun.current += 1; // cancel any in-flight cold-search poll from a prior search
+    const myRun = crawlRun.current;
+    const g = opts?.genderOverride ?? genderFilter;
+    const bucket = opts?.bucketOverride ?? sourceBucket;
+    const baseBody = { prompt: p, seeds, names, mode, bucket, gender: g === 'any' ? undefined : g };
+
+    // PHASE 1 (fast, ~1s): DB-only so the page shows results immediately instead
+    // of blocking ~15-30s on the slow OpenAI web search + live crawl.
+    try {
+      const rd = await fetch('/api/discover-live', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...baseBody, dbOnly: true }),
+      });
+      if (crawlRun.current !== myRun) return; // a newer search superseded us
+      if (rd.ok) {
+        const dd = await rd.json();
+        if (crawlRun.current !== myRun) return;
+        if ((dd.results ?? []).length > 0) {
+          setRun(dd as RunResponse);
+          setLoading(false); // show DB results now; full results replace them below
+        }
+      }
+    } catch { /* fall through to the full call */ }
+
+    // PHASE 2 (full): OpenAI + DB + live crawl. Replaces the fast results when ready.
     try {
       const r = await fetch('/api/discover-live', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify((() => {
-          const g = opts?.genderOverride ?? genderFilter;
-          return { prompt: p, seeds, names, mode, bucket: opts?.bucketOverride ?? sourceBucket, gender: g === 'any' ? undefined : g };
-        })()),
+        body: JSON.stringify(baseBody),
       });
+      if (crawlRun.current !== myRun) return; // superseded by a newer search
       const d = await r.json();
+      if (crawlRun.current !== myRun) return;
       if (!r.ok) {
         if (d.error === 'no_seeds') setNeedSeed(true);
         else setError(d.message ?? d.error ?? 'Search failed');
-        setRun(null);
+        setRun((prev) => prev ?? null); // keep any fast DB results already shown
       } else {
         setRun(d as RunResponse);
         // Cold search: the server queued a deep worker crawl and returned its id.

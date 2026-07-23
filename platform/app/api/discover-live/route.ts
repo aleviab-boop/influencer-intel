@@ -160,6 +160,42 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // FAST PHASE: the client fires a `dbOnly` call first so the page shows DB
+    // results in ~1s, then a second full call streams in the (slow ~15s) OpenAI +
+    // live-crawl results. Without this the whole page blocks on OpenAI's web
+    // search and shows a 15-30s blank spinner. dbOnly skips AI/crawl/persist/
+    // enqueue entirely — pure DB read, returned immediately.
+    if (body?.dbOnly === true) {
+      const placeF = extractPlace(prompt, tokens);
+      const fast = flagLocals(dbMatches, tokens)
+        .filter((p) => p.followers > 0 && !p.unverified)
+        .sort((a, b) => {
+          const am = a.loc_match ? 0 : 1;
+          const bm = b.loc_match ? 0 : 1;
+          if (am !== bm) return am - bm;
+          return b.score - a.score || b.followers - a.followers;
+        })
+        .slice(0, max)
+        .map((p) => ({ ...p, completeness: completenessScore(p) }));
+      return NextResponse.json({
+        prompt,
+        tokens,
+        results: fast,
+        enriching: [],
+        from_db: fast.length,
+        from_live: 0,
+        from_ai: 0,
+        persisted: 0,
+        resolved_from_names: [],
+        auto_seeds: [],
+        job_id: null,
+        cold: false,
+        partial: true,
+        place: placeF,
+        localsFound: placeF ? countLocals(fast, placeF) : null,
+      });
+    }
+
     // A prompt is "cold" when the Super Admin scraper has never crawled it before
     // (no prior search_query job for it) — NOT merely when the DB is empty. This
     // is the key distinction: "fashion influencer in guwahati" returns generic
