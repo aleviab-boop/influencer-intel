@@ -94,7 +94,14 @@ export async function GET() {
       cities: [], matrix: [], nicheTotals: [], grandTotal: 0,
     });
   }
-  const nicheSums = NICHES.map((n) => `sum((${like('nt', n.match)})::int) as ${n.key}`).join(',\n           ');
+  // Assign each creator to EXACTLY ONE niche (first match in NICHES order wins),
+  // so the columns are mutually exclusive. Otherwise a "fashion + lifestyle"
+  // creator was counted in BOTH columns, and uncategorized creators were counted
+  // in the total but no column — so the row never added up. Now Total is the sum
+  // of the visible niche columns (creators matching none are excluded from both).
+  const nicheBucket =
+    `case\n             ${NICHES.map((n) => `when ${like('nt', n.match)} then '${n.key}'`).join('\n             ')}\n             else null end`;
+  const nicheCounts = NICHES.map((n) => `count(*) filter (where nb = '${n.key}')::int as ${n.key}`).join(',\n           ');
   const cityCase =
     `case ${CITIES.map((c) => `when ${like('cr', c.match)} then '${c.label}'`).join('\n              ')}\n              else null end`;
 
@@ -108,10 +115,10 @@ export async function GET() {
       where platform = 'instagram' and is_active = true
     ),
     tagged as (
-      select nt, (${cityCase}) as city from base
+      select (${nicheBucket}) as nb, (${cityCase}) as city from base
     )
-    select city, count(*)::int as total,
-           ${nicheSums}
+    select city, count(*) filter (where nb is not null)::int as total,
+           ${nicheCounts}
     from tagged
     where city is not null
     group by city
