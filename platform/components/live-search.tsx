@@ -2008,22 +2008,26 @@ export function LiveSearch({
               <p className="text-[12px] text-[#999] mb-3">
                 Accounts our AI found but couldn’t pull numbers for yet — followers &amp; engagement fill in automatically as enrichment catches up, then they move into the results above.
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-2">
                 {run.enriching.map((s) => (
                   <a
                     key={s.username}
                     href={`https://instagram.com/${s.username}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#eee] bg-white hover:bg-[#faf9ff] transition-colors"
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-[#eee] bg-white hover:bg-[#faf9ff] transition-colors"
                     title={`@${s.username} — data enriching`}
                   >
-                    <span className="w-7 h-7 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-[12px] font-semibold flex items-center justify-center shrink-0">
+                    <span className="w-9 h-9 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-[13px] font-semibold flex items-center justify-center shrink-0">
                       {s.username.charAt(0).toUpperCase()}
                     </span>
-                    <span className="min-w-0 leading-tight">
-                      <span className="block text-[13px] font-medium text-[#111] truncate max-w-[170px]">@{s.username}</span>
-                      <span className="block text-[11px] text-[#bbb]">— · enriching…</span>
+                    <span className="min-w-0 leading-tight flex-1">
+                      <span className="block text-[14px] font-medium text-[#111] truncate">@{s.username}</span>
+                      {s.full_name ? <span className="block text-[12px] text-[#999] truncate">{s.full_name}</span> : null}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 shrink-0 text-[12px] text-[#9b7bff]">
+                      <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
+                      enriching…
                     </span>
                   </a>
                 ))}
