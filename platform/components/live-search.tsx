@@ -80,6 +80,9 @@ interface RunResponse {
   tokens: string[];
   seeds: string[];
   results: LiveProfile[];
+  // OpenAI finds we couldn't confirm this run (no follower data yet). Shown in a
+  // separate "Found — enriching…" section so they stay visible instead of dropping.
+  enriching?: Array<{ username: string; full_name?: string; profile_pic_url?: string | null; link?: string | null }>;
   persisted: number;
   resolved_from_names?: Array<{ name: string; handle: string; followers: number }>;
   auto_seeds?: Array<{ handle: string; followers: number }>;
@@ -1979,6 +1982,38 @@ export function LiveSearch({
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {run.enriching && run.enriching.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">Found — enriching…</span>
+                <span className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, #e3def9, transparent)' }} />
+              </div>
+              <p className="text-[12px] text-[#999] mb-3">
+                Accounts our AI found but couldn’t pull numbers for yet — followers &amp; engagement fill in automatically as enrichment catches up, then they move into the results above.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {run.enriching.map((s) => (
+                  <a
+                    key={s.username}
+                    href={`https://instagram.com/${s.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#eee] bg-white hover:bg-[#faf9ff] transition-colors"
+                    title={`@${s.username} — data enriching`}
+                  >
+                    <span className="w-7 h-7 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-[12px] font-semibold flex items-center justify-center shrink-0">
+                      {s.username.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 leading-tight">
+                      <span className="block text-[13px] font-medium text-[#111] truncate max-w-[170px]">@{s.username}</span>
+                      <span className="block text-[11px] text-[#bbb]">— · enriching…</span>
+                    </span>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
         </div>

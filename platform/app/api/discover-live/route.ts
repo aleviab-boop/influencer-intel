@@ -334,7 +334,8 @@ export async function POST(req: NextRequest) {
     const richer = p.followers > ex.followers || (p.followers === ex.followers && p.score > ex.score) ? p : ex;
     byUser.set(key, { ...richer, from_ai: p.from_ai || ex.from_ai, loc_match: p.loc_match || ex.loc_match });
   }
-  const results = flagLocals(Array.from(byUser.values()), tokens)
+  const merged = flagLocals(Array.from(byUser.values()), tokens);
+  const results = merged
     // Only DISPLAY creators we actually have data for — no un-enriched stubs
     // (a stub is an AI-suggested handle we couldn't validate live yet: 0
     // followers / unverified). They're still SAVED and enriched in the
@@ -381,11 +382,30 @@ export async function POST(req: NextRequest) {
     { region: cls.region, niche, tags },
   );
 
+  // OpenAI-found accounts we couldn't confirm this run (0 followers / unverified
+  // stubs) are excluded from `results` — but instead of dropping them from view,
+  // return them as `enriching` so the UI can show a "Found — enriching…" section.
+  // The account is real and saved; its numbers just fill in later. Only AI finds,
+  // deduped against what's already shown, capped so it stays tidy.
+  const shownKeys = new Set(results.map((r) => r.username.toLowerCase()));
+  const enriching = merged
+    .filter((p) => p.from_ai && !shownKeys.has(p.username.toLowerCase()) && !(p.followers > 0 && !p.unverified))
+    .slice(0, 15)
+    .map((p) => ({
+      username: p.username,
+      full_name: p.full_name ?? '',
+      profile_pic_url: p.profile_pic_url ?? null,
+      link: p.link ?? null,
+      from_ai: true as const,
+      enriching: true as const,
+    }));
+
   const place = extractPlace(prompt, tokens);
   return NextResponse.json({
     prompt,
     tokens,
     results,
+    enriching,
     from_db: results.filter((r) => r.from === 'db').length,
     from_live: results.filter((r) => r.from === 'live').length,
     from_ai: aiProfiles.length,
