@@ -40,6 +40,11 @@ async function dbBackedAiProfiles(handles: string[]): Promise<LiveProfile[]> {
     new Set(handles.map((h) => h.trim().toLowerCase().replace(/^@/, '')).filter((h) => /^[a-z0-9._]{2,30}$/.test(h))),
   );
   if (norm.length === 0) return [];
+  // Also match ignoring dots/underscores: OpenAI often writes "subko_coffee"
+  // while the DB has "subkocoffee" (or vice-versa). Matching the stripped form
+  // catches those punctuation variants so more of OpenAI's real suggestions
+  // resolve from the DB instead of needing a (throttle-prone) live confirm.
+  const stripped = Array.from(new Set(norm.map((h) => h.replace(/[._]/g, ''))));
   try {
     const rows = await getBolticClient().query<{
       id: string; handle: string; display_name: string | null; bio: string | null;
@@ -52,8 +57,9 @@ async function dbBackedAiProfiles(handles: string[]): Promise<LiveProfile[]> {
          FROM creators
         WHERE platform = 'instagram' AND is_active = true
           AND coalesce(follower_count, 0) > 0
-          AND lower(handle) = ANY($1)`,
-      [norm],
+          AND (lower(handle) = ANY($1)
+               OR regexp_replace(lower(handle), '[._]', '', 'g') = ANY($2))`,
+      [norm, stripped],
     );
     return rows.map((r) => {
       const contact = extractContact(r.bio);
@@ -274,6 +280,25 @@ export async function POST(req: NextRequest) {
 
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
+
+  // GUARANTEE ~10 HEALTHY in the AI/top section. OpenAI names ~15-20 handles, but
+  // under account throttle only a few confirm live (the rest come back as hidden
+  // 0-follower stubs). So when the confirmed AI set is thin, we top it up with the
+  // best DB niche matches (real, data-backed) — promoted into the AI group so the
+  // top of the results reliably shows ~10 healthy creators instead of 1-2. Deduped
+  // against what's already there, so nothing shows twice.
+  if (mode === 'db') {
+    const AI_TARGET = 10;
+    const healthyAi = aiProfiles.filter((p) => p.followers > 0 && !p.unverified).length;
+    if (healthyAi < AI_TARGET) {
+      const have = new Set(aiProfiles.map((p) => p.username.toLowerCase()));
+      const topUp = dbMatches
+        .filter((p) => p.followers > 0 && !have.has(p.username.toLowerCase()))
+        .slice(0, AI_TARGET - healthyAi)
+        .map((p) => ({ ...p, from_ai: true }));
+      aiProfiles = [...aiProfiles, ...topUp];
+    }
+  }
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {
