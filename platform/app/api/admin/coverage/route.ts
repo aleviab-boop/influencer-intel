@@ -117,7 +117,10 @@ export async function GET() {
     tagged as (
       select (${nicheBucket}) as nb, (${cityCase}) as city from base
     )
-    select city, count(*) filter (where nb is not null)::int as total,
+    -- total = ALL creators in the city; ${'`other`'} = those matching none of the 12
+    -- niches. So Total = sum(niche columns) + Other, and every row adds up exactly.
+    select city, count(*)::int as total,
+           count(*) filter (where nb is null)::int as other,
            ${nicheCounts}
     from tagged
     where city is not null
@@ -131,21 +134,25 @@ export async function GET() {
     console.error('[coverage] query failed:', err);
   }
 
+  // The 12 tracked niches plus a trailing "Other" column (creators matching none
+  // of them) so the columns add up to the full city total.
+  const COLS = [...NICHES.map((n) => ({ key: n.key, label: n.label })), { key: 'other', label: 'Other' }];
+
   const byCity = new Map(rows.map((r) => [String(r.city), r]));
   const matrix = CITIES.map((c) => {
     const r = byCity.get(c.label);
-    const cells = NICHES.map((n) => ({ niche: n.key, count: Number(r?.[n.key] ?? 0) }));
+    const cells = COLS.map((n) => ({ niche: n.key, count: Number(r?.[n.key] ?? 0) }));
     return { city: c.label, total: Number(r?.total ?? 0), cells };
   });
 
   // Column totals (per niche across all cities) for the footer row.
-  const nicheTotals = NICHES.map((n) => ({
+  const nicheTotals = COLS.map((n) => ({
     niche: n.key,
     count: matrix.reduce((s, row) => s + (row.cells.find((c) => c.niche === n.key)?.count ?? 0), 0),
   }));
 
   return NextResponse.json({
-    niches: NICHES.map((n) => ({ key: n.key, label: n.label })),
+    niches: COLS,
     cities: CITIES.map((c) => c.label),
     matrix,
     nicheTotals,
