@@ -408,6 +408,9 @@ export async function POST(req: NextRequest) {
   const cls = classifyPrompt(prompt);
   const niche = cls.niche ?? inferNiche(liveProfiles.length ? liveProfiles : dbMatches);
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
+  // Location tokens in this search — used by persist() to gate region/location
+  // tagging so only creators actually from the place get stamped with it.
+  const placeTokens = cls.tags.filter((t) => isLocationToken(t));
   // Persist EVERY creator surfaced by the search — AI-found (verified AND
   // unverified), plus crawled — so the DB keeps building in the background. The
   // unverified ones (IG was throttled/timed out, so we couldn't confirm them
@@ -415,7 +418,7 @@ export async function POST(req: NextRequest) {
   // never clobber a real existing row; a later search / worker crawl enriches them.
   const persisted = await persist(
     [...aiProfiles, ...liveProfiles],
-    { region: cls.region, niche, tags },
+    { region: cls.region, niche, tags, placeTokens },
   );
 
   // OpenAI-found accounts we couldn't confirm this run (0 followers / unverified
@@ -567,10 +570,22 @@ function flagLocals(list: LiveProfile[], tokens: string[]): LiveProfile[] {
 
 async function persist(
   results: LiveProfile[],
-  ctx: { region: string | null; niche: string | null; tags: string[] },
+  ctx: { region: string | null; niche: string | null; tags: string[]; placeTokens: string[] },
 ): Promise<number> {
   if (results.length === 0) return 0;
   const hasTag = Boolean(ctx.region || ctx.niche || ctx.tags.length);
+  // Location tokens must NOT be stamped on creators who aren't actually from the
+  // place — otherwise a national star matched by niche in a "fashion kolkata"
+  // search gets region='kolkata' and pollutes every future kolkata search. We
+  // gate region + location-tag writes per creator on real profile-text evidence
+  // (same word-boundary test flagLocals uses). Niche/genre stay broad for all.
+  const wb = (t: string) => new RegExp(`(^|[^a-z])${t}([^a-z]|$)`);
+  const isLocal = (p: LiveProfile) => {
+    if (ctx.placeTokens.length === 0) return true; // niche-only search: nothing to gate
+    if (p.loc_match) return true;
+    const text = `${p.username} ${p.full_name} ${p.biography} ${p.category}`.toLowerCase();
+    return ctx.placeTokens.some((t) => wb(t).test(text));
+  };
   let ok = 0;
   try {
     const db = getBolticClient();
@@ -644,6 +659,11 @@ async function persist(
           // Tag with the search's niche/region — fill-only, never clobbering
           // curated data, so these creators are findable in future searches.
           if (hasTag) {
+            // Only stamp region + location tags on creators genuinely from the
+            // place; strip location tokens from the tag set for everyone else.
+            const local = isLocal(p);
+            const region = local ? ctx.region : null;
+            const tags = local ? ctx.tags : ctx.tags.filter((t) => !ctx.placeTokens.includes(t));
             await db.query(
               `UPDATE creators SET
                  genre  = COALESCE(genre,  $2),
@@ -652,7 +672,7 @@ async function persist(
                  tags   = CASE WHEN tags IS NULL OR cardinality(tags) = 0
                                THEN $5::text[] ELSE tags END
                WHERE id = $1`,
-              [id, ctx.niche, ctx.niche, ctx.region, ctx.tags],
+              [id, ctx.niche, ctx.niche, region, tags],
             );
           }
         }
