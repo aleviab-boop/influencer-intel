@@ -39,6 +39,22 @@ exec caffeinate -i bash -c '
       sleep 120
     done ) &
 
+  # Tunnel URL health-check. A Cloudflare quick-tunnel can lose its public
+  # hostname (NXDOMAIN) while the local cloudflared keeps its edge connection
+  # open — so the loop below never sees the process exit, never restarts it, and
+  # the DB keeps serving a dead URL (prod silently falls back to DB-only). Every
+  # 3 min, verify the published URL still resolves/serves; if not, kill
+  # cloudflared so the loop regenerates a fresh URL and republishes it.
+  ( while true; do
+      sleep 180
+      url=$(cat /tmp/ig-tunnel-url.txt 2>/dev/null)
+      [ -z "$url" ] && continue
+      if ! curl -sf -m10 "$url" >/dev/null 2>&1; then
+        echo "[relay] tunnel URL $url failed health-check (likely NXDOMAIN) — cycling cloudflared"
+        pkill -f "cloudflared tunnel --url http://localhost:8787" 2>/dev/null
+      fi
+    done ) &
+
   # keep a tunnel alive; on every (re)start, publish the fresh URL to the DB
   while true; do
     pkill -f "cloudflared tunnel --url http://localhost:8787" 2>/dev/null; sleep 1
