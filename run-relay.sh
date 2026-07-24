@@ -59,7 +59,12 @@ exec caffeinate -i bash -c '
   while true; do
     pkill -f "cloudflared tunnel --url http://localhost:8787" 2>/dev/null; sleep 1
     echo "[relay] starting tunnel ($(date "+%H:%M:%S"))…"
-    cloudflared tunnel --url http://localhost:8787 2>&1 | while IFS= read -r line; do
+    # --protocol http2: the default QUIC transport registers the tunnel and passes
+    # prechecks, then the edge silently terminates the datagram/QUIC session
+    # ("Application error 0x0 (remote)"), so the hostname never serves publicly
+    # (NXDOMAIN / relay unreachable) even though cloudflared keeps running. HTTP/2
+    # is reliable on this network and serves 200 immediately.
+    cloudflared tunnel --url http://localhost:8787 --protocol http2 2>&1 | while IFS= read -r line; do
       echo "$line"
       case "$line" in
         *trycloudflare.com*)
