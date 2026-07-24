@@ -162,16 +162,41 @@ export async function searchCreatorsInDb(
     ? `and (follower_count is null or follower_count >= ${Math.floor(Number(opts.minFollowers))})`
     : '';
 
+  // Conditional LOCATION filter (only when the query names a place). Ranking
+  // alone isn't enough: when a query's genuine locals get claimed by the AI/live
+  // sections upstream (they're de-duped out of the DB section), the DB fallback
+  // is left showing the non-local tail — e.g. "dance creator for guwahati"
+  // surfacing Madhuri Dixit / national dance celebs who only match "dance". So
+  // when the query has a place token AND at least one local match exists
+  // (loc_total > 0), drop the non-locals entirely. When NO local matches exist
+  // we fall back to the full niche-relevant set (loc_total = 0 short-circuits the
+  // filter) — preserving the "never hide the only matches we have" behavior for
+  // cities the DB hasn't covered yet.
+  const localsOnly = hasLocToken ? `where (loc_match or loc_total = 0)` : '';
+
   const sql = `
+    with base as (
+      select id, handle, display_name, bio, primary_category, follower_count,
+             engagement_rate, is_verified, profile_photo_url, source, gender, is_indian,
+             (${scoreExpr}) as score,
+             (${locHitExpr}) as loc_match,
+             (${SOURCE_BUCKET}) as source_bucket
+      from creators
+      where platform = 'instagram' and is_active = true and (${whereAny})
+        ${nicheRequired}
+        ${bucketFilter}
+        ${floor}
+        ${genderFilter}
+    ),
+    scored as (
+      select *, sum(case when loc_match then 1 else 0 end) over () as loc_total
+      from base
+    )
     select id, handle, display_name, bio, primary_category, follower_count,
            engagement_rate, is_verified, profile_photo_url, source, gender, is_indian,
-           (${scoreExpr}) as score, (${locHitExpr}) as loc_match
-    from creators
-    where platform = 'instagram' and is_active = true and (${whereAny})
-      ${nicheRequired}
-      ${bucketFilter}
-      ${floor}
-      ${genderFilter}
+           score, loc_match
+    from scored
+    ${localsOnly}
     -- Bucket first (scraper finds before Excel imports). Then INDIA-FIRST: this is
     -- an India-only platform, so foreign creators (is_indian=false) sink below all
     -- Indian/unflagged ones — a broad token like "artisan" no longer leads with a
@@ -179,9 +204,9 @@ export async function searchCreatorsInDb(
     -- is_indian is only ~half-populated, so a hard filter would also hide genuine
     -- Indian creators not yet flagged; sinking only the KNOWN-foreign is safe.)
     -- Then LOCALS LEAD when the query names a place, weighted relevance, then reach.
-    order by (${SOURCE_BUCKET}) asc,
+    order by source_bucket asc,
              (case when is_indian = false then 1 else 0 end) asc,
-             ${hasLocToken ? `(${locHitExpr}) desc,` : ''}
+             ${hasLocToken ? `loc_match desc,` : ''}
              score desc,
              follower_count desc nulls last
     limit $${tokens.length + 1}
