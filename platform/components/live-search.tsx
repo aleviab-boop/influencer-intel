@@ -573,6 +573,10 @@ export function LiveSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<RunResponse | null>(null);
+  // Latest results, kept in a ref so callbacks captured by long-lived observers
+  // (which close over a stale `run`) can still read the current rows.
+  const runRef = useRef<RunResponse | null>(null);
+  runRef.current = run;
   // worker live-crawl: true while we poll the search_query job for new creators
   const [crawling, setCrawling] = useState(false);
   const crawlRun = useRef(0); // bumped per search so stale polls self-cancel
@@ -651,7 +655,12 @@ export function LiveSearch({
       const d = await fetch(`/api/ig-stats?handle=${encodeURIComponent(handle)}`).then((r) => r.json());
       if (d && !d.error) {
         const patch: { followers?: number; engagement?: number; profile_pic_url?: string | null } = {};
-        if (d.followers != null) patch.followers = d.followers;
+        // Throttle guard: a rate-limited / logged-out IG read strips the follower
+        // count down to a tiny number (e.g. 4.6K for a 14M account). If the fresh
+        // read is a small fraction of the count we already have, treat it as a bad
+        // read and keep the existing (DB) value — don't let it displace 14M with 4.6K.
+        const baseline = runRef.current?.results.find((p) => p.username.toLowerCase() === key)?.followers ?? 0;
+        if (d.followers != null && !(baseline > 1000 && d.followers < baseline * 0.5)) patch.followers = d.followers;
         if (d.engagement != null) patch.engagement = d.engagement;
         if (d.profile_pic_url) patch.profile_pic_url = d.profile_pic_url;
         setLiveStats((s) => ({ ...s, [handle]: patch }));
@@ -1374,7 +1383,10 @@ export function LiveSearch({
   // when the job finishes / a time budget is hit.
   async function pollCrawl(jobId: string, initial: LiveProfile[]) {
     const my = crawlRun.current;
-    setCrawling(true);
+    // Don't claim "crawling Instagram…" until the browser worker actually picks
+    // the job up (status → 'in_progress'). If it stays 'queued', the worker is
+    // offline and nothing is being crawled — showing the indicator then is a lie.
+    setCrawling(false);
     const seen = new Set(initial.map((x) => x.username.toLowerCase()));
     const merged = [...initial];
     try {
@@ -1390,6 +1402,9 @@ export function LiveSearch({
         } catch {
           continue;
         }
+        // Only surface the indicator while the worker is genuinely working the
+        // job; a stuck 'queued' status (worker offline) never flips this on.
+        if (crawlRun.current === my) setCrawling(d.status === 'in_progress' && !d.done);
         let changed = false;
         for (const c of d.results ?? []) {
           const k = c.username.toLowerCase();
