@@ -148,7 +148,7 @@ export default function BrandMentionsPage() {
             No creators in the database have posted about <span className="font-medium text-ink-600">{debouncedQ}</span> yet. Try another brand, or run more crawls to grow coverage.
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {creators.map((c) => <CreatorRow key={c.id} c={c} brand={debouncedQ} />)}
           </div>
         )}
@@ -160,7 +160,7 @@ export default function BrandMentionsPage() {
 function CreatorRow({ c, brand }: { c: Creator; brand: string }) {
   const top = c.matched_posts?.[0];
   return (
-    <div className="rounded-2xl bg-white border border-border shadow-card p-4 hover:shadow-[0_8px_30px_rgba(0,0,0,0.06)] transition-shadow">
+    <div className="group rounded-2xl bg-white border border-border shadow-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgba(108,77,246,0.12)] hover:border-[#d9d3f7]">
       <div className="flex items-start gap-3">
         <Avatar c={c} />
         <div className="min-w-0 flex-1">
@@ -234,15 +234,33 @@ function CreatorRow({ c, brand }: { c: Creator; brand: string }) {
 }
 
 function Avatar({ c }: { c: Creator }) {
-  const [err, setErr] = useState(false);
+  // Two-stage fallback: proxy the DB photo URL through /api/ig-image (IG CDN URLs
+  // are hotlink-blocked cross-origin), then /api/ig-avatar by handle, then a
+  // deterministic gradient initial. `stage` advances on each onError.
+  const [stage, setStage] = useState(0);
   let h = 0;
   for (let i = 0; i < c.handle.length; i++) h = (h * 31 + c.handle.charCodeAt(i)) >>> 0;
-  if (c.profile_photo_url && !err) {
+
+  const src =
+    stage === 0 && c.profile_photo_url
+      ? `/api/ig-image?u=${encodeURIComponent(c.profile_photo_url)}`
+      : stage <= 1
+        ? `/api/ig-avatar?handle=${encodeURIComponent(c.handle)}`
+        : null;
+
+  if (src) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={c.profile_photo_url} alt={c.handle} onError={() => setErr(true)} className="w-11 h-11 rounded-full object-cover shrink-0" />;
+    return (
+      <img
+        src={src}
+        alt={c.handle}
+        onError={() => setStage((s) => (s === 0 && c.profile_photo_url ? 1 : 2))}
+        className="w-11 h-11 rounded-full object-cover shrink-0 transition-transform duration-200 group-hover:scale-105"
+      />
+    );
   }
   return (
-    <div className="w-11 h-11 rounded-full shrink-0 grid place-items-center text-white text-[15px] font-semibold" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
+    <div className="w-11 h-11 rounded-full shrink-0 grid place-items-center text-white text-[15px] font-semibold transition-transform duration-200 group-hover:scale-105" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
       {(c.display_name || c.handle).charAt(0).toUpperCase()}
     </div>
   );
