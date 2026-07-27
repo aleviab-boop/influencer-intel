@@ -115,44 +115,79 @@ export default function BrandMentionsPage() {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
-        <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Brand Collaborations</div>
-        <h1 className="text-2xl font-bold text-ink-900">Who&apos;s working with a brand</h1>
-        <p className="text-[15px] text-ink-600 mt-1 mb-6">
+        <div className="text-[11px] uppercase tracking-wider font-medium mb-1.5" style={{ color: ACCENT }}>Brand Collaborations</div>
+        <h1 className="text-[26px] font-bold text-ink-900 tracking-tight">Who&apos;s working with a brand</h1>
+        <p className="text-[15px] text-ink-500 mt-1.5 mb-5 max-w-2xl">
           Type a company and see the creators who work with it — a detected paid partnership, a tagged collab, or a recent post about it shown as proof.
         </p>
 
         {/* Search */}
-        <div className="rounded-2xl bg-white border border-border shadow-card p-3 flex items-center gap-2 mb-6">
+        <div className="rounded-2xl bg-white border border-border shadow-card p-2 flex items-center gap-2">
           <div className="relative flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-ink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               autoFocus
               placeholder="Try a brand — Nykaa, Myntra, boAt, Mamaearth…"
-              className="w-full pl-9 pr-3 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-lg focus:outline-none focus:border-ink-900"
+              className="w-full pl-10 pr-3 py-2.5 bg-transparent text-[15px] text-ink-900 rounded-lg focus:outline-none placeholder:text-ink-400"
             />
           </div>
-          {searched && !loading && <div className="text-[13px] text-ink-500 pr-2 whitespace-nowrap">{creators.length} creator{creators.length === 1 ? '' : 's'}</div>}
+          {searched && !loading && <div className="text-[13px] font-medium text-ink-500 pr-3 whitespace-nowrap">{creators.length} creator{creators.length === 1 ? '' : 's'}</div>}
+        </div>
+
+        {/* Quick-pick brand chips */}
+        <div className="flex items-center gap-2 flex-wrap mt-3 mb-6">
+          <span className="text-[12px] text-ink-400">Popular:</span>
+          {POPULAR.map((b) => (
+            <button
+              key={b}
+              onClick={() => setQ(b)}
+              className={`text-[12.5px] px-3 py-1 rounded-full border transition-colors ${
+                debouncedQ.toLowerCase() === b.toLowerCase()
+                  ? 'text-white border-transparent'
+                  : 'bg-white text-ink-600 border-border hover:border-[#c9bff5] hover:text-ink-900'
+              }`}
+              style={debouncedQ.toLowerCase() === b.toLowerCase() ? { background: ACCENT } : undefined}
+            >
+              {b}
+            </button>
+          ))}
         </div>
 
         {/* Results */}
         {loading ? (
           <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
         ) : !searched ? (
-          <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">
-            Start typing a company name to find the creators who&apos;ve posted about it.
-          </div>
+          <EmptyState
+            title="Search a brand to begin"
+            body="Pick one above or type any company — we'll surface the creators who work with it, with the proof post where we have it."
+          />
         ) : creators.length === 0 ? (
-          <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">
-            No creators in the database have posted about <span className="font-medium text-ink-600">{debouncedQ}</span> yet. Try another brand, or run more crawls to grow coverage.
-          </div>
+          <EmptyState
+            title={`No creators found for “${debouncedQ}”`}
+            body="No creators in our database are associated with this brand yet. Try another company, or run more crawls to grow coverage."
+          />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {creators.map((c) => <CreatorRow key={c.id} c={c} brand={debouncedQ} />)}
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+const POPULAR = ['Nykaa', 'Myntra', 'boAt', 'Mamaearth', 'Sugar', 'Ajio', 'Zomato', 'Nike'];
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-20 px-6 rounded-2xl border border-dashed border-border bg-white">
+      <div className="w-14 h-14 rounded-2xl grid place-items-center mb-4" style={{ background: '#f1edfd' }}>
+        <svg className="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+      </div>
+      <div className="text-[15px] font-semibold text-ink-900">{title}</div>
+      <p className="text-[13.5px] text-ink-500 mt-1 max-w-sm">{body}</p>
     </div>
   );
 }
