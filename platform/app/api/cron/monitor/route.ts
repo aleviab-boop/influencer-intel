@@ -65,26 +65,39 @@ export async function GET(req: NextRequest) {
   const db = getBolticClient();
   const fired: string[] = [];
 
-  // 1) LIVE DATA PIPELINE — one authenticated probe through the relay + cookie.
-  try {
-    const res = await igFetch(PROBE, { headers: PROBE_HEADERS });
-    if (res.status === 401 || res.status === 403) {
-      fired.push('cookie_dead');
-      await alertOnce('live_cookie', `:red_circle: *Live cookie rejected* (HTTP ${res.status}) — every IG session cookie is being refused. Live posts/engagement are down. Revive an account (\`npm run scraper:capture -- <handle>\`).`);
-    } else if (res.status === 429) {
-      fired.push('rate_limited');
-      await alertOnce('live_ratelimit', ':warning: *Instagram is rate-limiting (429)* — live data intermittent. Usually clears in 30–60 min; revive more accounts to spread load.');
-    } else if (!res.ok) {
-      fired.push(`http_${res.status}`);
-      await alertOnce('live_http', `:warning: *Live probe returned HTTP ${res.status}* — unexpected response from Instagram.`);
-    } else {
-      await clearAlert('live_cookie', ':white_check_mark: Live data flowing again — cookie/relay recovered.');
-      await clearAlert('live_relay', ':white_check_mark: Relay reachable again — live data flowing.');
-      await clearAlert('live_ratelimit');
-      await clearAlert('live_http');
+  // 1) LIVE DATA PIPELINE — best-of-2 authenticated probe through the relay +
+  //    cookie. web_profile_info flaps 400/empty on a single throttled egress IP,
+  //    so a lone failure isn't actionable — retry once before alerting.
+  let status = -1; // last HTTP status seen (-1 = never got a response = relay down)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
+    try {
+      const res = await igFetch(PROBE, { headers: PROBE_HEADERS });
+      status = res.status;
+      if (res.ok) break; // clean success → stop
+      if (res.status === 401 || res.status === 403) break; // hard auth fail → no retry
+      // 400 / 429 / 5xx → transient, retry once
+    } catch {
+      status = -1; // igFetch threw → relay/tunnel unreachable from the cloud
     }
-  } catch {
-    // igFetch threw → relay/tunnel unreachable from the cloud.
+  }
+  if (status >= 200 && status < 300) {
+    await clearAlert('live_cookie', ':white_check_mark: Live data flowing again — cookie/relay recovered.');
+    await clearAlert('live_relay', ':white_check_mark: Relay reachable again — live data flowing.');
+    await clearAlert('live_ratelimit');
+    await clearAlert('live_http');
+  } else if (status === 401 || status === 403) {
+    fired.push('cookie_dead');
+    await alertOnce('live_cookie', `:red_circle: *Live cookie rejected* (HTTP ${status}) — every IG session cookie is being refused. Live posts/engagement are down. Revive an account (\`npm run scraper:capture -- <handle>\`).`);
+  } else if (status === 400 || status === 429) {
+    // IG returns 400 (not just 429) as a soft anti-bot throttle on this endpoint
+    // when one egress IP hits it repeatedly — intermittent, self-clears.
+    fired.push('rate_limited');
+    await alertOnce('live_ratelimit', `:warning: *Instagram is soft-throttling (HTTP ${status})* — live data intermittent. Usually clears in 30–60 min; revive more accounts / spread egress to steady it.`);
+  } else if (status > 0) {
+    fired.push(`http_${status}`);
+    await alertOnce('live_http', `:warning: *Live probe returned HTTP ${status}* — unexpected response from Instagram.`);
+  } else {
     fired.push('relay_down');
     await alertOnce('live_relay', ':red_circle: *Relay unreachable* — the cloud app can’t reach Instagram. Is the relay + tunnel running on the crawl host? (`./run-relay.sh`)');
   }
