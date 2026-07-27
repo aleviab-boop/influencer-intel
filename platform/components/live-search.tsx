@@ -579,6 +579,10 @@ export function LiveSearch({
   runRef.current = run;
   // worker live-crawl: true while we poll the search_query job for new creators
   const [crawling, setCrawling] = useState(false);
+  // True while the slow full phase (OpenAI web search + live IG validation) is
+  // still running AFTER the instant DB results have already painted — so we can
+  // show a "still searching" cue instead of looking finished at the fast paint.
+  const [enriching, setEnriching] = useState(false);
   const crawlRun = useRef(0); // bumped per search so stale polls self-cancel
   const [exporting, setExporting] = useState(false);
   const [showSug, setShowSug] = useState(false);
@@ -1323,6 +1327,7 @@ export function LiveSearch({
     }
 
     setLoading(true);
+    setEnriching(true); // full phase (OpenAI + live) is now in progress
     setError(null);
     setNeedSeed(false);
     crawlRun.current += 1; // cancel any in-flight cold-search poll from a prior search
@@ -1375,6 +1380,7 @@ export function LiveSearch({
       setError((err as Error).message);
     } finally {
       setLoading(false);
+      setEnriching(false); // full phase done → drop the "searching" cue
     }
   }
 
@@ -1538,7 +1544,7 @@ export function LiveSearch({
             className="w-12 h-12 rounded-full grid place-items-center text-white shadow-md shrink-0 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:brightness-105 disabled:opacity-50 disabled:translate-y-0 disabled:shadow-md"
             style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
           >
-            {loading ? (
+            {loading || enriching ? (
               <span className="w-5 h-5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
             ) : (
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
@@ -1690,12 +1696,17 @@ export function LiveSearch({
               <span className="font-semibold text-[#111]">{shown.length}</span>
               {shown.length !== run.results.length && <span className="text-[#999]">/{run.results.length}</span>} profiles for{' '}
               <span className="font-medium text-[#111]">“{run.prompt}”</span>
-              {crawling && (
+              {enriching ? (
+                <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-[#9b7bff]">
+                  <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
+                  searching the web &amp; Instagram for more…
+                </span>
+              ) : crawling ? (
                 <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-[#9b7bff]">
                   <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
                   crawling Instagram…
                 </span>
-              )}
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <button
