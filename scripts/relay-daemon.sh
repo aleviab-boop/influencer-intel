@@ -31,8 +31,11 @@ sleep 1
 
 # 3) run the tunnel in the foreground. When it dies, this script exits and
 #    launchd (KeepAlive) restarts everything. Capture the fresh URL for Vercel.
+#    --protocol http2: the default QUIC transport is flaky on this network and
+#    silently drops the tunnel (edge then serves HTTP 530 / NXDOMAIN while the
+#    worker keeps crawling locally). Forcing http2 keeps the tunnel stable.
 echo "[daemon] starting cloudflare tunnel ($(date '+%F %T'))…"
-cloudflared tunnel --url http://localhost:8787 2>&1 | while IFS= read -r line; do
+cloudflared tunnel --protocol http2 --url http://localhost:8787 2>&1 | while IFS= read -r line; do
   echo "$line"
   case "$line" in
     *trycloudflare.com*)

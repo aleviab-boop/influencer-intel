@@ -114,8 +114,17 @@ export async function GET() {
       detail = relayConfigured
         ? 'The live fetch couldn’t reach Instagram — is the relay / tunnel running on the crawl host?'
         : 'No IG_RELAY set — production (data-center IP) can’t reach Instagram without it.';
+    } else if (httpStatus >= 520 && httpStatus <= 530) {
+      // 520–527 & 530 are Cloudflare EDGE errors, not Instagram responses (IG
+      // never emits these). A 530 (Argo error 1033) means the relay's tunnel
+      // origin isn't connected — the cloudflared tunnel on the crawl host is
+      // down or mid-churn. Blaming Instagram here sends the operator chasing the
+      // wrong thing; point them at the tunnel instead.
+      status = 'relay_down';
+      label = 'Relay tunnel down';
+      detail = `The relay tunnel returned a Cloudflare error (HTTP ${httpStatus}) — the cloudflared tunnel on the crawl host is down or restarting, so live reads can’t reach it (the worker keeps crawling locally regardless). Restart the relay daemon on the host; it republishes a fresh URL to the DB and live data self-heals within ~60s.`;
     } else {
-      status = 'error'; label = `HTTP ${httpStatus}`; detail = `Unexpected response from Instagram (HTTP ${httpStatus}).`;
+      status = 'error'; label = `HTTP ${httpStatus}`; detail = `Unexpected response (HTTP ${httpStatus}).`;
     }
     data = { status, label, detail, httpCode, relayConfigured, cookieConfigured, checkedAt: new Date().toISOString() };
   }
