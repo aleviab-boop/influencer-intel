@@ -1018,21 +1018,55 @@ export function LiveSearch({
     return pid;
   }
 
+  // Live Instagram finds have no creator_id yet (they aren't in our DB). Persist
+  // a minimal creators row first so we get an id to recruit against. Returns the
+  // id (existing or freshly created), or null on failure.
+  async function ensureCreatorId(p: LiveProfile): Promise<string | null> {
+    if (p.creator_id) return p.creator_id;
+    try {
+      const res = await fetch('/api/creators/ensure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          handle: p.username,
+          full_name: p.full_name,
+          biography: p.biography,
+          category: p.category,
+          followers: p.followers,
+          engagement: p.engagement,
+          is_verified: p.is_verified,
+          profile_pic_url: p.profile_pic_url,
+        }),
+      });
+      if (!res.ok) return null;
+      const d = (await res.json()) as { creator_id?: string };
+      return d.creator_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async function recruitOne(pid: string, p: LiveProfile) {
-    if (!p.creator_id) return;
+    const cid = await ensureCreatorId(p);
+    if (!cid) return;
     await fetch(`/api/programs/${pid}/recruits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ creator_id: p.creator_id, source_prompt: run?.prompt, relevance_score: p.score }),
+      body: JSON.stringify({ creator_id: cid, source_prompt: run?.prompt, relevance_score: p.score }),
     });
-    setRecruited((m) => ({ ...m, [p.creator_id!]: pid }));
+    // Cache the resolved id on the profile so subsequent renders show the
+    // recruited checkmark instead of re-persisting.
+    p.creator_id = cid;
+    setRecruited((m) => ({ ...m, [cid]: pid }));
   }
 
   async function addToShortlist(p: LiveProfile) {
-    if (!p.creator_id || recruiting) return;
+    if (recruiting) return;
     const pid = await ensureProgram();
     if (!pid) return;
-    setRecruiting(p.creator_id);
+    // Key the in-flight spinner off the handle since a live row may not have an
+    // id until recruitOne resolves one.
+    setRecruiting(p.creator_id ?? p.username);
     try {
       await recruitOne(pid, p);
     } finally {
@@ -1042,7 +1076,7 @@ export function LiveSearch({
 
   async function bulkAdd() {
     const targets = shown.filter(
-      (p) => selected.has(p.username) && p.creator_id && !recruited[p.creator_id],
+      (p) => selected.has(p.username) && !(p.creator_id && recruited[p.creator_id]),
     );
     if (targets.length === 0) return;
     const pid = await ensureProgram();
@@ -1979,19 +2013,19 @@ export function LiveSearch({
                           <IconBtn onClick={() => void openDraft(p)} title="AI outreach draft">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>
                           </IconBtn>
-                          {p.creator_id && (recruited[p.creator_id] ? (
+                          {p.creator_id && recruited[p.creator_id] ? (
                             <span className="w-7 h-7 grid place-items-center rounded-lg text-emerald-600" title="Added to campaign">
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10" /></svg>
                             </span>
                           ) : (
-                            <IconBtn onClick={() => void addToShortlist(p)} disabled={recruiting === p.creator_id} title="Add to campaign">
-                              {recruiting === p.creator_id ? (
+                            <IconBtn onClick={() => void addToShortlist(p)} disabled={recruiting === (p.creator_id ?? p.username)} title="Add to campaign">
+                              {recruiting === (p.creator_id ?? p.username) ? (
                                 <span className="w-3.5 h-3.5 rounded-full border-2 border-[#ddd] border-t-[#6C4DF6] animate-spin" />
                               ) : (
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                               )}
                             </IconBtn>
-                          ))}
+                          )}
                           <a
                             href={`https://instagram.com/${p.username}`}
                             target="_blank"
