@@ -102,7 +102,7 @@ export default function BrandMentionsPage() {
     }
     setLoading(true);
     setSearched(true);
-    fetch(`/api/brand-mentions?company=${encodeURIComponent(company)}&limit=60`)
+    fetch(`/api/brand-mentions?company=${encodeURIComponent(company)}&limit=200`)
       .then((r) => r.json())
       .then((d) => setCreators(d.creators ?? []))
       .catch(() => setCreators([]))
@@ -159,76 +159,56 @@ export default function BrandMentionsPage() {
 
 function CreatorRow({ c, brand }: { c: Creator; brand: string }) {
   const top = c.matched_posts?.[0];
+  const hasProof = c.mention_count > 0;
   return (
     <div className="group rounded-2xl bg-white border border-border shadow-card p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_36px_rgba(108,77,246,0.12)] hover:border-[#d9d3f7]">
-      <div className="flex items-start gap-3">
+      {/* Identity */}
+      <div className="flex items-center gap-3">
         <Avatar c={c} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <Link href={`/insights/${encodeURIComponent(c.handle)}`} className="text-[15px] font-semibold text-ink-900 hover:underline flex items-center gap-1.5">
-                {c.display_name || `@${c.handle}`}
-                {c.is_verified && <span title="Verified" style={{ color: ACCENT }}>✔</span>}
-                {c.paid_partner && <span title="A paid-partnership tag was detected on this creator's profile" className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">PAID PARTNER</span>}
-              </Link>
-              <div className="text-[12px] text-ink-400 truncate">
-                @{c.handle}
-                {c.primary_category && <> · <span className="capitalize">{c.primary_category || c.vision_niche}</span></>}
-                {(c.primary_city || c.primary_state) && <> · {[c.primary_city, c.primary_state].filter(Boolean).join(', ')}</>}
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-right shrink-0">
-              <div>
-                <div className="text-[14px] font-semibold text-ink-900 tabular-nums">{fmt(c.follower_count)}</div>
-                <div className="text-[11px] text-ink-400">followers</div>
-              </div>
-              <div>
-                <div className="text-[14px] font-semibold text-ink-800 tabular-nums">{erPct(c.engagement_rate)}</div>
-                <div className="text-[11px] text-ink-400">ER</div>
-              </div>
-              <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-md text-white self-center" style={{ background: scoreColor(c.cred_score) }}>{c.cred_score ?? '—'}</span>
-            </div>
+          <Link href={`/insights/${encodeURIComponent(c.handle)}`} className="text-[15px] font-semibold text-ink-900 hover:underline flex items-center gap-1.5 truncate">
+            <span className="truncate">{c.display_name || `@${c.handle}`}</span>
+            {c.is_verified && <span title="Verified" className="shrink-0" style={{ color: ACCENT }}>✔</span>}
+          </Link>
+          <div className="text-[12px] text-ink-400 truncate">
+            @{c.handle}
+            {(c.primary_category || c.vision_niche) && <> · <span className="capitalize">{c.primary_category || c.vision_niche}</span></>}
           </div>
-
-          {/* Mention summary — post proof when we have it, else the profile-level
-              brand association our vision pipeline detected. */}
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {c.mention_count > 0 ? (
-              <>
-                <span className="text-[12px] font-medium px-2 py-0.5 rounded-full text-white" style={{ background: ACCENT }}>
-                  {c.mention_count} post{c.mention_count === 1 ? '' : 's'} about {brand}
-                </span>
-                {c.last_mention && <span className="text-[12px] text-ink-400">latest {timeAgo(c.last_mention)}</span>}
-              </>
-            ) : (
-              <>
-                <span className="text-[12px] font-medium px-2 py-0.5 rounded-full border border-border text-ink-600">
-                  Works with {c.matched_brand || brand}
-                </span>
-                <span className="text-[12px] text-ink-400">detected on profile</span>
-              </>
-            )}
-          </div>
-
-          {/* Evidence — most recent matching post */}
-          {top && (
-            <div className="mt-2 rounded-xl bg-[#faf9ff] border border-border-soft p-3">
-              <p className="text-[13px] text-ink-700 leading-snug line-clamp-3 whitespace-pre-wrap"><BrandSnippet caption={top.caption} brand={brand} /></p>
-              <div className="mt-1.5 flex items-center gap-3 text-[11px] text-ink-400">
-                {top.post_type && <span className="capitalize">{top.post_type}</span>}
-                {top.like_count != null && <span>♥ {fmt(top.like_count)}</span>}
-                {top.comment_count != null && <span>💬 {fmt(top.comment_count)}</span>}
-                {top.view_count ? <span>▷ {fmt(top.view_count)}</span> : null}
-                {top.post_url && (
-                  <a href={top.post_url} target="_blank" rel="noopener noreferrer" className="ml-auto font-medium hover:underline" style={{ color: ACCENT }} onClick={(e) => e.stopPropagation()}>
-                    View post →
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-[15px] font-semibold text-ink-900 tabular-nums">{fmt(c.follower_count)}</div>
+          <div className="text-[11px] text-ink-400">followers</div>
         </div>
       </div>
+
+      {/* Relationship + secondary stats on one tidy line */}
+      <div className="mt-3 flex items-center gap-2 flex-wrap text-[12px]">
+        {hasProof ? (
+          <span className="font-medium px-2 py-0.5 rounded-full text-white" style={{ background: ACCENT }}>
+            {c.mention_count} post{c.mention_count === 1 ? '' : 's'}{c.last_mention ? ` · ${timeAgo(c.last_mention)}` : ''}
+          </span>
+        ) : (
+          <span className="font-medium px-2 py-0.5 rounded-full border border-border text-ink-600">Works with {c.matched_brand || brand}</span>
+        )}
+        {c.paid_partner && (
+          <span title="A paid-partnership tag was detected on this creator's profile" className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">Paid partner</span>
+        )}
+        <span className="ml-auto text-ink-400 tabular-nums whitespace-nowrap">
+          ER {erPct(c.engagement_rate)} · <span className="font-medium" style={{ color: scoreColor(c.cred_score) }}>{c.cred_score ?? '—'}</span>
+        </span>
+      </div>
+
+      {/* Evidence — only shown when there's an actual dated post about the brand */}
+      {hasProof && top && (
+        <div className="mt-2.5 rounded-xl bg-[#faf9ff] border border-border-soft px-3 py-2">
+          <p className="text-[12.5px] text-ink-600 leading-snug line-clamp-2"><BrandSnippet caption={top.caption} brand={brand} /></p>
+          {top.post_url && (
+            <a href={top.post_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-[11px] font-medium hover:underline" style={{ color: ACCENT }} onClick={(e) => e.stopPropagation()}>
+              View post →
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }

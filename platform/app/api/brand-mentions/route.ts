@@ -28,7 +28,7 @@ interface MatchedPost {
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const company = (url.searchParams.get('company') ?? '').trim();
-  const limit = Math.min(80, Math.max(1, Number(url.searchParams.get('limit') ?? 60)));
+  const limit = Math.min(300, Math.max(1, Number(url.searchParams.get('limit') ?? 200)));
 
   if (company.length < 2) {
     return NextResponse.json({ creators: [], total: 0, company });
