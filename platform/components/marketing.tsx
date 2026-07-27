@@ -176,7 +176,6 @@ export const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Reply Assistant', href: '/tools/reply-assistant', icon: 'chat' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
-  { label: 'Competitor Analysis', href: '/competitor-analysis', icon: 'bars' },
   { label: 'Brand Collaborations', href: '/brand-mentions', icon: 'instagram' },
   { label: 'Influencer Database', href: '/database', icon: 'database' },
   { label: 'Campaign Analytics', href: '/campaign-analytics', icon: 'clock' },
@@ -275,7 +274,7 @@ function footerHref(label: string): string {
     'Influencer Database': '/influencer-database',
     'Campaign Management': '/campaigns',
     'Comment to DM': '/comment-to-dm',
-    'Competitor Analysis': '/competitor-analysis',
+    'Competitor Analysis': '/brand-mentions',
     'Search': '/influencer-search',
     'Payouts': '/payouts',
   };

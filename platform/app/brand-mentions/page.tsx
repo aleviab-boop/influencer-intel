@@ -27,6 +27,8 @@ interface Creator {
   engagement_rate: number | string | null;
   cred_score: string | null;
   vision_niche: string | null;
+  paid_partner: boolean;
+  matched_brand: string | null;
   mention_count: number;
   last_mention: string | null;
   matched_posts: MatchedPost[];
@@ -46,6 +48,27 @@ const scoreColor = (s: string | null): string => {
   if (!Number.isFinite(n)) return '#9aa0ad';
   return n >= 80 ? '#10b981' : n >= 60 ? '#f59e0b' : '#f43f5e';
 };
+// Show the part of the caption AROUND the brand mention (captions are long and
+// the mention is often buried), with the matched term highlighted.
+function BrandSnippet({ caption, brand }: { caption: string | undefined; brand: string }) {
+  if (!caption) return <span className="text-ink-400">(no caption)</span>;
+  const lc = caption.toLowerCase();
+  const i = lc.indexOf(brand.toLowerCase());
+  if (i < 0) return <>{caption}</>;
+  const start = Math.max(0, i - 70);
+  const end = Math.min(caption.length, i + brand.length + 90);
+  const pre = (start > 0 ? '…' : '') + caption.slice(start, i);
+  const hit = caption.slice(i, i + brand.length);
+  const post = caption.slice(i + brand.length, end) + (end < caption.length ? '…' : '');
+  return (
+    <>
+      {pre}
+      <mark className="bg-transparent font-semibold" style={{ color: ACCENT }}>{hit}</mark>
+      {post}
+    </>
+  );
+}
+
 const timeAgo = (iso: string | null | undefined): string => {
   if (!iso) return '';
   const d = new Date(iso).getTime();
@@ -95,7 +118,7 @@ export default function BrandMentionsPage() {
         <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Brand Collaborations</div>
         <h1 className="text-2xl font-bold text-ink-900">Who&apos;s working with a brand</h1>
         <p className="text-[15px] text-ink-600 mt-1 mb-6">
-          Type a company and see the creators who recently mentioned or tagged it in their posts — with the post as proof.
+          Type a company and see the creators who work with it — a detected paid partnership, a tagged collab, or a recent post about it shown as proof.
         </p>
 
         {/* Search */}
@@ -146,6 +169,7 @@ function CreatorRow({ c, brand }: { c: Creator; brand: string }) {
               <Link href={`/insights/${encodeURIComponent(c.handle)}`} className="text-[15px] font-semibold text-ink-900 hover:underline flex items-center gap-1.5">
                 {c.display_name || `@${c.handle}`}
                 {c.is_verified && <span title="Verified" style={{ color: ACCENT }}>✔</span>}
+                {c.paid_partner && <span title="A paid-partnership tag was detected on this creator's profile" className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">PAID PARTNER</span>}
               </Link>
               <div className="text-[12px] text-ink-400 truncate">
                 @{c.handle}
@@ -166,18 +190,30 @@ function CreatorRow({ c, brand }: { c: Creator; brand: string }) {
             </div>
           </div>
 
-          {/* Mention summary */}
+          {/* Mention summary — post proof when we have it, else the profile-level
+              brand association our vision pipeline detected. */}
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            <span className="text-[12px] font-medium px-2 py-0.5 rounded-full text-white" style={{ background: ACCENT }}>
-              {c.mention_count} post{c.mention_count === 1 ? '' : 's'} about {brand}
-            </span>
-            {c.last_mention && <span className="text-[12px] text-ink-400">latest {timeAgo(c.last_mention)}</span>}
+            {c.mention_count > 0 ? (
+              <>
+                <span className="text-[12px] font-medium px-2 py-0.5 rounded-full text-white" style={{ background: ACCENT }}>
+                  {c.mention_count} post{c.mention_count === 1 ? '' : 's'} about {brand}
+                </span>
+                {c.last_mention && <span className="text-[12px] text-ink-400">latest {timeAgo(c.last_mention)}</span>}
+              </>
+            ) : (
+              <>
+                <span className="text-[12px] font-medium px-2 py-0.5 rounded-full border border-border text-ink-600">
+                  Works with {c.matched_brand || brand}
+                </span>
+                <span className="text-[12px] text-ink-400">detected on profile</span>
+              </>
+            )}
           </div>
 
           {/* Evidence — most recent matching post */}
           {top && (
             <div className="mt-2 rounded-xl bg-[#faf9ff] border border-border-soft p-3">
-              <p className="text-[13px] text-ink-700 leading-snug line-clamp-3 whitespace-pre-wrap">{top.caption || '(no caption)'}</p>
+              <p className="text-[13px] text-ink-700 leading-snug line-clamp-3 whitespace-pre-wrap"><BrandSnippet caption={top.caption} brand={brand} /></p>
               <div className="mt-1.5 flex items-center gap-3 text-[11px] text-ink-400">
                 {top.post_type && <span className="capitalize">{top.post_type}</span>}
                 {top.like_count != null && <span>♥ {fmt(top.like_count)}</span>}
