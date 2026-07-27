@@ -75,23 +75,47 @@ export async function GET() {
   } else {
     let status: Health['status'] = 'error';
     let label = 'Unknown', detail = '', httpCode: number | null = null;
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 10_000);
-      const res = await igFetch('https://www.instagram.com/api/v1/users/web_profile_info/?username=instagram', { headers: HEADERS, signal: ctrl.signal });
-      clearTimeout(t);
-      httpCode = res.status;
-      if (res.ok) { status = 'healthy'; label = 'Live data flowing'; detail = 'Cookie + relay working — drawers show live posts & engagement.'; }
-      else if (res.status === 429) { status = 'rate_limited'; label = 'Rate-limited'; detail = 'Instagram is throttling (429) — usually cools down in 30–60 min. Ease off crawls/fetcher.'; }
-      else if (res.status === 401 || res.status === 403) { status = 'cookie_dead'; label = 'Cookie rejected'; detail = `Instagram rejected the session (HTTP ${res.status}) — refresh IG_SESSIONID.`; }
-      else { status = 'error'; label = `HTTP ${res.status}`; detail = `Unexpected response from Instagram (HTTP ${res.status}).`; }
-    } catch {
-      // igFetch throws / times out → relay (or network) is unreachable.
+    // Best-of-2: web_profile_info on a single IP flaps between 200 and a
+    // soft-throttle 400 (~1/3 of hits). One bad probe should NOT flip the whole
+    // pipeline "down", so we retry once on any non-ok that isn't a hard
+    // auth rejection and take the better outcome.
+    let httpStatus = -1;
+    let relayDown = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10_000);
+        const res = await igFetch('https://www.instagram.com/api/v1/users/web_profile_info/?username=instagram', { headers: HEADERS, signal: ctrl.signal });
+        clearTimeout(t);
+        httpStatus = res.status;
+        relayDown = false;
+        if (res.ok) break;                                   // got a good one — stop
+        if (res.status === 401 || res.status === 403) break; // hard auth fail — no point retrying
+      } catch {
+        // igFetch throws / times out → relay (or network) is unreachable.
+        httpStatus = -1;
+        relayDown = true;
+      }
+    }
+
+    httpCode = httpStatus > 0 ? httpStatus : null;
+    if (httpStatus >= 200 && httpStatus < 300) {
+      status = 'healthy'; label = 'Live data flowing'; detail = 'Cookie + relay working — drawers show live posts & engagement.';
+    } else if (httpStatus === 401 || httpStatus === 403) {
+      status = 'cookie_dead'; label = 'Cookie rejected'; detail = `Instagram rejected the session (HTTP ${httpStatus}) — refresh IG_SESSIONID.`;
+    } else if (httpStatus === 429 || httpStatus === 400) {
+      // 400/429 from web_profile_info is IG soft-throttling this IP, not a
+      // broken pipeline — live data still flows, just intermittently.
+      status = 'rate_limited'; label = 'Soft-throttled'; detail = `Instagram is soft-throttling this IP (HTTP ${httpStatus}) — live data still flows but some fetches will retry. Usually eases within 30–60 min.`;
+    } else if (relayDown) {
       status = relayConfigured ? 'relay_down' : 'no_relay';
       label = relayConfigured ? 'Relay unreachable' : 'No relay';
       detail = relayConfigured
         ? 'The live fetch couldn’t reach Instagram — is the relay / tunnel running on the crawl host?'
         : 'No IG_RELAY set — production (data-center IP) can’t reach Instagram without it.';
+    } else {
+      status = 'error'; label = `HTTP ${httpStatus}`; detail = `Unexpected response from Instagram (HTTP ${httpStatus}).`;
     }
     data = { status, label, detail, httpCode, relayConfigured, cookieConfigured, checkedAt: new Date().toISOString() };
   }
