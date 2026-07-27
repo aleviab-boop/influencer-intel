@@ -81,12 +81,55 @@ const timeAgo = (iso: string | null | undefined): string => {
   return `${Math.floor(days / 365)}y ago`;
 };
 
+// Shape returned by /api/brand-mentions/live (a live IG crawl match).
+interface LiveMatch {
+  username: string;
+  full_name: string;
+  category: string;
+  followers: number;
+  is_verified: boolean;
+  profile_pic_url: string | null;
+  engagement: number; // already a percentage (e.g. 3.2)
+  matched_caption: string | null;
+  post_url: string | null;
+  match_reason: 'caption' | 'bio';
+}
+
+// Adapt a live crawl match into the Creator shape so it renders in the same card.
+// engagement comes back as a %, but erPct() multiplies by 100, so store the fraction.
+function liveToCreator(m: LiveMatch): Creator {
+  const isProof = m.match_reason === 'caption';
+  return {
+    id: `live:${m.username}`,
+    handle: m.username,
+    display_name: m.full_name || null,
+    profile_photo_url: m.profile_pic_url,
+    follower_count: m.followers,
+    primary_category: m.category || null,
+    primary_city: null,
+    primary_state: null,
+    is_verified: m.is_verified,
+    engagement_rate: m.engagement ? m.engagement / 100 : null,
+    cred_score: null,
+    vision_niche: null,
+    paid_partner: false,
+    matched_brand: null,
+    mention_count: isProof ? 1 : 0,
+    last_mention: null,
+    matched_posts: isProof && m.matched_caption ? [{ caption: m.matched_caption, post_url: m.post_url ?? undefined }] : [],
+  };
+}
+
 export default function BrandMentionsPage() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  // Live crawl (Instagram, beyond our DB) — kicked off on demand per brand.
+  const [liveCreators, setLiveCreators] = useState<Creator[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveDone, setLiveDone] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q.trim()), 400);
@@ -100,6 +143,10 @@ export default function BrandMentionsPage() {
       setSearched(false);
       return;
     }
+    // New brand → reset any prior live-crawl results.
+    setLiveCreators([]);
+    setLiveDone(false);
+    setLiveLoading(false);
     setLoading(true);
     setSearched(true);
     fetch(`/api/brand-mentions?company=${encodeURIComponent(company)}&limit=200`)
@@ -110,6 +157,19 @@ export default function BrandMentionsPage() {
   }, [debouncedQ]);
 
   useEffect(() => { load(); }, [load]);
+
+  const findLive = useCallback(() => {
+    const company = debouncedQ.trim();
+    if (company.length < 2 || liveLoading) return;
+    setLiveLoading(true);
+    // Tell the crawler which handles we already show so it only returns NEW finds.
+    const exclude = creators.map((c) => c.handle).join(',');
+    fetch(`/api/brand-mentions/live?company=${encodeURIComponent(company)}&exclude=${encodeURIComponent(exclude)}`)
+      .then((r) => r.json())
+      .then((d) => setLiveCreators((d.creators ?? []).map(liveToCreator)))
+      .catch(() => setLiveCreators([]))
+      .finally(() => { setLiveLoading(false); setLiveDone(true); });
+  }, [debouncedQ, creators, liveLoading]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
@@ -173,7 +233,70 @@ export default function BrandMentionsPage() {
             {creators.map((c) => <CreatorRow key={c.id} c={c} brand={debouncedQ} />)}
           </div>
         )}
+
+        {/* Live crawl — go beyond our DB and search Instagram directly */}
+        {searched && !loading && (
+          <LiveSection
+            brand={debouncedQ}
+            creators={liveCreators}
+            loading={liveLoading}
+            done={liveDone}
+            onFind={findLive}
+          />
+        )}
       </main>
+    </div>
+  );
+}
+
+function LiveSection({
+  brand, creators, loading, done, onFind,
+}: { brand: string; creators: Creator[]; loading: boolean; done: boolean; onFind: () => void }) {
+  return (
+    <div className="mt-8">
+      {!done && !loading && (
+        <div className="flex flex-col items-center text-center gap-2 py-6">
+          <button
+            onClick={onFind}
+            className="inline-flex items-center gap-2 text-[13.5px] font-semibold text-white px-4 py-2.5 rounded-xl transition-transform hover:-translate-y-0.5"
+            style={{ background: ACCENT }}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>
+            Find more on Instagram (live)
+          </button>
+          <p className="text-[12px] text-ink-400 max-w-md">
+            Crawls Instagram from {brand}&apos;s network in real time for creators we don&apos;t have yet. Takes ~30–45s and may be partial.
+          </p>
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex flex-col items-center gap-3 py-10">
+          <div className="w-9 h-9 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+          <p className="text-[13px] text-ink-500">Crawling Instagram for creators who work with {brand}…</p>
+        </div>
+      )}
+
+      {done && !loading && (
+        <>
+          <div className="flex items-center gap-3 my-5">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] uppercase tracking-wider font-medium" style={{ color: ACCENT }}>
+              Found live on Instagram · {creators.length} new
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          {creators.length === 0 ? (
+            <p className="text-[13px] text-ink-400 text-center py-6">
+              No new creators surfaced from the live crawl this time — the session may be throttled. Try again in a bit.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {creators.map((c) => <CreatorRow key={c.id} c={c} brand={brand} />)}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -150,6 +150,7 @@ interface RawUser {
   edge_owner_to_timeline_media?: {
     edges?: Array<{
       node?: {
+        shortcode?: string;
         edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> };
         edge_liked_by?: { count?: number };
         edge_media_to_comment?: { count?: number };
@@ -674,4 +675,120 @@ export async function liveDiscover(
   );
 
   return { tokens, seeds: cleanSeeds, results };
+}
+
+// ---- live brand-collaborator crawl --------------------------------------
+//
+// "Who works with <brand>", crawled LIVE off Instagram instead of read from our
+// DB. Same BFS as liveDiscover (seed → related profiles + caption @mentions →
+// …), but the KEEP test is brand-specific: we scan each crawled profile's recent
+// captions for the brand term and, when it hits, keep that creator with the
+// actual matching caption + post URL as proof — mirroring the DB caption scan in
+// /api/brand-mentions, just against live-fetched profiles. A weaker bio/name/
+// category mention is kept too (flagged 'bio'). The seed brand handles are never
+// returned as results. Bounded by depth/max/budget so the request can't hang.
+
+export interface BrandCollabMatch {
+  username: string;
+  full_name: string;
+  biography: string;
+  category: string;
+  followers: number;
+  is_verified: boolean;
+  profile_pic_url: string | null;
+  engagement: number;
+  matched_caption: string | null;
+  post_url: string | null;
+  match_reason: 'caption' | 'bio';
+}
+
+// Scan a live profile's recent posts for the brand; return the first matching
+// caption + its post URL (from the media shortcode) as proof, else null.
+function captionProof(user: RawUser, rx: RegExp): { caption: string; post_url: string | null } | null {
+  for (const edge of user.edge_owner_to_timeline_media?.edges ?? []) {
+    const node = edge.node;
+    const text = node?.edge_media_to_caption?.edges?.[0]?.node?.text ?? '';
+    if (text && rx.test(text)) {
+      return { caption: text, post_url: node?.shortcode ? `https://www.instagram.com/p/${node.shortcode}/` : null };
+    }
+  }
+  return null;
+}
+
+export async function liveBrandCollabs(
+  brand: string,
+  seeds: string[],
+  options: LiveDiscoveryOptions = {},
+): Promise<{ brand: string; seeds: string[]; results: BrandCollabMatch[] }> {
+  const depth = options.depth ?? 2;
+  const max = options.max ?? 40;
+  const delayMs = options.delayMs ?? 350;
+  const budgetMs = options.budgetMs ?? 28_000;
+  const startedAt = Date.now();
+
+  // Same prefix-at-word-boundary match the /api/brand-mentions caption scan uses,
+  // so "@nykaafashion" / "#nykaabeauty" count but mid-word coincidences don't.
+  const esc = brand.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = new RegExp(`(^|[^a-z0-9])${esc}`, 'i');
+
+  const cleanSeeds = seeds
+    .map((s) => s.trim().toLowerCase().replace(/^@/, ''))
+    .filter((s) => /^[a-z0-9._]{2,30}$/.test(s));
+  const seedSet = new Set(cleanSeeds);
+
+  const found = new Map<string, BrandCollabMatch>();
+  const seen = new Set<string>(cleanSeeds);
+  const queue: Array<{ username: string; hop: number }> = cleanSeeds.map((s) => ({ username: s, hop: 0 }));
+
+  while (queue.length > 0 && found.size < max) {
+    if (Date.now() - startedAt > budgetMs) break;
+    const { username, hop } = queue.shift()!;
+
+    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt));
+    await sleep(delayMs);
+    if (!user || !user.username) continue;
+
+    // Never return the brand's own account(s) as a "creator", but still expand
+    // outward from them — their captions/related profiles are the richest source
+    // of actual collaborators.
+    if (!seedSet.has(user.username.toLowerCase())) {
+      const proof = captionProof(user, rx);
+      const haystack = `${user.username} ${user.full_name ?? ''} ${user.biography ?? ''} ${user.category_name ?? ''}`;
+      if (proof) {
+        const followers = user.edge_followed_by?.count ?? 0;
+        found.set(user.username.toLowerCase(), {
+          username: user.username, full_name: user.full_name ?? '', biography: user.biography ?? '',
+          category: user.category_name ?? '', followers, is_verified: Boolean(user.is_verified),
+          profile_pic_url: user.profile_pic_url ?? null, engagement: engagementRate(user, followers),
+          matched_caption: proof.caption, post_url: proof.post_url, match_reason: 'caption',
+        });
+      } else if (rx.test(haystack)) {
+        const followers = user.edge_followed_by?.count ?? 0;
+        found.set(user.username.toLowerCase(), {
+          username: user.username, full_name: user.full_name ?? '', biography: user.biography ?? '',
+          category: user.category_name ?? '', followers, is_verified: Boolean(user.is_verified),
+          profile_pic_url: user.profile_pic_url ?? null, engagement: engagementRate(user, followers),
+          matched_caption: null, post_url: null, match_reason: 'bio',
+        });
+      }
+    }
+
+    if (hop < depth) {
+      for (const next of discoverLinks(user)) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push({ username: next, hop: hop + 1 });
+        }
+      }
+    }
+  }
+
+  // Caption-proof creators first (concrete), then reach.
+  const results = Array.from(found.values()).sort(
+    (a, b) =>
+      Number(b.match_reason === 'caption') - Number(a.match_reason === 'caption') ||
+      b.followers - a.followers,
+  );
+
+  return { brand, seeds: cleanSeeds, results };
 }
