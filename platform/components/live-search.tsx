@@ -2062,11 +2062,11 @@ export function LiveSearch({
           {run.enriching && run.enriching.length > 0 && (
             <div className="mt-6">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">Found — enriching…</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b7bff] whitespace-nowrap">Also found — no stats yet</span>
                 <span className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, #e3def9, transparent)' }} />
               </div>
               <p className="text-[12px] text-[#999] mb-3">
-                Accounts our AI found but couldn’t pull numbers for yet — followers &amp; engagement fill in automatically as enrichment catches up, then they move into the results above.
+                Accounts our AI surfaced but we don’t have follower / engagement numbers for. Open one on Instagram to check it out — they’ll pick up stats automatically once our background scraper reaches them.
               </p>
               <div className="flex flex-col gap-2">
                 {run.enriching.map((s) => (
@@ -2076,7 +2076,7 @@ export function LiveSearch({
                     target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-3 w-full px-4 py-3 rounded-xl border border-[#eee] bg-white hover:bg-[#faf9ff] transition-colors"
-                    title={`@${s.username} — data enriching`}
+                    title={`@${s.username} — open on Instagram`}
                   >
                     <span className="w-9 h-9 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-[13px] font-semibold flex items-center justify-center shrink-0">
                       {s.username.charAt(0).toUpperCase()}
@@ -2086,8 +2086,8 @@ export function LiveSearch({
                       {s.full_name ? <span className="block text-[12px] text-[#999] truncate">{s.full_name}</span> : null}
                     </span>
                     <span className="inline-flex items-center gap-1.5 shrink-0 text-[12px] text-[#9b7bff]">
-                      <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
-                      enriching…
+                      View on Instagram
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M9 7h8v8" /></svg>
                     </span>
                   </a>
                 ))}
