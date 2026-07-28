@@ -71,6 +71,22 @@ function until(iso: string | null): string | null {
   return fmtDuration(d);
 }
 
+// Map `{ bucket: 'YYYY-MM-DD', n }` rows onto a fixed, contiguous last-`days`
+// window (zero-filling gaps) so a single day of data doesn't render as one
+// full-width bar. Always returns exactly `days` values, oldest → newest.
+function dailySeries(rows: Array<{ bucket: string; n: number }> | undefined, days: number): number[] {
+  const byDay = new Map((rows ?? []).map((r) => [r.bucket, r.n]));
+  const out: number[] = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+    out.push(byDay.get(key) ?? 0);
+  }
+  return out;
+}
+
 function StatCard({ label, value, sub, tone }: { label: string; value: string | number; sub?: string; tone?: 'ok' | 'warn' | 'bad' }) {
   const bar = tone === 'ok' ? '#10b981' : tone === 'warn' ? '#f59e0b' : tone === 'bad' ? '#ef4444' : ACCENT;
   return (
@@ -132,8 +148,8 @@ export default function MetricsPage() {
 
   const h = m?.headline;
   const hourly = useMemo(() => (m?.hourly_throughput ?? []).map((x) => x.n), [m]);
-  const perDay = useMemo(() => (m?.searches_per_day ?? []).map((x) => x.n), [m]);
-  const loginsPerDay = useMemo(() => (m?.logins_per_day ?? []).map((x) => x.n), [m]);
+  const perDay = useMemo(() => dailySeries(m?.searches_per_day, 14), [m]);
+  const loginsPerDay = useMemo(() => dailySeries(m?.logins_per_day, 14), [m]);
   const oldestQ = until(h?.oldest_queued_at ?? null);
 
   return (
@@ -222,7 +238,7 @@ export default function MetricsPage() {
         {/* search volume + top niches */}
         <Card title="Search volume & top niches" right={<span className="text-[12px] text-[#999]">14 days</span>}>
           <div className="px-5 py-4">
-            <Bars data={perDay.length ? perDay : Array(14).fill(0)} color="#9b7bff" />
+            <Bars data={perDay} color="#9b7bff" />
             <div className="mt-4 flex flex-wrap gap-1.5">
               {(m?.top_niches ?? []).map((t) => (
                 <span key={t.token} className="inline-flex items-center gap-1 text-[12px] px-2 py-1 rounded-lg bg-[#f4f2ff] text-[#6C4DF6]">
@@ -237,7 +253,7 @@ export default function MetricsPage() {
         {/* logins / active users */}
         <Card title="Logins & active users" right={<span className="text-[12px] text-[#999]">14 days</span>}>
           <div className="px-5 py-4">
-            <Bars data={loginsPerDay.length ? loginsPerDay : Array(14).fill(0)} color="#10b981" />
+            <Bars data={loginsPerDay} color="#10b981" />
             <div className="flex items-center justify-between mt-3 text-[12px]">
               <span className="text-emerald-600 font-medium">{h?.logins_today ?? 0} logins today</span>
               <span className="text-[#888]">{h?.dau_today ?? 0} active today</span>
