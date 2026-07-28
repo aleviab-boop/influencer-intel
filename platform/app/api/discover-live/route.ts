@@ -10,6 +10,8 @@ import {
   classifyPrompt,
   inferNiche,
   isLocationToken,
+  nicheKeywords,
+  hasNicheEvidence,
   completenessScore,
   extractContact,
   STATE_CITIES,
@@ -374,7 +376,26 @@ export async function POST(req: NextRequest) {
     byUser.set(key, { ...richer, from_ai: p.from_ai || ex.from_ai, loc_match: p.loc_match || ex.loc_match });
   }
   const merged = flagLocals(Array.from(byUser.values()), tokens);
-  const results = merged
+
+  // NICHE RELEVANCE GATE. The live crawl expands through Instagram's related-
+  // accounts graph, which clusters by region/language — so a "vintage watch
+  // collector in mumbai" search pulls in big Mumbai/Marathi news & politics
+  // handles that match the LOCATION but have nothing to do with the subject.
+  // We flag every result on whether its profile text actually mentions the
+  // search's subject words, then keep only the on-topic ones. Curated (the
+  // agency's own imported list) is always exempt. Safety net: if the gate would
+  // empty the page, we fall back to the ungated set rather than show nothing.
+  const nicheGate = nicheKeywords(prompt);
+  for (const p of merged) {
+    p.niche_match = hasNicheEvidence(
+      `${p.username} ${p.full_name} ${p.biography} ${p.category}`,
+      nicheGate,
+    );
+  }
+  const relevant = nicheGate.length > 0 ? merged.filter((p) => p.niche_match || p.curated) : merged;
+  const gated = relevant.length > 0 ? relevant : merged;
+
+  const results = gated
     // Only DISPLAY creators we actually have data for — no un-enriched stubs
     // (a stub is an AI-suggested handle we couldn't validate live yet: 0
     // followers / unverified). They're still SAVED and enriched in the
@@ -391,7 +412,13 @@ export async function POST(req: NextRequest) {
       const af = a.is_indian === false ? 1 : 0;
       const bf = b.is_indian === false ? 1 : 0;
       if (af !== bf) return af - bf;
-      // ③ Within a source, genuine locals lead a "…in <place>" query.
+      // ③ On-topic first: profiles whose text matches the search's subject lead
+      // over off-niche accounts (so the fallback set, and mixed results, still
+      // surface relevant creators ahead of location-only matches).
+      const an = a.niche_match === false ? 1 : 0;
+      const bn = b.niche_match === false ? 1 : 0;
+      if (an !== bn) return an - bn;
+      // ④ Within a source, genuine locals lead a "…in <place>" query.
       const am = a.loc_match ? 0 : 1;
       const bm = b.loc_match ? 0 : 1;
       if (am !== bm) return am - bm;
@@ -421,7 +448,7 @@ export async function POST(req: NextRequest) {
   // never clobber a real existing row; a later search / worker crawl enriches them.
   const persisted = await persist(
     [...aiProfiles, ...liveProfiles],
-    { region: cls.region, niche, tags, placeTokens },
+    { region: cls.region, niche, tags, placeTokens, nicheKeywords: nicheGate },
   );
 
   // OpenAI-found accounts we couldn't confirm this run (0 followers / unverified
@@ -573,7 +600,7 @@ function flagLocals(list: LiveProfile[], tokens: string[]): LiveProfile[] {
 
 async function persist(
   results: LiveProfile[],
-  ctx: { region: string | null; niche: string | null; tags: string[]; placeTokens: string[] },
+  ctx: { region: string | null; niche: string | null; tags: string[]; placeTokens: string[]; nicheKeywords: string[] },
 ): Promise<number> {
   if (results.length === 0) return 0;
   const hasTag = Boolean(ctx.region || ctx.niche || ctx.tags.length);
@@ -581,7 +608,7 @@ async function persist(
   // place — otherwise a national star matched by niche in a "fashion kolkata"
   // search gets region='kolkata' and pollutes every future kolkata search. We
   // gate region + location-tag writes per creator on real profile-text evidence
-  // (same word-boundary test flagLocals uses). Niche/genre stay broad for all.
+  // (same word-boundary test flagLocals uses).
   const wb = (t: string) => new RegExp(`(^|[^a-z])${t}([^a-z]|$)`);
   const isLocal = (p: LiveProfile) => {
     if (ctx.placeTokens.length === 0) return true; // niche-only search: nothing to gate
@@ -589,6 +616,14 @@ async function persist(
     const text = `${p.username} ${p.full_name} ${p.biography} ${p.category}`.toLowerCase();
     return ctx.placeTokens.some((t) => wb(t).test(text));
   };
+  // SYMMETRIC niche gate: don't stamp the search's niche/genre on a creator whose
+  // profile shows no evidence of the subject — otherwise an off-topic local
+  // (a Mumbai news page swept up by a "vintage watch … mumbai" crawl) gets
+  // niche='vintage' and pollutes every future vintage search, exactly the mirror
+  // of the location pollution above.
+  const isOnNiche = (p: LiveProfile) =>
+    p.niche_match ??
+    hasNicheEvidence(`${p.username} ${p.full_name} ${p.biography} ${p.category}`, ctx.nicheKeywords);
   let ok = 0;
   try {
     const db = getBolticClient();
@@ -662,11 +697,17 @@ async function persist(
           // Tag with the search's niche/region — fill-only, never clobbering
           // curated data, so these creators are findable in future searches.
           if (hasTag) {
-            // Only stamp region + location tags on creators genuinely from the
-            // place; strip location tokens from the tag set for everyone else.
+            // Stamp region/location only on creators genuinely FROM the place,
+            // and niche/genre only on creators actually ON the subject. Strip the
+            // corresponding tokens from the tag set otherwise, so neither location
+            // nor niche pollutes a creator that only matched the other axis.
             const local = isLocal(p);
+            const onNiche = isOnNiche(p);
             const region = local ? ctx.region : null;
-            const tags = local ? ctx.tags : ctx.tags.filter((t) => !ctx.placeTokens.includes(t));
+            const nicheVal = onNiche ? ctx.niche : null;
+            let tags = ctx.tags;
+            if (!local) tags = tags.filter((t) => !ctx.placeTokens.includes(t));
+            if (!onNiche) tags = tags.filter((t) => !ctx.nicheKeywords.includes(t));
             await db.query(
               `UPDATE creators SET
                  genre  = COALESCE(genre,  $2),
@@ -675,7 +716,7 @@ async function persist(
                  tags   = CASE WHEN tags IS NULL OR cardinality(tags) = 0
                                THEN $5::text[] ELSE tags END
                WHERE id = $1`,
-              [id, ctx.niche, ctx.niche, region, tags],
+              [id, nicheVal, nicheVal, region, tags],
             );
           }
         }

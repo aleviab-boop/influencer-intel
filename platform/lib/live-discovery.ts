@@ -61,6 +61,7 @@ export interface LiveProfile {
   creator_id?: string; // creators.id, once known (DB rows + persisted live rows)
   from?: 'db' | 'live';
   loc_match?: boolean; // matched a place token in the location field (DB search)
+  niche_match?: boolean; // profile text shows evidence of the search's SUBJECT/niche
   curated?: boolean; // from the user's own curated/imported list (source='manual')
   gender?: 'female' | 'male' | 'unknown' | null; // creator's inferred gender
   unverified?: boolean; // AI-suggested but not yet confirmed on IG (cookie down)
@@ -368,6 +369,37 @@ const HANDLE_SUFFIXES = [
 
 function isNiche(token: string): boolean {
   return Boolean(NICHE_SYNONYMS[token] ?? NICHE_SYNONYMS[token.replace(/s$/, '')]);
+}
+
+// The SUBJECT words a prompt targets — the searchable niche/topic tokens with
+// location names, filler suffixes ("creator", "blogger") and stopwords stripped,
+// then expanded with known niche synonyms. This is what a result must show
+// evidence of to count as ON-TOPIC. For "vintage watch collector in mumbai" it
+// yields [vintage, watch, collector] (mumbai dropped as location) — so a Mumbai
+// news/politics mega-account, which matches the LOCATION but none of the subject
+// words, can be filtered out. Returns [] when the prompt has no subject words
+// (e.g. a bare "@handle" or "creators in delhi"), in which case there's no gate.
+export function nicheKeywords(prompt: string): string[] {
+  const toks = tokenize(prompt).filter((t) => !isLocationToken(t) && !SUFFIX_WORDS.has(t));
+  const out = new Set<string>();
+  for (const t of toks) {
+    if (t.length > 2) out.add(t);
+    const stem = t.replace(/s$/, '');
+    if (stem.length > 2) out.add(stem);
+    const syns = NICHE_SYNONYMS[t] ?? NICHE_SYNONYMS[stem];
+    if (syns) for (const s of syns) out.add(s);
+  }
+  return Array.from(out);
+}
+
+// Does a profile's combined text (handle + name + bio + category) show evidence
+// of the search's subject? Word-boundary match on any niche keyword. An empty
+// keyword list means "no gate" → always true. Tokens are alphanumeric (tokenize
+// strips punctuation), so no regex escaping is needed.
+export function hasNicheEvidence(text: string, keywords: string[]): boolean {
+  if (keywords.length === 0) return true;
+  const t = text.toLowerCase();
+  return keywords.some((k) => new RegExp(`(^|[^a-z0-9])${k}([^a-z0-9]|$)`).test(t));
 }
 
 // Split a prompt into a region (known city), a niche (recognised category),
