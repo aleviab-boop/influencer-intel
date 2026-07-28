@@ -26,7 +26,7 @@ interface Account {
   jobs_24h: number;
 }
 interface RecentSearch { prompt: string; result_count: number; created_at: string }
-interface RecentLogin { email: string | null; kind: string; name: string | null; meta: { method?: string } | null; created_at: string }
+interface RecentLogin { email: string | null; kind: string; name: string | null; meta: { method?: string; role?: string } | null; created_at: string }
 interface Metrics {
   generatedAt: string;
   worker: { live: boolean; last_beat_at: string | null };
@@ -268,7 +268,10 @@ export default function MetricsPage() {
                     {(l.name || l.email || '?').trim().charAt(0)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-medium truncate" title={l.email ?? ''}>{l.name || l.email || <span className="text-[#aaa]">unknown</span>}</div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[13px] font-medium truncate" title={l.email ?? ''}>{l.name || l.email || <span className="text-[#aaa]">unknown</span>}</span>
+                      {l.meta?.role === 'admin' && <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#fdeaea] text-rose-600 shrink-0">admin</span>}
+                    </div>
                     <div className="text-[11px] text-[#aaa] truncate">
                       {l.name && l.email ? `${l.email} · ` : ''}{l.kind === 'signup' ? 'signed up' : 'logged in'}{l.meta?.method ? ` · ${l.meta.method}` : ''}
                     </div>

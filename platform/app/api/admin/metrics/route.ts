@@ -75,10 +75,10 @@ export async function GET() {
 
     // Logins + DAU (distinct active users). A "user" is keyed by brand_id, falling
     // back to email. kind in ('login','signup') = an authenticated session start.
-    one(`SELECT count(*)::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > date_trunc('day', now())`),
-    one(`SELECT count(*)::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > now() - interval '24 hours'`),
-    one(`SELECT count(DISTINCT coalesce(brand_id::text, email))::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > date_trunc('day', now())`),
-    one(`SELECT count(DISTINCT coalesce(brand_id::text, email))::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > now() - interval '7 days'`),
+    one(`SELECT count(*)::int n FROM activity_events WHERE kind IN ('login','signup') AND coalesce(meta->>'role','') <> 'admin' AND created_at > date_trunc('day', now())`),
+    one(`SELECT count(*)::int n FROM activity_events WHERE kind IN ('login','signup') AND coalesce(meta->>'role','') <> 'admin' AND created_at > now() - interval '24 hours'`),
+    one(`SELECT count(DISTINCT coalesce(brand_id::text, email))::int n FROM activity_events WHERE kind IN ('login','signup') AND coalesce(meta->>'role','') <> 'admin' AND created_at > date_trunc('day', now())`),
+    one(`SELECT count(DISTINCT coalesce(brand_id::text, email))::int n FROM activity_events WHERE kind IN ('login','signup') AND coalesce(meta->>'role','') <> 'admin' AND created_at > now() - interval '7 days'`),
 
     // Who's crawling right now — in-progress jobs + how long they've been running,
     // with the account handle doing the work.
@@ -148,7 +148,7 @@ export async function GET() {
     rows(
       `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS bucket, count(*)::int n
          FROM activity_events
-        WHERE kind IN ('login','signup') AND created_at > now() - interval '14 days'
+        WHERE kind IN ('login','signup') AND coalesce(meta->>'role','') <> 'admin' AND created_at > now() - interval '14 days'
         GROUP BY 1 ORDER BY 1`,
     ),
 

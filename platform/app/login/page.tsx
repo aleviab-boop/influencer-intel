@@ -79,7 +79,7 @@ export default function LoginPage() {
         const r = await fetch('/api/admin/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), password }),
+          body: JSON.stringify({ email: email.trim(), password, name: name.trim() || undefined }),
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
@@ -110,8 +110,21 @@ export default function LoginPage() {
         setError('Could not reach the server. Try again.'); setLoading(false); return;
       }
     } else {
-      if (!email.trim()) return;
+      // Influencer — legacy passwordless sign-in: creates/loads the brand row and
+      // logs the login (with the name) so it shows in the admin Metrics feed.
+      if (!email.trim()) { setError('Enter your email.'); return; }
       setLoading(true);
+      try {
+        const r = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim(), brand_name: name.trim() || undefined }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
+      } catch {
+        setError('Could not reach the server. Try again.'); setLoading(false); return;
+      }
     }
     try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
     const params = new URLSearchParams(window.location.search);
@@ -226,21 +239,19 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={submit} className="mt-5 space-y-4">
-              {role === 'agency' && (
-                <label className="block">
-                  <span className="flex items-center justify-between text-[12px] font-medium text-ink-500 mb-1.5">
-                    <span>Your name</span>
-                    <span className="font-normal text-ink-400">optional</span>
-                  </span>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Aisha Kapoor"
-                    className={inp}
-                  />
-                </label>
-              )}
+              <label className="block">
+                <span className="flex items-center justify-between text-[12px] font-medium text-ink-500 mb-1.5">
+                  <span>Your name</span>
+                  <span className="font-normal text-ink-400">optional</span>
+                </span>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Aisha Kapoor"
+                  className={inp}
+                />
+              </label>
               <label className="block">
                 <span className="text-[12px] font-medium text-ink-500 mb-1.5 block">{role === 'agency' ? 'Work email' : role === 'admin' ? 'Admin email' : 'Email'}</span>
                 <input
