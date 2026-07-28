@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       payload = await createAccount(body.email, body.password, body.brand_name);
     } else if (body.action === 'sign_in') {
       if (!body.email || !body.password) return NextResponse.json({ error: 'email and password required' }, { status: 400 });
-      payload = await signInWithPassword(body.email, body.password);
+      payload = await signInWithPassword(body.email, body.password, body.brand_name);
     } else {
       // Legacy passwordless sign-in (influencer / OAuth flows).
       if (!body.email) return NextResponse.json({ error: 'email required' }, { status: 400 });

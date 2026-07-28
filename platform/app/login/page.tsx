@@ -40,6 +40,7 @@ const PANEL: Record<Role, { headline: string; sub: string; points: string[] }> =
 export default function LoginPage() {
   const router = useRouter();
   const [role, setRole] = useState<Role>('agency');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -59,6 +60,7 @@ export default function LoginPage() {
   // Clear fields/errors when switching roles — no pre-filled credentials.
   useEffect(() => {
     setError(null);
+    setName('');
     setEmail('');
     setPassword('');
   }, [role]);
@@ -100,7 +102,7 @@ export default function LoginPage() {
         const r = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'sign_in', email: email.trim(), password }),
+          body: JSON.stringify({ action: 'sign_in', email: email.trim(), password, brand_name: name.trim() || undefined }),
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
@@ -224,6 +226,21 @@ export default function LoginPage() {
             </div>
 
             <form onSubmit={submit} className="mt-5 space-y-4">
+              {role === 'agency' && (
+                <label className="block">
+                  <span className="flex items-center justify-between text-[12px] font-medium text-ink-500 mb-1.5">
+                    <span>Your name</span>
+                    <span className="font-normal text-ink-400">optional</span>
+                  </span>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Aisha Kapoor"
+                    className={inp}
+                  />
+                </label>
+              )}
               <label className="block">
                 <span className="text-[12px] font-medium text-ink-500 mb-1.5 block">{role === 'agency' ? 'Work email' : role === 'admin' ? 'Admin email' : 'Email'}</span>
                 <input

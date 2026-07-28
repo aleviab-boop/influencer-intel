@@ -193,13 +193,21 @@ export async function createAccount(email: string, password: string, brandName?:
 /**
  * Sign in with email + password, verifying against the stored hash.
  */
-export async function signInWithPassword(email: string, password: string): Promise<SessionPayload> {
+export async function signInWithPassword(email: string, password: string, name?: string): Promise<SessionPayload> {
   const cleanEmail = email.trim().toLowerCase();
   const db = getBolticClient();
   const rows = await db.query<BrandRow>(`SELECT * FROM brands WHERE slug = $1 LIMIT 1`, [slugFor(cleanEmail)]);
   const brand = rows[0];
   if (!brand || !brand.password_hash) throw new Error('No account found for this email — create one first.');
   if (!verifyPassword(password, brand.password_hash)) throw new Error('Incorrect email or password.');
+  // Optional: let the user attach/refresh their display name at login. Handy for
+  // demo/shared accounts that never set one — it then shows in the admin Metrics
+  // logins feed. Only overwrite when a non-empty, changed name is supplied.
+  const cleanName = name?.trim().slice(0, 80);
+  if (cleanName && cleanName !== brand.name) {
+    await db.query(`UPDATE brands SET name = $1, updated_at = NOW() WHERE id = $2`, [cleanName, brand.id]);
+    brand.name = cleanName;
+  }
   const payload = payloadFor(brand, cleanEmail);
   await setSessionCookie(payload);
   void logActivity({ kind: 'login', brand_id: payload.brand_id, email: payload.email, meta: { method: 'password', name: payload.brand_name } });
