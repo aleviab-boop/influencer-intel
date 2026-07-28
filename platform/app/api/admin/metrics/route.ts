@@ -152,16 +152,16 @@ export async function GET() {
         GROUP BY 1 ORDER BY 1`,
     ),
 
-    // Recent logins feed — who signed in, when. We surface a human name so a
-    // shared/generic mailbox (e.g. agency@gmail.com) is still attributable:
-    // prefer the current brand name, fall back to the name captured on the event.
+    // Recent logins feed — who signed in, when. The name is the point-in-time
+    // snapshot captured on THAT login (meta.name), NOT the account's current
+    // name — so the same email can show a different name each time, and updating
+    // a name never retroactively rewrites past rows. Falls back to email when an
+    // (older) event has no captured name.
     rows(
-      `SELECT ae.email, ae.kind, ae.meta, ae.created_at,
-              coalesce(nullif(b.name, ''), ae.meta->>'name') AS name
-         FROM activity_events ae
-         LEFT JOIN brands b ON b.id = ae.brand_id
-        WHERE ae.kind IN ('login','signup')
-        ORDER BY ae.created_at DESC LIMIT 25`,
+      `SELECT email, kind, meta, created_at, nullif(meta->>'name', '') AS name
+         FROM activity_events
+        WHERE kind IN ('login','signup')
+        ORDER BY created_at DESC LIMIT 25`,
     ),
 
     rows<{ t: string | null }>(`SELECT beat_at t FROM worker_heartbeat WHERE worker='main'`).then((r) => r[0]?.t ?? null),
