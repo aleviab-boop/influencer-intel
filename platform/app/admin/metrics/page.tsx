@@ -250,38 +250,46 @@ export default function MetricsPage() {
           </div>
         </Card>
 
-        {/* logins / active users */}
-        <Card title="Logins & active users" right={<span className="text-[12px] text-[#999]">14 days</span>}>
-          <div className="px-5 py-4">
-            <Bars data={loginsPerDay} color="#10b981" />
-            <div className="flex items-center justify-between mt-3 text-[12px]">
-              <span className="text-emerald-600 font-medium">{h?.logins_today ?? 0} logins today</span>
-              <span className="text-[#888]">{h?.dau_today ?? 0} active today</span>
-              <span className="text-[#888]">{h?.dau_7d ?? 0} active 7d</span>
-            </div>
-          </div>
-          {m && m.recent_logins.length > 0 && (
-            <div className="max-h-[220px] overflow-y-auto divide-y divide-[#f4f4f8] border-t border-[#f1f1f6]">
-              {m.recent_logins.map((l, i) => (
-                <div key={i} className="flex items-center gap-3 px-5 py-2">
-                  <span className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-semibold text-[#6C4DF6] bg-[#f4f2ff] shrink-0 uppercase">
-                    {(l.name || l.email || '?').trim().charAt(0)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[13px] font-medium truncate" title={l.email ?? ''}>{l.name || l.email || <span className="text-[#aaa]">unknown</span>}</span>
-                      {l.meta?.role === 'admin' && <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#fdeaea] text-rose-600 shrink-0">admin</span>}
-                    </div>
-                    <div className="text-[11px] text-[#aaa] truncate">
-                      {l.name && l.email ? `${l.email} · ` : ''}{l.kind === 'signup' ? 'signed up' : 'logged in'}{l.meta?.method ? ` · ${l.meta.method}` : ''}
-                    </div>
-                  </div>
-                  <span className="text-[12px] tabular-nums text-[#888] shrink-0">{ago(l.created_at)}</span>
+        {/* logins / active users — full width */}
+        <div className="lg:col-span-2">
+          <Card title="Logins & active users" right={<span className="text-[12px] text-[#999]">14 days</span>}>
+            <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-[#f1f1f6]">
+              {/* left: 14-day volume */}
+              <div className="px-5 py-4">
+                <Bars data={loginsPerDay} color="#10b981" />
+                <div className="flex items-center justify-between mt-3 text-[12px]">
+                  <span className="text-emerald-600 font-medium">{h?.logins_today ?? 0} logins today</span>
+                  <span className="text-[#888]">{h?.dau_today ?? 0} active today</span>
+                  <span className="text-[#888]">{h?.dau_7d ?? 0} active 7d</span>
                 </div>
-              ))}
+              </div>
+              {/* right: recent logins feed */}
+              <div className="max-h-[260px] overflow-y-auto divide-y divide-[#f4f4f8] border-t md:border-t-0 border-[#f1f1f6]">
+                {m && m.recent_logins.length === 0 ? (
+                  <div className="px-5 py-8 text-center text-[13px] text-[#aaa]">No logins logged yet.</div>
+                ) : (
+                  (m?.recent_logins ?? []).map((l, i) => (
+                    <div key={i} className="flex items-center gap-3 px-5 py-2">
+                      <span className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-semibold text-[#6C4DF6] bg-[#f4f2ff] shrink-0 uppercase">
+                        {(l.name || l.email || '?').trim().charAt(0)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[13px] font-medium truncate" title={l.email ?? ''}>{l.name || l.email || <span className="text-[#aaa]">unknown</span>}</span>
+                          {l.meta?.role === 'admin' && <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-[#fdeaea] text-rose-600 shrink-0">admin</span>}
+                        </div>
+                        <div className="text-[11px] text-[#aaa] truncate">
+                          {l.name && l.email ? `${l.email} · ` : ''}{l.kind === 'signup' ? 'signed up' : 'logged in'}{l.meta?.method ? ` · ${l.meta.method}` : ''}
+                        </div>
+                      </div>
+                      <span className="text-[12px] tabular-nums text-[#888] shrink-0">{ago(l.created_at)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          )}
-        </Card>
+          </Card>
+        </div>
       </div>
 
       {/* account roster */}
