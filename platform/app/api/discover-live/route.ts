@@ -122,8 +122,11 @@ export async function POST(req: NextRequest) {
     const gender = body?.gender === 'female' ? 'female' : body?.gender === 'male' ? 'male' : undefined;
     const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: 5000, gender });
     // Log the agency search for the admin Agency activity feed (best-effort).
+    // Raw query (not db.insert): the client casts JS arrays to ::jsonb, but
+    // agency_searches.tokens is text[] — pg encodes a string[] param natively.
+    // Storing tokens powers the admin Metrics "top niches" rollup.
     void getBolticClient()
-      .insert('agency_searches', { prompt, result_count: dbMatches.length })
+      .query(`INSERT INTO agency_searches (prompt, tokens, result_count) VALUES ($1, $2, $3)`, [prompt, tokens, dbMatches.length])
       .catch(() => {});
 
     // TRENDS is a CURATED bucket — the creators imported from the campaign Excel
