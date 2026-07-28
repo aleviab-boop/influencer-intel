@@ -40,6 +40,11 @@ export async function GET() {
     searchesToday,
     searches24h,
     searches7d,
+    // users / logins
+    loginsToday,
+    logins24h,
+    dauToday,
+    dau7d,
     // detail sets
     liveCrawls,
     hourlyThroughput,
@@ -47,6 +52,8 @@ export async function GET() {
     recentSearches,
     searchesPerDay,
     topNiches,
+    loginsPerDay,
+    recentLogins,
     // worker heartbeat
     heartbeat,
   ] = await Promise.all([
@@ -65,6 +72,13 @@ export async function GET() {
     one(`SELECT count(*)::int n FROM agency_searches WHERE created_at > date_trunc('day', now())`),
     one(`SELECT count(*)::int n FROM agency_searches WHERE created_at > now() - interval '24 hours'`),
     one(`SELECT count(*)::int n FROM agency_searches WHERE created_at > now() - interval '7 days'`),
+
+    // Logins + DAU (distinct active users). A "user" is keyed by brand_id, falling
+    // back to email. kind in ('login','signup') = an authenticated session start.
+    one(`SELECT count(*)::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > date_trunc('day', now())`),
+    one(`SELECT count(*)::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > now() - interval '24 hours'`),
+    one(`SELECT count(DISTINCT coalesce(brand_id::text, email))::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > date_trunc('day', now())`),
+    one(`SELECT count(DISTINCT coalesce(brand_id::text, email))::int n FROM activity_events WHERE kind IN ('login','signup') AND created_at > now() - interval '7 days'`),
 
     // Who's crawling right now — in-progress jobs + how long they've been running,
     // with the account handle doing the work.
@@ -130,6 +144,22 @@ export async function GET() {
         GROUP BY 1 ORDER BY n DESC, token LIMIT 15`,
     ),
 
+    // Logins per day (last 14d) for the mini bar chart.
+    rows(
+      `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS bucket, count(*)::int n
+         FROM activity_events
+        WHERE kind IN ('login','signup') AND created_at > now() - interval '14 days'
+        GROUP BY 1 ORDER BY 1`,
+    ),
+
+    // Recent logins feed — who signed in, when.
+    rows(
+      `SELECT email, kind, meta, created_at
+         FROM activity_events
+        WHERE kind IN ('login','signup')
+        ORDER BY created_at DESC LIMIT 25`,
+    ),
+
     rows<{ t: string | null }>(`SELECT beat_at t FROM worker_heartbeat WHERE worker='main'`).then((r) => r[0]?.t ?? null),
   ]);
 
@@ -150,6 +180,10 @@ export async function GET() {
       searches_today: searchesToday,
       searches_24h: searches24h,
       searches_7d: searches7d,
+      logins_today: loginsToday,
+      logins_24h: logins24h,
+      dau_today: dauToday,
+      dau_7d: dau7d,
     },
     live_crawls: liveCrawls,
     hourly_throughput: hourlyThroughput,
@@ -157,5 +191,7 @@ export async function GET() {
     recent_searches: recentSearches,
     searches_per_day: searchesPerDay,
     top_niches: topNiches,
+    logins_per_day: loginsPerDay,
+    recent_logins: recentLogins,
   });
 }

@@ -12,6 +12,7 @@
 import { cookies } from 'next/headers';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import type { Brand } from '@influencer-intel/shared/types';
+import { logActivity } from '@/lib/activity';
 import crypto from 'node:crypto';
 
 const COOKIE_NAME = 'ii_session';
@@ -149,6 +150,7 @@ export async function signIn(email: string, brandName?: string, igHandle?: strin
     secure: process.env.NODE_ENV === 'production',
     maxAge: COOKIE_MAX_AGE,
   });
+  void logActivity({ kind: 'login', brand_id: payload.brand_id, email: payload.email, meta: { method: 'email' } });
   return payload;
 }
 
@@ -184,6 +186,7 @@ export async function createAccount(email: string, password: string, brandName?:
   }
   const payload = payloadFor(brand, cleanEmail);
   await setSessionCookie(payload);
+  void logActivity({ kind: 'signup', brand_id: payload.brand_id, email: payload.email, meta: { method: 'password' } });
   return payload;
 }
 
@@ -199,6 +202,7 @@ export async function signInWithPassword(email: string, password: string): Promi
   if (!verifyPassword(password, brand.password_hash)) throw new Error('Incorrect email or password.');
   const payload = payloadFor(brand, cleanEmail);
   await setSessionCookie(payload);
+  void logActivity({ kind: 'login', brand_id: payload.brand_id, email: payload.email, meta: { method: 'password' } });
   return payload;
 }
 

@@ -26,6 +26,7 @@ interface Account {
   jobs_24h: number;
 }
 interface RecentSearch { prompt: string; result_count: number; created_at: string }
+interface RecentLogin { email: string | null; kind: string; meta: { method?: string } | null; created_at: string }
 interface Metrics {
   generatedAt: string;
   worker: { live: boolean; last_beat_at: string | null };
@@ -33,6 +34,7 @@ interface Metrics {
     queued: number; in_progress: number; completed_24h: number; skipped_24h: number; failed_24h: number;
     avg_duration_sec: number; oldest_queued_at: string | null;
     searches_today: number; searches_24h: number; searches_7d: number;
+    logins_today: number; logins_24h: number; dau_today: number; dau_7d: number;
   };
   live_crawls: LiveCrawl[];
   hourly_throughput: Array<{ bucket: string; n: number }>;
@@ -40,6 +42,8 @@ interface Metrics {
   recent_searches: RecentSearch[];
   searches_per_day: Array<{ bucket: string; n: number }>;
   top_niches: Array<{ token: string; n: number }>;
+  logins_per_day: Array<{ bucket: string; n: number }>;
+  recent_logins: RecentLogin[];
 }
 
 function fmtDuration(sec: number): string {
@@ -129,6 +133,7 @@ export default function MetricsPage() {
   const h = m?.headline;
   const hourly = useMemo(() => (m?.hourly_throughput ?? []).map((x) => x.n), [m]);
   const perDay = useMemo(() => (m?.searches_per_day ?? []).map((x) => x.n), [m]);
+  const loginsPerDay = useMemo(() => (m?.logins_per_day ?? []).map((x) => x.n), [m]);
   const oldestQ = until(h?.oldest_queued_at ?? null);
 
   return (
@@ -149,13 +154,15 @@ export default function MetricsPage() {
       {err && <div className="mb-4 text-[13px] text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5">Couldn't load metrics: {err}</div>}
 
       {/* headline stat strip */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <StatCard label="Active today (DAU)" value={h?.dau_today ?? '—'} tone={h && h.dau_today > 0 ? 'ok' : undefined} sub={`${h?.dau_7d ?? 0} in last 7d`} />
+        <StatCard label="Logins today" value={h?.logins_today ?? '—'} sub={`${h?.logins_24h ?? 0} in 24h`} />
+        <StatCard label="Searches today" value={h?.searches_today ?? '—'} sub={`${h?.searches_24h ?? 0} in 24h`} />
+        <StatCard label="Searches 7d" value={h?.searches_7d ?? '—'} sub="last 7 days" />
         <StatCard label="Crawling now" value={h?.in_progress ?? '—'} tone={h && h.in_progress > 0 ? 'ok' : undefined} sub="in progress" />
         <StatCard label="Queued" value={h?.queued ?? '—'} tone={h && h.queued > 20 ? 'warn' : undefined} sub={oldestQ ? `oldest ${oldestQ}` : 'empty'} />
         <StatCard label="Completed 24h" value={h?.completed_24h ?? '—'} tone="ok" sub={`${h?.skipped_24h ?? 0} skipped · ${h?.failed_24h ?? 0} failed`} />
         <StatCard label="Avg crawl" value={h ? fmtDuration(h.avg_duration_sec) : '—'} sub="per job, 24h" />
-        <StatCard label="Searches today" value={h?.searches_today ?? '—'} sub={`${h?.searches_24h ?? 0} in 24h`} />
-        <StatCard label="Searches 7d" value={h?.searches_7d ?? '—'} sub="last 7 days" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -225,6 +232,33 @@ export default function MetricsPage() {
               {m && m.top_niches.length === 0 && <span className="text-[12px] text-[#aaa]">No niche data yet.</span>}
             </div>
           </div>
+        </Card>
+
+        {/* logins / active users */}
+        <Card title="Logins & active users" right={<span className="text-[12px] text-[#999]">14 days</span>}>
+          <div className="px-5 py-4">
+            <Bars data={loginsPerDay.length ? loginsPerDay : Array(14).fill(0)} color="#10b981" />
+            <div className="flex items-center justify-between mt-3 text-[12px]">
+              <span className="text-emerald-600 font-medium">{h?.logins_today ?? 0} logins today</span>
+              <span className="text-[#888]">{h?.dau_today ?? 0} active today</span>
+              <span className="text-[#888]">{h?.dau_7d ?? 0} active 7d</span>
+            </div>
+          </div>
+          {m && m.recent_logins.length > 0 && (
+            <div className="max-h-[220px] overflow-y-auto divide-y divide-[#f4f4f8] border-t border-[#f1f1f6]">
+              {m.recent_logins.map((l, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] truncate" title={l.email ?? ''}>{l.email || <span className="text-[#aaa]">unknown</span>}</div>
+                    <div className="text-[11px] text-[#aaa]">
+                      {l.kind === 'signup' ? 'signed up' : 'logged in'}{l.meta?.method ? ` · ${l.meta.method}` : ''}
+                    </div>
+                  </div>
+                  <span className="text-[12px] tabular-nums text-[#888] shrink-0">{ago(l.created_at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 
