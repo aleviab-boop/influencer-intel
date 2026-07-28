@@ -44,6 +44,11 @@ interface Metrics {
   top_niches: Array<{ token: string; n: number }>;
   logins_per_day: Array<{ bucket: string; n: number }>;
   recent_logins: RecentLogin[];
+  creators_total: number;
+  creator_growth: Array<{ bucket: string; n: number }>;
+  creators_by_source: Array<{ source: string; n: number }>;
+  job_outcomes_7d: Array<{ status: string; n: number }>;
+  search_buckets: { zero: number; small: number; big: number };
 }
 
 function fmtDuration(sec: number): string {
@@ -110,6 +115,70 @@ function Bars({ data, color = ACCENT }: { data: number[]; color?: string }) {
   );
 }
 
+// Donut / pie chart (pure SVG, no deps). `slices` = label/value/color.
+function Donut({ slices, size = 120, thickness = 18, centerLabel, centerSub }: {
+  slices: Array<{ label: string; value: number; color: string }>;
+  size?: number; thickness?: number; centerLabel?: string; centerSub?: string;
+}) {
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  const r = (size - thickness) / 2;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f1f1f6" strokeWidth={thickness} />
+        {total > 0 && slices.map((s, i) => {
+          const frac = s.value / total;
+          const dash = frac * c;
+          const el = (
+            <circle key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={s.color} strokeWidth={thickness}
+              strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset} strokeLinecap="butt" />
+          );
+          offset += dash;
+          return el;
+        })}
+      </svg>
+      <div className="min-w-0">
+        {centerLabel != null && <div className="text-[22px] font-bold tabular-nums leading-none">{centerLabel}</div>}
+        {centerSub && <div className="text-[11px] text-[#999] mb-2">{centerSub}</div>}
+        <div className="space-y-1">
+          {slices.map((s) => (
+            <div key={s.label} className="flex items-center gap-2 text-[12px]">
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: s.color }} />
+              <span className="text-[#666] truncate">{s.label}</span>
+              <span className="ml-auto tabular-nums font-medium text-[#333]">{s.value.toLocaleString()}</span>
+              <span className="tabular-nums text-[#aaa] w-9 text-right">{total ? Math.round((s.value / total) * 100) : 0}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Smooth-ish line chart (pure SVG). `data` = y-values, evenly spaced on x.
+function Line({ data, color = ACCENT, height = 72 }: { data: number[]; color?: string; height?: number }) {
+  const w = 300;
+  const max = Math.max(1, ...data);
+  const n = data.length;
+  const pts: Array<[number, number]> = data.map((v, i) => [n <= 1 ? 0 : (i / (n - 1)) * w, height - (v / max) * (height - 8) - 4]);
+  const path = pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area = `${path} L${w},${height} L0,${height} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
+      <defs>
+        <linearGradient id="ln-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#ln-fill)" />
+      <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl bg-white border border-[#ececf3] shadow-[0_1px_2px_rgba(20,20,40,0.04)]">
@@ -151,6 +220,39 @@ export default function MetricsPage() {
   const perDay = useMemo(() => dailySeries(m?.searches_per_day, 14), [m]);
   const loginsPerDay = useMemo(() => dailySeries(m?.logins_per_day, 14), [m]);
   const oldestQ = until(h?.oldest_queued_at ?? null);
+
+  // Cumulative creator-DB growth over 30 days (line). Start from the count that
+  // existed before the window, then add each day's new creators.
+  const creatorLine = useMemo(() => {
+    const daily = dailySeries(m?.creator_growth, 30);
+    const added = daily.reduce((s, v) => s + v, 0);
+    let running = (m?.creators_total ?? added) - added;
+    return daily.map((v) => (running += v));
+  }, [m]);
+
+  const SRC_COLORS: Record<string, string> = { icmp: '#6C4DF6', scrape: '#10b981', manual: '#f59e0b', trends: '#ec4899', unknown: '#c7c7d1' };
+  const sourceSlices = useMemo(
+    () => (m?.creators_by_source ?? []).map((s) => ({ label: s.source, value: s.n, color: SRC_COLORS[s.source] ?? '#9b7bff' })),
+    [m], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const outcomeSlices = useMemo(() => {
+    const by = new Map((m?.job_outcomes_7d ?? []).map((x) => [x.status, x.n]));
+    return [
+      { label: 'Completed', value: by.get('completed') ?? 0, color: '#10b981' },
+      { label: 'Skipped', value: by.get('skipped') ?? 0, color: '#f59e0b' },
+      { label: 'Failed', value: by.get('failed') ?? 0, color: '#ef4444' },
+    ];
+  }, [m]);
+  const outcomeTotal = outcomeSlices.reduce((s, x) => s + x.value, 0);
+  const successRate = outcomeTotal ? Math.round(((outcomeSlices[0]!.value) / outcomeTotal) * 100) : 0;
+  const sb = m?.search_buckets ?? { zero: 0, small: 0, big: 0 };
+  const searchSlices = [
+    { label: 'Good (6+ results)', value: sb.big, color: '#10b981' },
+    { label: 'Few (1–5)', value: sb.small, color: '#f59e0b' },
+    { label: 'Empty (0)', value: sb.zero, color: '#ef4444' },
+  ];
+  const searchTotal = sb.zero + sb.small + sb.big;
+  const zeroRate = searchTotal ? Math.round((sb.zero / searchTotal) * 100) : 0;
 
   return (
     <div className="p-8 max-w-[1400px] mx-auto">
@@ -290,6 +392,59 @@ export default function MetricsPage() {
             </div>
           </Card>
         </div>
+      </div>
+
+      {/* platform overview — pie + line charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        {/* creator DB growth (line) */}
+        <Card title="Creator database" right={<span className="text-[12px] text-[#999]">30-day growth</span>}>
+          <div className="px-5 py-4">
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-[26px] font-bold tabular-nums leading-none">{(m?.creators_total ?? 0).toLocaleString()}</span>
+              <span className="text-[12px] text-emerald-600 font-medium">
+                +{(m?.creator_growth ?? []).reduce((s, x) => s + x.n, 0).toLocaleString()} in 30d
+              </span>
+            </div>
+            <Line data={creatorLine} color="#6C4DF6" />
+          </div>
+        </Card>
+
+        {/* creator sources (pie) */}
+        <Card title="Where creators come from" right={<span className="text-[12px] text-[#999]">by source</span>}>
+          <div className="px-5 py-4">
+            {m && sourceSlices.length === 0
+              ? <div className="py-8 text-center text-[13px] text-[#aaa]">No creators yet.</div>
+              : <Donut slices={sourceSlices} centerLabel={(m?.creators_total ?? 0).toLocaleString()} centerSub="total creators" />}
+          </div>
+        </Card>
+
+        {/* search effectiveness (pie) */}
+        <Card title="Search effectiveness" right={<span className="text-[12px] text-[#999]">30 days</span>}>
+          <div className="px-5 py-4">
+            {searchTotal === 0
+              ? <div className="py-8 text-center text-[13px] text-[#aaa]">No searches yet.</div>
+              : <Donut slices={searchSlices} centerLabel={`${100 - zeroRate}%`} centerSub="returned results" />}
+          </div>
+        </Card>
+      </div>
+
+      {/* job outcomes (pie) — full-width strip alongside a note */}
+      <div className="mt-6">
+        <Card title="Crawl outcomes" right={<span className="text-[12px] text-[#999]">last 7 days</span>}>
+          <div className="px-5 py-4">
+            {outcomeTotal === 0
+              ? <div className="py-8 text-center text-[13px] text-[#aaa]">No jobs completed in the last 7 days — worker has been idle.</div>
+              : (
+                <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
+                  <Donut slices={outcomeSlices} centerLabel={`${successRate}%`} centerSub="success rate" />
+                  <div className="text-[13px] text-[#666]">
+                    <div className="font-medium text-[#333] mb-1">{outcomeTotal.toLocaleString()} jobs finished</div>
+                    <div>{successRate}% completed cleanly, {100 - successRate}% skipped or failed.</div>
+                  </div>
+                </div>
+              )}
+          </div>
+        </Card>
       </div>
 
       {/* account roster */}

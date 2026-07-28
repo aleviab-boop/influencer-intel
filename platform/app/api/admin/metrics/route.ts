@@ -54,6 +54,12 @@ export async function GET() {
     topNiches,
     loginsPerDay,
     recentLogins,
+    // creator database + quality charts
+    creatorsTotal,
+    creatorGrowth,
+    creatorsBySource,
+    jobOutcomes7d,
+    searchBuckets,
     // worker heartbeat
     heartbeat,
   ] = await Promise.all([
@@ -164,6 +170,39 @@ export async function GET() {
         ORDER BY created_at DESC LIMIT 25`,
     ),
 
+    // Creator database size — for the growth line's cumulative baseline.
+    one(`SELECT count(*)::int n FROM creators`),
+
+    // New creators per day, last 30 days — drives the DB-growth line chart.
+    rows(
+      `SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS bucket, count(*)::int n
+         FROM creators
+        WHERE created_at > now() - interval '30 days'
+        GROUP BY 1 ORDER BY 1`,
+    ),
+
+    // Where creators came from (icmp / scrape / manual / unknown) — pie.
+    rows(
+      `SELECT coalesce(nullif(source,''),'unknown') AS source, count(*)::int n
+         FROM creators GROUP BY 1 ORDER BY n DESC`,
+    ),
+
+    // Job outcomes over 7 days (completed / skipped / failed) — pie + success rate.
+    rows(
+      `SELECT status, count(*)::int n
+         FROM scrape_jobs
+        WHERE completed_at > now() - interval '7 days' AND status IN ('completed','skipped','failed')
+        GROUP BY 1`,
+    ),
+
+    // Search effectiveness — how many searches returned nothing vs a few vs many.
+    rows(
+      `SELECT count(*) FILTER (WHERE coalesce(result_count,0)=0)::int zero,
+              count(*) FILTER (WHERE result_count BETWEEN 1 AND 5)::int small,
+              count(*) FILTER (WHERE result_count > 5)::int big
+         FROM agency_searches WHERE created_at > now() - interval '30 days'`,
+    ).then((r) => r[0] ?? { zero: 0, small: 0, big: 0 }),
+
     rows<{ t: string | null }>(`SELECT beat_at t FROM worker_heartbeat WHERE worker='main'`).then((r) => r[0]?.t ?? null),
   ]);
 
@@ -197,5 +236,10 @@ export async function GET() {
     top_niches: topNiches,
     logins_per_day: loginsPerDay,
     recent_logins: recentLogins,
+    creators_total: creatorsTotal,
+    creator_growth: creatorGrowth,
+    creators_by_source: creatorsBySource,
+    job_outcomes_7d: jobOutcomes7d,
+    search_buckets: searchBuckets,
   });
 }
