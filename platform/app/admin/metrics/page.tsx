@@ -26,7 +26,7 @@ interface Account {
   jobs_24h: number;
 }
 interface RecentSearch { prompt: string; result_count: number; created_at: string }
-interface RecentLogin { email: string | null; kind: string; meta: { method?: string } | null; created_at: string }
+interface RecentLogin { email: string | null; kind: string; name: string | null; meta: { method?: string } | null; created_at: string }
 interface Metrics {
   generatedAt: string;
   worker: { live: boolean; last_beat_at: string | null };
@@ -248,10 +248,13 @@ export default function MetricsPage() {
             <div className="max-h-[220px] overflow-y-auto divide-y divide-[#f4f4f8] border-t border-[#f1f1f6]">
               {m.recent_logins.map((l, i) => (
                 <div key={i} className="flex items-center gap-3 px-5 py-2">
+                  <span className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-semibold text-[#6C4DF6] bg-[#f4f2ff] shrink-0 uppercase">
+                    {(l.name || l.email || '?').trim().charAt(0)}
+                  </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] truncate" title={l.email ?? ''}>{l.email || <span className="text-[#aaa]">unknown</span>}</div>
-                    <div className="text-[11px] text-[#aaa]">
-                      {l.kind === 'signup' ? 'signed up' : 'logged in'}{l.meta?.method ? ` · ${l.meta.method}` : ''}
+                    <div className="text-[13px] font-medium truncate" title={l.email ?? ''}>{l.name || l.email || <span className="text-[#aaa]">unknown</span>}</div>
+                    <div className="text-[11px] text-[#aaa] truncate">
+                      {l.name && l.email ? `${l.email} · ` : ''}{l.kind === 'signup' ? 'signed up' : 'logged in'}{l.meta?.method ? ` · ${l.meta.method}` : ''}
                     </div>
                   </div>
                   <span className="text-[12px] tabular-nums text-[#888] shrink-0">{ago(l.created_at)}</span>
