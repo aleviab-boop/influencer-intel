@@ -7,6 +7,7 @@ import type {
   ShortlistCreatorView,
 } from '@influencer-intel/shared/types';
 import { freshnessBadge } from '@/lib/freshness';
+import { scoreAuthenticity } from '@/lib/authenticity';
 
 export const runtime = 'nodejs';
 
@@ -83,6 +84,26 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         confidence: creator.audience_demographics.confidence,
         gender_female_pct: creator.audience_demographics.gender.female_pct,
         top_cities: creator.audience_demographics.top_cities,
+      };
+    }
+    // Same authenticity read as the live shortlist builder (toUI) so the badge
+    // persists on reload. Omit when there's nothing to judge on.
+    const auth = scoreAuthenticity({
+      follower_count: creator.follower_count,
+      following_count: creator.following_count,
+      avg_likes: creator.avg_likes,
+      avg_comments: creator.avg_comments,
+      engagement_rate: creator.engagement_rate,
+      cred_score: creator.credibility?.overall_score ?? null,
+      recent_posts: creator.recent_posts,
+    });
+    if (auth.basis !== 'insufficient') {
+      item.authenticity = {
+        score: auth.score,
+        band: auth.band,
+        basis: auth.basis,
+        posts_analyzed: auth.posts_analyzed,
+        signals: auth.signals,
       };
     }
     ui.push(item);

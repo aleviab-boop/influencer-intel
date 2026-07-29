@@ -19,6 +19,7 @@ import type {
 import { discoverCandidates } from './discovery';
 import { buildHashtagQueries } from './hashtag-discovery';
 import { rankCreators, type RankedCreator } from './ranker';
+import { scoreAuthenticity } from './authenticity';
 import { generateLightReasoning, generatePerCreatorReasoning } from './reasoning';
 import { freshnessBadge } from './freshness';
 import { getBroadcaster } from './sse-broadcaster';
@@ -208,6 +209,29 @@ export function toUI(ranked: RankedCreator, briefCreator: BriefCreator): Shortli
       badge: c.credibility.badge,
       signals: c.credibility.signals,
       flags: c.credibility.flags,
+    };
+  }
+  // Authenticity read from scrapable signals. Uses the full Creator (which has
+  // recent_posts + avg_likes/comments here, unlike the trimmed view.creator).
+  // The OAuth-verified reach path is async/DB-bound, so we skip it inline — the
+  // standalone tool keeps that path. Omit entirely when there's nothing to judge
+  // on so the card shows no misleading "0" badge.
+  const auth = scoreAuthenticity({
+    follower_count: c.follower_count,
+    following_count: c.following_count,
+    avg_likes: c.avg_likes,
+    avg_comments: c.avg_comments,
+    engagement_rate: c.engagement_rate,
+    cred_score: c.credibility?.overall_score ?? null,
+    recent_posts: c.recent_posts,
+  });
+  if (auth.basis !== 'insufficient') {
+    view.authenticity = {
+      score: auth.score,
+      band: auth.band,
+      basis: auth.basis,
+      posts_analyzed: auth.posts_analyzed,
+      signals: auth.signals,
     };
   }
   if (c.audience_demographics) {

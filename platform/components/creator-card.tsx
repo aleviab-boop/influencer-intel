@@ -13,7 +13,7 @@ export function CreatorCard({ creator }: { creator: ShortlistCreatorView }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full grid grid-cols-[28px_44px_1fr_auto_auto_auto_16px] items-center gap-4 px-4 py-3.5 text-left"
+        className="w-full grid grid-cols-[28px_44px_1fr_auto_auto_auto_auto_16px] items-center gap-4 px-4 py-3.5 text-left"
       >
         <span className="text-sm text-ink-400 font-mono tabular-nums shrink-0 text-center">
           {creator.rank}
@@ -60,6 +60,10 @@ export function CreatorCard({ creator }: { creator: ShortlistCreatorView }) {
             <div className="text-ink-900 tabular-nums">{Math.round(creator.audience.gender_female_pct)}% F</div>
             <div className="text-[11px] uppercase tracking-wider text-ink-400">{creator.audience.confidence}</div>
           </div>
+        )}
+
+        {creator.authenticity && (
+          <AuthenticityChip score={creator.authenticity.score} band={creator.authenticity.band} />
         )}
 
         {creator.credibility && (
@@ -299,6 +303,28 @@ function ExpandedPanel({ creator }: { creator: ShortlistCreatorView }) {
           </Section>
         )}
 
+        {creator.authenticity && (
+          <Section title="Authenticity">
+            <div className="flex items-center gap-3 mb-3">
+              <AuthenticityChip score={creator.authenticity.score} band={creator.authenticity.band} />
+              <span className="text-sm text-ink-600">{authBandLabel(creator.authenticity.band)}</span>
+              <span className="text-[11px] text-ink-400">{authBasisLabel(creator.authenticity.basis, creator.authenticity.posts_analyzed)}</span>
+            </div>
+            <div className="space-y-1.5">
+              {creator.authenticity.signals.map((s) => (
+                <div key={s.label} className="flex items-start gap-2 text-sm">
+                  <span className={`mt-0.5 shrink-0 ${s.ok ? 'text-success' : 'text-warn'}`}>{s.ok ? '✓' : '✕'}</span>
+                  <span className="text-ink-900">{s.label}</span>
+                  <span className="text-ink-500 truncate">— {s.detail}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] text-ink-400 leading-relaxed">
+              Heuristic estimate of engagement quality from public signals — not a literal fake-follower percentage.
+            </p>
+          </Section>
+        )}
+
         {vision?.safety_concerns && vision.safety_concerns.length > 0 && (
           <Section title="Safety">
             <div className="flex flex-wrap gap-1.5">
@@ -430,6 +456,37 @@ function CredibilityChip({ score, badge }: { score: number; badge: 'green' | 'am
       {Math.round(score)}
     </div>
   );
+}
+
+function AuthenticityChip({ score, band }: { score: number; band: 'high' | 'mixed' | 'low' }) {
+  const colors = {
+    high: 'bg-success/10 text-success border-success/30',
+    mixed: 'bg-warn/10 text-warn border-warn/30',
+    low: 'bg-danger/10 text-danger border-danger/30',
+  } as const;
+  return (
+    <div
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-semibold border ${colors[band]} shrink-0 tabular-nums`}
+      title={`Authenticity ${Math.round(score)}/100 — estimated engagement quality`}
+    >
+      <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 7-2.9-1.4-5-3.8-5-7v-4l5-2z" strokeLinejoin="round" />
+      </svg>
+      {Math.round(score)}
+    </div>
+  );
+}
+
+function authBandLabel(band: 'high' | 'mixed' | 'low'): string {
+  return band === 'high' ? 'Looks genuine' : band === 'mixed' ? 'Mixed signals' : 'Needs a closer look';
+}
+
+function authBasisLabel(basis: string, posts: number): string {
+  if (basis === 'verified') return 'from OAuth-verified reach';
+  if (basis === 'per_post') return `from ${posts} recent post${posts === 1 ? '' : 's'}`;
+  if (basis === 'aggregate') return 'from profile averages';
+  if (basis === 'credibility') return 'from credibility score';
+  return '';
 }
 
 function FreshnessDot({ freshness }: { freshness: ShortlistCreatorView['freshness'] }) {

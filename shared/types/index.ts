@@ -597,6 +597,19 @@ export interface ShortlistCreatorView {
   reasoning: string | null;
   freshness: Freshness;
   credibility?: { overall_score: number; badge: CredibilityBadge; signals?: CredibilityData['signals']; flags?: string[] };
+  /**
+   * Authenticity / fake-follower read, computed from scrapable engagement signals
+   * (ER-vs-tier, comment authenticity, consistency, follower/following ratio).
+   * A heuristic estimate of how genuine the audience/engagement looks — NOT a
+   * literal fake-follower percentage. Absent when there's no data to judge on.
+   */
+  authenticity?: {
+    score: number; // 0–100
+    band: 'high' | 'mixed' | 'low';
+    basis: 'verified' | 'per_post' | 'aggregate' | 'credibility' | 'insufficient';
+    posts_analyzed: number;
+    signals: { label: string; ok: boolean; detail: string }[];
+  };
   audience?: {
     confidence: ConfidenceLevel;
     gender_female_pct: number | null;
