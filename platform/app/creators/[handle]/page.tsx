@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
 import type { Creator, ShortlistCreatorView } from '@influencer-intel/shared/types';
 import { CreatorCard } from '@/components/creator-card';
+import { scoreAuthenticity } from '@/lib/authenticity';
 
 interface SimilarCreator {
   id: string;
@@ -117,6 +118,15 @@ function fmtFollowers(v: number | string | null | undefined): string {
 }
 
 function creatorToView(c: Creator): ShortlistCreatorView {
+  const auth = scoreAuthenticity({
+    follower_count: c.follower_count,
+    following_count: c.following_count,
+    avg_likes: c.avg_likes,
+    avg_comments: c.avg_comments,
+    engagement_rate: c.engagement_rate,
+    cred_score: c.credibility?.overall_score ?? null,
+    recent_posts: c.recent_posts,
+  });
   return {
     brief_creator_id: c.id, // dummy — we're not in a brief context
     creator: {
@@ -155,6 +165,15 @@ function creatorToView(c: Creator): ShortlistCreatorView {
           confidence: c.audience_demographics.confidence,
           gender_female_pct: c.audience_demographics.gender.female_pct,
           top_cities: c.audience_demographics.top_cities,
+        }
+      : undefined,
+    authenticity: auth.basis !== 'insufficient'
+      ? {
+          score: auth.score,
+          band: auth.band,
+          basis: auth.basis,
+          posts_analyzed: auth.posts_analyzed,
+          signals: auth.signals,
         }
       : undefined,
   };
