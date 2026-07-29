@@ -106,6 +106,18 @@ export async function POST(req: NextRequest) {
   const tokens = tokenize(prompt);
   const mode = body?.mode === 'db' ? 'db' : 'live';
 
+  // DIRECT-HANDLE LOOKUP. Rule: a prompt that starts with '@' names an exact
+  // Instagram account, not a niche. We turn it into a crawl seed so the live
+  // pipeline FETCHES that profile (and its network) instead of keyword-searching
+  // the DB for it. For a handle lookup we also skip the OpenAI-suggest step, the
+  // niche relevance gate, and the deep-worker enqueue — none of those apply when
+  // the user has already told us the exact account they want.
+  const handleLookup = /^@[a-z0-9._]{1,30}$/i.test(prompt);
+  const lookupHandle = handleLookup ? prompt.slice(1).toLowerCase() : '';
+  if (handleLookup && !seeds.some((s) => s.trim().toLowerCase().replace(/^@/, '') === lookupHandle)) {
+    seeds.push(lookupHandle);
+  }
+
   // Cold-search fallback: when a db-mode (Lander) search finds nothing in the
   // database, we enqueue a deep worker crawl and fall through to an immediate
   // live crawl. This id lets the client poll the worker for the richer finds it
@@ -213,7 +225,7 @@ export async function POST(req: NextRequest) {
     // is throttled (the OpenAI suggester doesn't depend on IG accounts, so it
     // "never dies"). We only enqueue a deep worker crawl for a genuinely NEW
     // prompt, so we don't re-crawl — and re-throttle accounts on — a known one.
-    if (!searchedBefore) workerJobId = await enqueueSearchJob(prompt);
+    if (!searchedBefore && !handleLookup) workerJobId = await enqueueSearchJob(prompt);
     // (no early return — execution continues into the AI + crawl pipelines)
   }
 
@@ -240,7 +252,7 @@ export async function POST(req: NextRequest) {
   // each is validated against Instagram (hallucinations dropped, throttled ones
   // kept as stubs). Only on Lander (db-mode) searches.
   const aiPipeline = (async () => {
-    if (mode !== 'db') return;
+    if (mode !== 'db' || handleLookup) return;
     try {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
@@ -300,7 +312,7 @@ export async function POST(req: NextRequest) {
     // Live Instagram crawl runs ONLY for a cold prompt. Known prompts get OpenAI
     // + DB (already crawled once), so we don't burn account budget re-crawling —
     // "then do scraping, and throttle accounts accordingly."
-    if (mode === 'db' && searchedBefore) return;
+    if (mode === 'db' && searchedBefore && !handleLookup) return;
     if (seeds.length === 0 && names.length === 0) {
       for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
         seeds.push(m.handle);
@@ -346,8 +358,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: 'no_seeds',
-        message:
-          names.length > 0
+        message: handleLookup
+          ? `Couldn't fetch @${lookupHandle}. It may be private, mistyped, or Instagram is rate-limiting right now — try again in a moment.`
+          : names.length > 0
             ? `Couldn't find Instagram accounts for that name. Try a different spelling or an @handle.`
             : `Couldn't find live results or anything in your database. Add a name or @handle to start from.`,
       },
@@ -385,7 +398,7 @@ export async function POST(req: NextRequest) {
   // search's subject words, then keep only the on-topic ones. Curated (the
   // agency's own imported list) is always exempt. Safety net: if the gate would
   // empty the page, we fall back to the ungated set rather than show nothing.
-  const nicheGate = nicheKeywords(prompt);
+  const nicheGate = handleLookup ? [] : nicheKeywords(prompt);
   for (const p of merged) {
     p.niche_match = hasNicheEvidence(
       `${p.username} ${p.full_name} ${p.biography} ${p.category}`,
@@ -401,7 +414,13 @@ export async function POST(req: NextRequest) {
     // followers / unverified). They're still SAVED and enriched in the
     // background; they just don't clutter the results until they have real
     // numbers, then they show up on a later search.
-    .filter((p) => p.followers > 0 && !p.unverified)
+    .filter((p) => {
+      if (p.unverified) return false;
+      // Direct @handle lookup: always keep the exact account, even if it has a
+      // small/zero follower count (e.g. a brand-new or niche personal account).
+      if (handleLookup && p.username.toLowerCase() === lookupHandle) return true;
+      return p.followers > 0;
+    })
     .sort((a, b) => {
       // ① Source priority: OpenAI first, then DB, then live crawl.
       const sr = srcRank(a) - srcRank(b);
@@ -431,6 +450,12 @@ export async function POST(req: NextRequest) {
     })
     .slice(0, max)
     .map((p) => ({ ...p, completeness: completenessScore(p) }));
+
+  // A direct @handle lookup: surface the exact account first, above its network.
+  if (handleLookup) {
+    const i = results.findIndex((r) => r.username.toLowerCase() === lookupHandle);
+    if (i > 0) results.unshift(results.splice(i, 1)[0]!);
+  }
 
   // Tag saved creators with the search's region/niche. When the prompt has no
   // niche (e.g. a bare seed handle), infer it from the crawled network so a
