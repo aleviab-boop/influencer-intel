@@ -135,18 +135,30 @@ export async function GET(req: NextRequest) {
     /* skip */
   }
 
-  // 3) WORKER — heartbeat stale AND jobs queued = the crawl worker is down.
+  // 3) WORKER — heartbeat stale AND jobs STUCK = the crawl worker is down.
+  //    We only count jobs queued longer than a grace window (10 min), not every
+  //    freshly-enqueued one. A normal search enqueues a `search_query` job the
+  //    instant it runs; a live worker claims it within seconds. Without the grace
+  //    window, any search would trip this alert even though the instant results
+  //    (live-discovery + OpenAI + DB) already returned fine and the worker was
+  //    about to pick the job up — the "results came up but I still got pinged"
+  //    false alarm. A job only counts as stalled once it's sat unworked past the
+  //    window, which genuinely means nothing is draining the queue.
+  const STALLED_JOB_GRACE_MIN = 10;
   try {
-    const rows = await db.query<{ beat_secs: number | null; queued: number }>(
+    const rows = await db.query<{ beat_secs: number | null; stuck: number }>(
       `SELECT
          EXTRACT(EPOCH FROM (now() - (SELECT beat_at FROM worker_heartbeat WHERE worker='main')))::int AS beat_secs,
-         (SELECT count(*) FROM scrape_jobs WHERE status='queued')::int AS queued`,
+         (SELECT count(*) FROM scrape_jobs
+            WHERE status='queued'
+              AND queued_at < now() - ($1 || ' minutes')::interval)::int AS stuck`,
+      [String(STALLED_JOB_GRACE_MIN)],
     );
     const beat = rows[0]?.beat_secs;
-    const queued = Number(rows[0]?.queued ?? 0);
-    if ((beat == null || beat > 300) && queued > 0) {
+    const stuck = Number(rows[0]?.stuck ?? 0);
+    if ((beat == null || beat > 300) && stuck > 0) {
       fired.push('worker_stalled');
-      await alertOnce('worker_stalled', `:warning: *Worker idle with ${queued} job(s) queued* — the crawl worker isn’t running. Start it on the crawl host (\`./run-worker.sh\`).`);
+      await alertOnce('worker_stalled', `:warning: *Worker idle with ${stuck} job(s) stuck >${STALLED_JOB_GRACE_MIN}min* — the crawl worker isn’t draining the queue. Start it on the crawl host (\`./run-worker.sh\`).`);
     } else {
       await clearAlert('worker_stalled');
     }
