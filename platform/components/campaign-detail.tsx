@@ -294,8 +294,8 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
           <InviteCreators programId={id} existing={new Set(recruits.map((r) => r.creator_id))} onAdded={load} />
           <SavedCreatorsSegment programId={id} onAdded={load} />
 
-          {/* kanban */}
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
+          {/* kanban — equal-height lanes that scroll internally */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {PIPELINE.map((stage) => {
               const s = STAGE[stage];
               const inStage = recruits.filter((r) => r.status === stage);
@@ -306,25 +306,41 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
                   onDragOver={(e) => { e.preventDefault(); setDragOver(stage); }}
                   onDragLeave={() => setDragOver((d) => (d === stage ? null : d))}
                   onDrop={(e) => { e.preventDefault(); const cid = e.dataTransfer.getData('text/plain'); if (cid) patchRecruit(cid, { status: stage }); setDragOver(null); }}
-                  className="rounded-2xl border bg-white overflow-hidden transition-all duration-200"
+                  className="flex flex-col rounded-2xl border bg-white overflow-hidden transition-all duration-200"
                   style={{
                     borderColor: isOver ? s.ring : 'var(--ii-border, #ececf2)',
-                    boxShadow: isOver ? `0 0 0 3px ${s.tint}, 0 8px 24px rgba(0,0,0,.06)` : '0 1px 2px rgba(0,0,0,.04)',
-                    transform: isOver ? 'translateY(-2px)' : 'none',
+                    boxShadow: isOver ? `0 0 0 3px ${s.tint}, 0 10px 28px rgba(0,0,0,.07)` : '0 1px 2px rgba(0,0,0,.04)',
+                    transform: isOver ? 'translateY(-3px)' : 'none',
                   }}
                 >
-                  <div className="flex items-center gap-2 px-3 py-2.5 border-b" style={{ borderColor: 'var(--ii-border-soft, #f0f0f5)', background: s.tint }}>
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b shrink-0" style={{ borderColor: 'var(--ii-border-soft, #f0f0f5)', background: s.tint }}>
                     <span className="w-2 h-2 rounded-full" style={{ background: s.dot }} />
                     <span className="text-[12px] font-semibold" style={{ color: s.dot }}>{s.label}</span>
-                    <span className="ml-auto text-[11px] tabular-nums text-ink-500 bg-white rounded-full px-2 py-0.5 border border-border-soft">{inStage.length}</span>
+                    <span className="ml-auto text-[11px] tabular-nums font-semibold text-ink-600 bg-white rounded-full px-2 py-0.5 border border-border-soft min-w-[26px] text-center">{inStage.length}</span>
                   </div>
-                  <div className="p-2.5 space-y-2 min-h-[90px]">
+                  <div className="flex-1 p-2.5 space-y-2 overflow-y-auto min-h-[280px] max-h-[560px]">
                     {inStage.map((r) => (
                       <RecruitCard key={r.creator_id} r={r} onPatch={patchRecruit} />
                     ))}
                     {inStage.length === 0 && (
-                      <div className="text-[11px] text-ink-300 text-center py-6 rounded-xl border border-dashed border-border">
-                        Drop creators here
+                      <div
+                        className="h-full min-h-[240px] grid place-items-center rounded-xl border border-dashed transition-colors"
+                        style={{
+                          borderColor: isOver ? s.dot : 'var(--ii-border, #e2e2ea)',
+                          background: isOver ? s.tint : 'transparent',
+                        }}
+                      >
+                        <div className="flex flex-col items-center gap-1.5 text-center px-2">
+                          <span
+                            className="w-7 h-7 grid place-items-center rounded-full transition-colors"
+                            style={{ background: isOver ? s.dot : '#f3f3f8', color: isOver ? '#fff' : '#b8b8c4' }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                          </span>
+                          <span className="text-[11px] font-medium" style={{ color: isOver ? s.dot : '#b8b8c4' }}>
+                            {isOver ? `Drop into ${s.label}` : 'Drop creators here'}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>
