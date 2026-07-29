@@ -1156,6 +1156,12 @@ export function LiveSearch({
     return ratio >= 1 ? 0 : clamp((ratio - 1) * 1.5, -1.5, 0); // healthy → no boost; low → demote
   };
 
+  // A direct @handle lookup (prompt is a single "@username"): the crawled
+  // account is what the user actually asked for, so its "Live from Instagram"
+  // group jumps to the TOP of the page instead of sitting under AI/DB sections.
+  const handleLookup = /^@[a-z0-9._]{1,30}$/i.test((run?.prompt ?? '').trim());
+  const lookupTarget = handleLookup ? (run?.prompt ?? '').trim().slice(1).toLowerCase() : '';
+
   const shown = (() => {
     if (!run) return [] as LiveProfile[];
     const filtered = run.results.filter((p) => {
@@ -1205,8 +1211,19 @@ export function LiveSearch({
     // Group into source sections in pipeline order: AI web search → previous DB
     // searches → live Instagram crawl. Stable sort keeps the within-section
     // ranking computed above.
-    const grpRank = (p: LiveProfile) => (p.from_ai ? 0 : p.from === 'db' ? 1 : 2);
+    // Normal search: AI → previous-DB → live crawl. Direct @handle lookup: the
+    // live crawl (the account you named) leads, then AI, then DB.
+    const grpRank = (p: LiveProfile) =>
+      handleLookup
+        ? (p.from === 'live' ? 0 : p.from_ai ? 1 : 2)
+        : (p.from_ai ? 0 : p.from === 'db' ? 1 : 2);
     sorted.sort((a, b) => grpRank(a) - grpRank(b));
+    // Pin the exact account to the very top for a direct lookup, ahead of any
+    // related-network accounts the crawl surfaced alongside it.
+    if (handleLookup && lookupTarget) {
+      const i = sorted.findIndex((p) => p.username.toLowerCase() === lookupTarget);
+      if (i > 0) sorted.unshift(sorted.splice(i, 1)[0]!);
+    }
     return sorted;
   })();
 
