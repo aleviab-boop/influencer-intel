@@ -295,7 +295,7 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
           <SavedCreatorsSegment programId={id} onAdded={load} />
 
           {/* kanban */}
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-start">
             {PIPELINE.map((stage) => {
               const s = STAGE[stage];
               const inStage = recruits.filter((r) => r.status === stage);
