@@ -19,6 +19,7 @@ const STAGE: Record<RecruitStatus, { label: string; dot: string; tint: string; r
   recruited: { label: 'Recruited', dot: '#10b981', tint: '#f0fdf4', ring: '#a7f3d0' },
   declined: { label: 'Declined', dot: '#f43f5e', tint: '#fff1f2', ring: '#fecdd3' },
 };
+const STATUS_COLOR: Record<string, string> = { active: '#10b981', paused: '#f59e0b', closed: '#94a3b8' };
 
 interface Program {
   id: string;
@@ -166,58 +167,79 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
         <div className="py-16 text-center text-sm text-rose-700">{error}</div>
       ) : program ? (
         <>
-          {/* header */}
-          <div className="mt-3 flex items-center gap-3 flex-wrap">
-            <input
-              defaultValue={program.name}
-              onBlur={(e) => e.target.value.trim() && e.target.value !== program.name && patchProgram({ name: e.target.value.trim() })}
-              className="text-2xl font-bold text-ink-900 bg-transparent border-b border-transparent hover:border-border focus:border-ink-900 focus:outline-none min-w-[200px]"
-            />
-            <select
-              value={program.status}
-              onChange={(e) => patchProgram({ status: e.target.value })}
-              className="text-[12px] px-2.5 py-1 rounded-full border border-border bg-white text-ink-700 focus:outline-none focus:border-ink-900"
-            >
-              {['active', 'paused', 'closed'].map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button
-              onClick={copyHandles}
-              disabled={recruits.length === 0}
-              title="Copy all shortlisted @handles for outreach"
-              className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-              {copied ? 'Copied!' : 'Copy handles'}
-            </button>
-            <button
-              onClick={exportCsv}
-              disabled={recruits.length === 0}
-              title="Download the shortlist as a CSV"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 hover:text-ink-900 disabled:opacity-40 transition-colors"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-              Export CSV
-            </button>
-            <button onClick={deleteCampaign} disabled={deleting} className="text-[13px] text-ink-400 hover:text-rose-600 disabled:opacity-50 transition-colors">{deleting ? 'Deleting…' : 'Delete campaign'}</button>
-          </div>
-          <input
-            defaultValue={program.description ?? ''}
-            onBlur={(e) => e.target.value !== (program.description ?? '') && patchProgram({ description: e.target.value.trim() || null })}
-            placeholder="Add a short brief / goal…"
-            className="mt-1 w-full max-w-2xl text-sm text-ink-600 bg-transparent border-b border-transparent hover:border-border focus:border-ink-900 focus:outline-none py-0.5"
-          />
-          {program.source_prompt && <p className="text-[12px] text-ink-400 mt-1">Seeded from “{program.source_prompt}”</p>}
+          {/* hero card — header + brief + requirements */}
+          <div className="mt-3 rounded-2xl border border-border bg-white shadow-card overflow-hidden transition-shadow hover:shadow-hover">
+            <div className="relative p-5" style={{ background: 'linear-gradient(135deg,#f7f4ff 0%,#ffffff 55%)' }}>
+              {/* blurred radial glow */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -top-16 -right-10 w-56 h-56 rounded-full opacity-60 blur-3xl"
+                style={{ background: 'radial-gradient(circle,rgba(108,77,246,0.22),transparent 70%)' }}
+              />
+              <div className="relative flex items-center gap-3 flex-wrap">
+                <input
+                  defaultValue={program.name}
+                  onBlur={(e) => e.target.value.trim() && e.target.value !== program.name && patchProgram({ name: e.target.value.trim() })}
+                  className="text-2xl font-bold text-ink-900 bg-transparent border-b border-transparent hover:border-border focus:border-ink-900 focus:outline-none min-w-[200px]"
+                />
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white/80 backdrop-blur pl-2.5 pr-1 py-0.5">
+                  <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLOR[program.status] ?? '#94a3b8' }} />
+                  <select
+                    value={program.status}
+                    onChange={(e) => patchProgram({ status: e.target.value })}
+                    className="text-[12px] bg-transparent text-ink-700 focus:outline-none cursor-pointer pr-0.5"
+                  >
+                    {['active', 'paused', 'closed'].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </span>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    onClick={copyHandles}
+                    disabled={recruits.length === 0}
+                    title="Copy all shortlisted @handles for outreach"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 rounded-lg border border-border bg-white px-3 py-1.5 hover:text-ink-900 hover:border-ink-300 hover:-translate-y-px disabled:opacity-40 disabled:hover:translate-y-0 transition-all"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                    {copied ? 'Copied!' : 'Copy handles'}
+                  </button>
+                  <button
+                    onClick={exportCsv}
+                    disabled={recruits.length === 0}
+                    title="Download the shortlist as a CSV"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 rounded-lg border border-border bg-white px-3 py-1.5 hover:text-ink-900 hover:border-ink-300 hover:-translate-y-px disabled:opacity-40 disabled:hover:translate-y-0 transition-all"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={deleteCampaign}
+                    disabled={deleting}
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-400 rounded-lg border border-border bg-white px-3 py-1.5 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 hover:-translate-y-px disabled:opacity-50 disabled:hover:translate-y-0 transition-all"
+                  >
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+              <input
+                defaultValue={program.description ?? ''}
+                onBlur={(e) => e.target.value !== (program.description ?? '') && patchProgram({ description: e.target.value.trim() || null })}
+                placeholder="Add a short brief / goal…"
+                className="relative mt-2 w-full max-w-2xl text-sm text-ink-600 bg-transparent border-b border-transparent hover:border-border focus:border-ink-900 focus:outline-none py-0.5"
+              />
+              {program.source_prompt && <p className="relative text-[12px] text-ink-400 mt-1">Seeded from “{program.source_prompt}”</p>}
+            </div>
 
-          {/* requirements */}
-          <div className="mt-3 max-w-2xl">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400 mb-1">Requirements</div>
-            <textarea
-              defaultValue={program.requirements ?? ''}
-              onBlur={(e) => e.target.value !== (program.requirements ?? '') && patchProgram({ requirements: e.target.value.trim() || null })}
-              rows={2}
-              placeholder="Who & what you need — followers range, ER, niche, cities, deliverables, timeline…"
-              className="w-full text-sm text-ink-700 bg-white border border-border rounded-xl px-3 py-2 focus:outline-none focus:border-ink-900 resize-none"
-            />
+            {/* requirements */}
+            <div className="border-t border-border-soft p-5">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400 mb-1.5">Requirements</div>
+              <textarea
+                defaultValue={program.requirements ?? ''}
+                onBlur={(e) => e.target.value !== (program.requirements ?? '') && patchProgram({ requirements: e.target.value.trim() || null })}
+                rows={2}
+                placeholder="Who & what you need — followers range, ER, niche, cities, deliverables, timeline…"
+                className="w-full max-w-2xl text-sm text-ink-700 bg-[#faf9ff] border border-border rounded-xl px-3 py-2 focus:outline-none focus:border-ink-900 focus:bg-white transition-colors resize-none"
+              />
+            </div>
           </div>
 
           {/* summary stats */}
@@ -229,7 +251,7 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
           </div>
 
           {/* budget */}
-          <div className="mt-4 p-4 rounded-2xl bg-white border border-border shadow-card max-w-2xl">
+          <div className="mt-4 p-4 rounded-2xl bg-white border border-border shadow-card max-w-2xl transition-shadow hover:shadow-hover">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-ink-600 font-medium">Budget</span>
@@ -284,15 +306,19 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
                   onDragOver={(e) => { e.preventDefault(); setDragOver(stage); }}
                   onDragLeave={() => setDragOver((d) => (d === stage ? null : d))}
                   onDrop={(e) => { e.preventDefault(); const cid = e.dataTransfer.getData('text/plain'); if (cid) patchRecruit(cid, { status: stage }); setDragOver(null); }}
-                  className="rounded-2xl p-2.5 transition-colors"
-                  style={{ background: isOver ? s.tint : '#f1f1f7', outline: isOver ? `2px dashed ${s.ring}` : 'none' }}
+                  className="rounded-2xl border bg-white overflow-hidden transition-all duration-200"
+                  style={{
+                    borderColor: isOver ? s.ring : 'var(--ii-border, #ececf2)',
+                    boxShadow: isOver ? `0 0 0 3px ${s.tint}, 0 8px 24px rgba(0,0,0,.06)` : '0 1px 2px rgba(0,0,0,.04)',
+                    transform: isOver ? 'translateY(-2px)' : 'none',
+                  }}
                 >
-                  <div className="flex items-center gap-2 px-1.5 py-1.5 mb-1">
+                  <div className="flex items-center gap-2 px-3 py-2.5 border-b" style={{ borderColor: 'var(--ii-border-soft, #f0f0f5)', background: s.tint }}>
                     <span className="w-2 h-2 rounded-full" style={{ background: s.dot }} />
-                    <span className="text-[12px] font-semibold text-ink-700">{s.label}</span>
-                    <span className="ml-auto text-[11px] tabular-nums text-ink-400 bg-white rounded-full px-2 py-0.5">{inStage.length}</span>
+                    <span className="text-[12px] font-semibold" style={{ color: s.dot }}>{s.label}</span>
+                    <span className="ml-auto text-[11px] tabular-nums text-ink-500 bg-white rounded-full px-2 py-0.5 border border-border-soft">{inStage.length}</span>
                   </div>
-                  <div className="space-y-2 min-h-[80px]">
+                  <div className="p-2.5 space-y-2 min-h-[90px]">
                     {inStage.map((r) => (
                       <RecruitCard key={r.creator_id} r={r} onPatch={patchRecruit} />
                     ))}
@@ -401,7 +427,7 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
   const addableCount = shown.filter((r) => r.creator_id && !existing.has(r.creator_id) && !added.has(r.creator_id)).length;
 
   return (
-    <div className="mt-6 p-4 rounded-2xl bg-white border border-border shadow-card">
+    <div className="mt-6 p-4 rounded-2xl bg-white border border-border shadow-card transition-shadow hover:shadow-hover">
       <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-400 mb-2">Find &amp; add creators</div>
       <div className="flex gap-2">
         <input
@@ -455,7 +481,7 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
               const isAdded = (r.creator_id && (existing.has(r.creator_id) || added.has(r.creator_id))) || false;
               const canAdd = Boolean(r.creator_id) && !isAdded;
               return (
-                <div key={r.username} className="flex items-center gap-3 px-3 py-2.5">
+                <div key={r.username} className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#faf9ff] transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-medium text-ink-900 truncate flex items-center gap-1">
                       {r.full_name || `@${r.username}`}{r.is_verified && <span style={{ color: ACCENT }}>✔</span>}
@@ -521,11 +547,11 @@ function SavedCreatorsSegment({ programId, onAdded }: { programId: string; onAdd
   return (
     <div className="mt-6">
       <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-400 mb-2">Your saved creators ({saved.length})</div>
-      <div className="rounded-2xl bg-white border border-border shadow-card divide-y divide-border-soft max-h-[300px] overflow-auto">
+      <div className="rounded-2xl bg-white border border-border shadow-card divide-y divide-border-soft max-h-[300px] overflow-auto transition-shadow hover:shadow-hover">
         {saved.map((s) => {
           const isAdded = added.has(s.username);
           return (
-            <div key={s.username} className="flex items-center gap-3 px-4 py-2.5">
+            <div key={s.username} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#faf9ff] transition-colors">
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-medium text-ink-900 truncate">{s.full_name || `@${s.username}`}</div>
                 <div className="text-[11px] text-ink-400 truncate">@{s.username}{s.followers ? ` · ${kfmt(s.followers)}` : ''}{s.category ? ` · ${s.category}` : ''}</div>
@@ -586,7 +612,7 @@ function InviteCreators({ programId, existing, onAdded }: { programId: string; e
           {results.map((c) => {
             const added = existing.has(c.id);
             return (
-              <div key={c.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-border-soft last:border-0">
+              <div key={c.id} className="flex items-center gap-3 px-3 py-2.5 border-b border-border-soft last:border-0 hover:bg-[#faf9ff] transition-colors">
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-medium text-ink-900 truncate">{c.display_name || `@${c.handle}`}</div>
                   <div className="text-[11px] text-ink-400 truncate">@{c.handle} · {kfmt(Number(c.follower_count) || 0)}{c.primary_category ? ` · ${c.primary_category}` : ''}</div>
@@ -605,8 +631,13 @@ function InviteCreators({ programId, existing, onAdded }: { programId: string; e
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="rounded-2xl bg-white border border-border p-3.5 shadow-card">
-      <div className={`text-xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
+    <div className="group relative overflow-hidden rounded-2xl bg-white border border-border p-4 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-hover hover:border-[#6C4DF6]/30">
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+        style={{ background: accent ? 'linear-gradient(90deg,#6C4DF6,#9b7bff)' : 'linear-gradient(90deg,#c9bdfb,#e6dfff)' }}
+      />
+      <div className={`text-2xl font-bold tabular-nums ${accent ? 'text-[#6C4DF6]' : 'text-ink-900'}`}>{value}</div>
       <div className="text-[11px] uppercase tracking-wider text-ink-400 mt-0.5">{label}</div>
     </div>
   );
@@ -623,7 +654,7 @@ function RecruitCard({ r, onPatch }: { r: Recruit; onPatch: (creatorId: string, 
     <div
       draggable
       onDragStart={(e) => e.dataTransfer.setData('text/plain', r.creator_id)}
-      className="p-3 rounded-xl bg-white border border-border shadow-card hover:shadow-hover hover:border-ink-900/20 transition-all cursor-grab active:cursor-grabbing"
+      className="p-3 rounded-xl bg-white border border-border shadow-card hover:shadow-hover hover:border-ink-900/20 hover:-translate-y-0.5 transition-all duration-200 cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-full grid place-items-center text-white text-[11px] font-bold shrink-0" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 70% 55%), hsl(${(h + 40) % 360} 70% 45%))` }}>{initials}</div>
