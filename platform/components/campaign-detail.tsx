@@ -53,6 +53,67 @@ const num = (v: number | string | null | undefined): number => (v == null ? 0 : 
 const inr = (n: number): string => '₹' + Math.round(n).toLocaleString('en-IN');
 const kfmt = (n: number): string => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n));
 
+// Pull follower / ER thresholds written in the search text into the filter
+// controls, so "1M+ followers, ER > 2%" actually filters instead of being
+// treated as plain keywords. Returns only the axes it actually found.
+function parseFilters(text: string): { min?: number; max?: number; er?: number } {
+  const t = ' ' + text.toLowerCase() + ' ';
+  const out: { min?: number; max?: number; er?: number } = {};
+  const toNum = (raw: string, suf: string): number => {
+    let n = parseFloat(raw.replace(/,/g, ''));
+    if (!Number.isFinite(n)) return NaN;
+    const s = (suf || '').toLowerCase();
+    if (s === 'm') n *= 1e6;
+    else if (s === 'k') n *= 1e3;
+    return Math.round(n);
+  };
+
+  // Engagement rate first — "er > 2%", "er - > 2%", "2%+ ER", "engagement 3%".
+  const er1 = t.match(/(?:er|engagement(?:\s*rate)?)\s*[>≥:=\-\s]*(\d+(?:\.\d+)?)\s*%?/);
+  const er2 = t.match(/(\d+(?:\.\d+)?)\s*%\s*\+?\s*(?:er|engagement)/);
+  const erRaw = er1?.[1] ?? er2?.[1];
+  if (erRaw != null) { const e = parseFloat(erRaw); if (Number.isFinite(e)) out.er = e; }
+
+  // Strip ER phrases + any bare "N%" so their numbers don't leak into follower parsing.
+  let ft = t;
+  if (er1) ft = ft.replace(er1[0], ' ');
+  if (er2) ft = ft.replace(er2[0], ' ');
+  ft = ft.replace(/\d+(?:\.\d+)?\s*%/g, ' ');
+
+  // Follower range — "50k-300k", "50k to 300k", "between 50k and 300k".
+  const range = ft.match(/(\d[\d.,]*)\s*([km]?)\s*(?:-|–|—|to|and)\s*(\d[\d.,]*)\s*([km]?)/);
+  if (range) {
+    const a = toNum(range[1]!, range[2] || range[4] || '');
+    const b = toNum(range[3]!, range[4] || '');
+    if (a > 0 && b > 0) { out.min = Math.min(a, b); out.max = Math.max(a, b); return out; }
+  }
+
+  // Max — "under 100k", "below 50k", "up to 500k", "less than 1m", "max 100k", "< 10k".
+  const mx = ft.match(/(?:under|below|less than|fewer than|up to|max(?:imum)?|<|≤)\s*(\d[\d.,]*)\s*([km]?)/);
+  if (mx) { const n = toNum(mx[1]!, mx[2] || ''); if (n > 0) out.max = n; }
+
+  // Min — "1m+", "over 100k", "at least 50k", "min 10k", "100k+ followers", "500k plus".
+  const mn = ft.match(/(?:over|above|at least|more than|min(?:imum)?|from|>|≥)\s*(\d[\d.,]*)\s*([km]?)/)
+          || ft.match(/(\d[\d.,]*)\s*([km]?)\s*(?:\+|plus)/)
+          || ft.match(/(\d[\d.,]*)\s*([km])\s*(?:followers|fans|subs)/);
+  if (mn) { const n = toNum(mn[1]!, mn[2] || ''); if (n > 0) out.min = n; }
+
+  return out;
+}
+
+const trimNum = (x: number): string => (x % 1 === 0 ? String(x) : x.toFixed(1));
+const followersPlus = (n: number): string =>
+  n >= 1e6 ? `${trimNum(n / 1e6)}M+` : n >= 1e3 ? `${trimNum(n / 1e3)}K+` : `${n}+`;
+const followersUnder = (n: number): string =>
+  n >= 1e6 ? `Under ${trimNum(n / 1e6)}M` : n >= 1e3 ? `Under ${trimNum(n / 1e3)}K` : `Under ${n}`;
+// Fixed dropdown option list, plus the current value if a typed threshold
+// produced something off-list (e.g. 50K / 300K) so the <select> can still show it.
+const withValue = (base: number[], v: number): number[] =>
+  base.includes(v) ? base : [...base, v].sort((a, b) => a - b);
+const MIN_FOLLOWER_OPTS = [0, 1000, 5000, 10000, 100000, 1000000];
+const MAX_FOLLOWER_OPTS = [0, 10000, 50000, 100000, 500000, 1000000];
+const MIN_ER_OPTS = [0, 1, 2, 3, 5, 8];
+
 export function CampaignDetail({ id, backHref }: { id: string; backHref: string }) {
   const router = useRouter();
   const [program, setProgram] = useState<Program | null>(null);
@@ -323,16 +384,18 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
                       <RecruitCard key={r.creator_id} r={r} onPatch={patchRecruit} />
                     ))}
                     {inStage.length === 0 && (
-                      <div
-                        className="h-full min-h-[240px] grid place-items-center rounded-xl border border-dashed transition-colors"
+                      <Link
+                        href="/admin/scraper"
+                        title="Open the agency scraper to find creators"
+                        className="group/drop h-full min-h-[240px] grid place-items-center rounded-xl border border-dashed transition-all hover:border-[#6C4DF6]/50 hover:bg-[#faf9ff]"
                         style={{
                           borderColor: isOver ? s.dot : 'var(--ii-border, #e2e2ea)',
-                          background: isOver ? s.tint : 'transparent',
+                          background: isOver ? s.tint : undefined,
                         }}
                       >
                         <div className="flex flex-col items-center gap-1.5 text-center px-2">
                           <span
-                            className="w-7 h-7 grid place-items-center rounded-full transition-colors"
+                            className="w-7 h-7 grid place-items-center rounded-full transition-colors group-hover/drop:bg-[#6C4DF6] group-hover/drop:text-white"
                             style={{ background: isOver ? s.dot : '#f3f3f8', color: isOver ? '#fff' : '#b8b8c4' }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -340,8 +403,13 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
                           <span className="text-[11px] font-medium" style={{ color: isOver ? s.dot : '#b8b8c4' }}>
                             {isOver ? `Drop into ${s.label}` : 'Drop creators here'}
                           </span>
+                          {!isOver && (
+                            <span className="text-[10px] font-medium text-[#6C4DF6] opacity-0 transition-opacity group-hover/drop:opacity-100">
+                              Find creators →
+                            </span>
+                          )}
                         </div>
-                      </div>
+                      </Link>
                     )}
                   </div>
                 </div>
@@ -385,10 +453,19 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
   const [minFollowers, setMinFollowers] = useState(0);
   const [maxFollowers, setMaxFollowers] = useState(0);
   const [minER, setMinER] = useState(0);
+  const [autoApplied, setAutoApplied] = useState<string[]>([]);
 
   async function run() {
     const p = prompt.trim();
     if (p.length < 2 || loading) return;
+    // Lift any follower / ER thresholds written in the text into the filters,
+    // so "1M+ followers, ER > 2%" is honoured instead of treated as keywords.
+    const f = parseFilters(p);
+    const applied: string[] = [];
+    if (f.min != null) { setMinFollowers(f.min); applied.push(followersPlus(f.min)); }
+    if (f.max != null) { setMaxFollowers(f.max); applied.push(followersUnder(f.max)); }
+    if (f.er != null) { setMinER(f.er); applied.push(`ER ${trimNum(f.er)}%+`); }
+    setAutoApplied(applied);
     setLoading(true);
     setResults([]);
     try {
@@ -460,30 +537,29 @@ function FindCreators({ programId, defaultPrompt, existing, onAdded }: { program
 
       {results.length > 0 && (
         <div className="mt-3">
+          {autoApplied.length > 0 && (
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] text-ink-500">
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#f3f0ff] text-[#6C4DF6] font-medium px-2 py-0.5">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>
+                Applied from your text: {autoApplied.join(' · ')}
+              </span>
+            </div>
+          )}
           <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
             <select value={minFollowers} onChange={(e) => setMinFollowers(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900">
-              <option value={0}>Any followers</option>
-              <option value={1000}>1K+</option>
-              <option value={5000}>5K+</option>
-              <option value={10000}>10K+</option>
-              <option value={100000}>100K+</option>
-              <option value={1000000}>1M+</option>
+              {withValue(MIN_FOLLOWER_OPTS, minFollowers).map((v) => (
+                <option key={v} value={v}>{v === 0 ? 'Any followers' : followersPlus(v)}</option>
+              ))}
             </select>
             <select value={maxFollowers} onChange={(e) => setMaxFollowers(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900" title="Cap follower count — useful for micro / nano creators">
-              <option value={0}>No max</option>
-              <option value={10000}>Under 10K</option>
-              <option value={50000}>Under 50K</option>
-              <option value={100000}>Under 100K</option>
-              <option value={500000}>Under 500K</option>
-              <option value={1000000}>Under 1M</option>
+              {withValue(MAX_FOLLOWER_OPTS, maxFollowers).map((v) => (
+                <option key={v} value={v}>{v === 0 ? 'No max' : followersUnder(v)}</option>
+              ))}
             </select>
             <select value={minER} onChange={(e) => setMinER(Number(e.target.value))} className="px-2 py-1 rounded-lg border border-border bg-white focus:outline-none focus:border-ink-900" title="Minimum engagement rate">
-              <option value={0}>Any ER</option>
-              <option value={1}>1%+ ER</option>
-              <option value={2}>2%+ ER</option>
-              <option value={3}>3%+ ER</option>
-              <option value={5}>5%+ ER</option>
-              <option value={8}>8%+ ER</option>
+              {withValue(MIN_ER_OPTS, minER).map((v) => (
+                <option key={v} value={v}>{v === 0 ? 'Any ER' : `${trimNum(v)}%+ ER`}</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center justify-between mb-2">
