@@ -9,6 +9,8 @@
 // keyword discovery of unknown accounts is NOT available on this free path.
 // ============================================================
 
+import { apifyProfileOrNull } from './apify';
+
 const IG_APP_ID = '936619743392459'; // public Instagram web app id
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
@@ -72,7 +74,15 @@ export async function fetchInstagramProfile(rawHandle: string): Promise<ScrapedP
     clearTimeout(t);
   }
   if (res.status === 404) throw new Error('not_found');
-  if (res.status === 401 || res.status === 403 || res.status === 429) throw new Error('blocked');
+  if (res.status === 401 || res.status === 403 || res.status === 429) {
+    // Free path (relay + cookie pool) got blocked by Instagram. Fall through to
+    // the PAID Apify actor — but only if APIFY_TOKEN is set. When it isn't,
+    // apifyProfileOrNull returns null and we throw 'blocked' exactly as before,
+    // so behavior is unchanged for anyone without Apify configured.
+    const viaApify = await apifyProfileOrNull(handle);
+    if (viaApify) return viaApify;
+    throw new Error('blocked');
+  }
   if (!res.ok) throw new Error(`instagram returned ${res.status}`);
 
   const json = await res.json().catch(() => null);
