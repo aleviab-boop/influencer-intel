@@ -394,6 +394,17 @@ const CAMPAIGN_FILLER = new Set([
   'sponsorship', 'ad', 'ads', 'paid', 'partnership', 'partnerships',
 ]);
 
+// A "campaign" / brand-brief prompt is a DISCOVERY-intent search — the user wants
+// FRESH creators for a brief, not a specific known account. For these we skip the
+// free handle-guessing step (slow, and it can return junk handles that block the
+// far-better hashtag path) and go straight to Apify hashtag discovery with wider
+// coverage. Detects the campaign/collab vocabulary an agency actually types.
+const CAMPAIGN_INTENT =
+  /\b(campaign|campaigns|collab|collabs|collaboration|promotion|promo|shoot|endorsement|barter)\b/i;
+export function isCampaignPrompt(prompt: string): boolean {
+  return CAMPAIGN_INTENT.test(prompt);
+}
+
 // Generic brand-collaboration signal — the PUBLIC fingerprint a creator leaves
 // when they've done paid brand work, identical across every niche (no per-brand
 // list needed). Instagram/ASCI disclosure rules mean real collabs carry one of
@@ -594,9 +605,18 @@ export function hashtagCandidates(prompt: string): string[] {
   }
   if (subs.length === 0) for (const t of others) pushUniq(t);
 
+  const hasCity = cities.length > 0;
   const out: string[] = [];
   for (const loc of locs) for (const n of subs) if (loc !== n) out.push(`${loc}${n}`);
-  for (const n of subs) out.push(n);
+  // India bias — the platform serves India ONLY. When the prompt names no city,
+  // interleave India-localized variants (#indiandenim) with each bare subject tag
+  // so discovery leans toward Indian creators and fewer foreign seeds get fetched
+  // (and then wasted by the downstream India filter). A named city already
+  // localizes, so we skip the bias there.
+  for (const n of subs) {
+    out.push(n);
+    if (!hasCity) out.push(`indian${n}`);
+  }
   for (const loc of locs) out.push(loc);
   return Array.from(new Set(out.filter((h) => /^[a-z0-9]{3,}$/.test(h))));
 }

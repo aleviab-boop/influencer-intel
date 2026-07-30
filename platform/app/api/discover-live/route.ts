@@ -6,6 +6,7 @@ import {
   resolveNameToSeeds,
   resolveTopicToSeeds,
   resolveHashtagToSeeds,
+  isCampaignPrompt,
   profilesFromHandles,
   tokenize,
   classifyPrompt,
@@ -315,17 +316,26 @@ export async function POST(req: NextRequest) {
     // "then do scraping, and throttle accounts accordingly."
     if (mode === 'db' && searchedBefore && !handleLookup) return;
     if (seeds.length === 0 && names.length === 0) {
-      for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
-        seeds.push(m.handle);
-        autoSeeds.push({ handle: m.handle, followers: m.followers });
+      // Campaign/brand-brief prompts are pure DISCOVERY intent. The free handle-
+      // guessing is slow AND can return junk handles that satisfy seeds.length>0
+      // and thereby BLOCK the far-better hashtag path. So for campaign prompts we
+      // skip the guess and go straight to Apify hashtag discovery (wider coverage:
+      // more tags, more posts). Non-campaign prompts keep the free-first behaviour.
+      const campaign = isCampaignPrompt(prompt);
+      if (!campaign) {
+        for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
+          seeds.push(m.handle);
+          autoSeeds.push({ handle: m.handle, followers: m.followers });
+        }
       }
-      // Free handle-guessing found nothing → PAID Apify hashtag search finds REAL
-      // handles posting under the topic (the login-walled search we can't do for
-      // free). No-op without APIFY_TOKEN, and only ever fires on a cold prompt
-      // that produced zero free seeds — so it never adds cost to normal searches.
+      // Free path found nothing (or was skipped) → PAID Apify hashtag search finds
+      // REAL handles posting under the topic (the login-walled search we can't do
+      // for free). No-op without APIFY_TOKEN. Campaign prompts search more tags /
+      // posts for richer, collab-ranked seeds; normal prompts stay lean.
       if (seeds.length === 0) {
         try {
-          for (const m of await resolveHashtagToSeeds(prompt)) {
+          const hopts = campaign ? { limit: 20, tags: 3, postsPerTag: 40 } : {};
+          for (const m of await resolveHashtagToSeeds(prompt, hopts)) {
             seeds.push(m.handle);
             autoSeeds.push({ handle: m.handle, followers: m.followers });
           }
