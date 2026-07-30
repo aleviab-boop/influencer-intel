@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { recruitToProgram, updateRecruit } from '@/lib/programs-service';
+import { recruitToProgram, updateRecruit, removeRecruit } from '@/lib/programs-service';
 import type { RecruitStatus } from '@influencer-intel/shared/types';
 
 export const runtime = 'nodejs';
@@ -58,6 +58,28 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ recruit });
   } catch (err) {
     console.error('[programs] recruit update failed:', err);
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
+
+// DELETE /api/programs/[id]/recruits  { creator_id }  (or ?creator_id=…)
+//   → remove a creator from this program (keeps the creator + other campaigns)
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const body = await req.json().catch(() => null);
+  const creatorId =
+    body && typeof body.creator_id === 'string'
+      ? body.creator_id
+      : new URL(req.url).searchParams.get('creator_id');
+  if (!creatorId) {
+    return NextResponse.json({ error: 'creator_id is required' }, { status: 400 });
+  }
+  try {
+    const removed = await removeRecruit({ program_id: id, creator_id: creatorId });
+    if (!removed) return NextResponse.json({ error: 'recruit not found' }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error('[programs] recruit remove failed:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }

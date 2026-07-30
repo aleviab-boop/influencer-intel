@@ -163,6 +163,21 @@ export async function recruitToProgram(input: {
   return rows[0]!;
 }
 
+// Remove a creator from a program. The creator itself stays in the `creators`
+// table (and in any other campaigns) — this only drops the program_recruits
+// link for THIS program. Returns false when there was nothing to remove.
+export async function removeRecruit(input: {
+  program_id: string;
+  creator_id: string;
+}): Promise<boolean> {
+  const db = getBolticClient();
+  const rows = await db.query<{ id: string }>(
+    `DELETE FROM program_recruits WHERE program_id = $1 AND creator_id = $2 RETURNING id`,
+    [input.program_id, input.creator_id],
+  );
+  return rows.length > 0;
+}
+
 export async function updateRecruit(input: {
   program_id: string;
   creator_id: string;

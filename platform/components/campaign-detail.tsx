@@ -199,6 +199,16 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
       body: JSON.stringify({ creator_id: creatorId, ...patch }),
     }).catch(() => load());
   }
+  async function removeRecruit(creatorId: string) {
+    // Optimistically drop the card; the DELETE removes the program_recruits row.
+    // The creator itself stays in the DB (and in any other campaigns).
+    setRecruits((rs) => rs.filter((r) => r.creator_id !== creatorId));
+    await fetch(`/api/programs/${id}/recruits`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator_id: creatorId }),
+    }).catch(() => load());
+  }
   async function patchProgram(patch: Partial<Program>) {
     setProgram((p) => (p ? { ...p, ...patch } : p));
     await fetch(`/api/programs/${id}`, {
@@ -381,7 +391,7 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
                   </div>
                   <div className="flex-1 p-2.5 space-y-2 overflow-y-auto min-h-[280px] max-h-[560px]">
                     {inStage.map((r) => (
-                      <RecruitCard key={r.creator_id} r={r} onPatch={patchRecruit} />
+                      <RecruitCard key={r.creator_id} r={r} onPatch={patchRecruit} onRemove={removeRecruit} />
                     ))}
                     {inStage.length === 0 && (
                       <Link
@@ -735,7 +745,7 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
   );
 }
 
-function RecruitCard({ r, onPatch }: { r: Recruit; onPatch: (creatorId: string, patch: Partial<Recruit>) => void }) {
+function RecruitCard({ r, onPatch, onRemove }: { r: Recruit; onPatch: (creatorId: string, patch: Partial<Recruit>) => void; onRemove: (creatorId: string) => void }) {
   const [deliverables, setDeliverables] = useState(r.deliverables ?? '');
   const [rate, setRate] = useState(r.rate == null ? '' : String(num(r.rate)));
   const initials = (r.display_name ?? r.handle).slice(0, 2).toUpperCase();
@@ -746,7 +756,7 @@ function RecruitCard({ r, onPatch }: { r: Recruit; onPatch: (creatorId: string, 
     <div
       draggable
       onDragStart={(e) => e.dataTransfer.setData('text/plain', r.creator_id)}
-      className="p-3 rounded-xl bg-white border border-border shadow-card hover:shadow-hover hover:border-ink-900/20 hover:-translate-y-0.5 transition-all duration-200 cursor-grab active:cursor-grabbing"
+      className="group/card p-3 rounded-xl bg-white border border-border shadow-card hover:shadow-hover hover:border-ink-900/20 hover:-translate-y-0.5 transition-all duration-200 cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-full grid place-items-center text-white text-[11px] font-bold shrink-0" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 70% 55%), hsl(${(h + 40) % 360} 70% 45%))` }}>{initials}</div>
@@ -756,17 +766,27 @@ function RecruitCard({ r, onPatch }: { r: Recruit; onPatch: (creatorId: string, 
           </a>
           <div className="text-[11px] text-ink-500 truncate">{[r.genre, r.region].filter(Boolean).join(' · ') || r.platform}</div>
         </div>
-        <a
-          href={r.profile_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title={`Open @${r.handle} on Instagram`}
-          className="shrink-0 w-7 h-7 grid place-items-center rounded-lg text-white hover:brightness-105 transition"
-          style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
-        </a>
+        <div className="flex items-center gap-1 shrink-0">
+          <a
+            href={r.profile_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={`Open @${r.handle} on Instagram`}
+            className="w-7 h-7 grid place-items-center rounded-lg text-white hover:brightness-105 transition"
+            style={{ background: 'linear-gradient(135deg,#F58529,#DD2A7B,#8134AF)' }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+          </a>
+          <button
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); if (confirm(`Remove @${r.handle} from this campaign?`)) onRemove(r.creator_id); }}
+            title={`Remove @${r.handle} from this campaign`}
+            className="w-7 h-7 grid place-items-center rounded-lg text-ink-300 hover:text-rose-600 hover:bg-rose-50 transition-colors opacity-0 group-hover/card:opacity-100 focus:opacity-100"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" /></svg>
+          </button>
+        </div>
       </div>
 
       <div className="mt-2 flex items-center gap-1.5 text-[10px]">
