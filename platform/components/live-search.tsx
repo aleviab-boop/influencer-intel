@@ -608,6 +608,10 @@ export function LiveSearch({
   const [programId, setProgramId] = useState('');
   const [recruited, setRecruited] = useState<Record<string, string>>({});
   const [recruiting, setRecruiting] = useState<string | null>(null);
+  // Which result row's "＋ Add to campaign" picker is open (keyed by creator_id
+  // or username). null = none open. Lets the user choose WHICH campaign to add
+  // to instead of silently dropping into the first/default one.
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
   // outreach draft modal
   const [draftFor, setDraftFor] = useState<LiveProfile | null>(null);
   const [draftText, setDraftText] = useState('');
@@ -1060,15 +1064,32 @@ export function LiveSearch({
     setRecruited((m) => ({ ...m, [cid]: pid }));
   }
 
-  async function addToShortlist(p: LiveProfile) {
+  // Add a creator to a SPECIFIC campaign chosen from the per-row picker. Passing
+  // '__new__' prompts for a new campaign name and creates it first. Unlike
+  // addToShortlist this never falls back to the default/first campaign.
+  async function addToProgram(p: LiveProfile, pid: string) {
     if (recruiting) return;
-    const pid = await ensureProgram();
-    if (!pid) return;
-    // Key the in-flight spinner off the handle since a live row may not have an
-    // id until recruitOne resolves one.
+    setPickerFor(null);
+    let target = pid;
+    if (target === '__new__') {
+      const name = window.prompt('New campaign name');
+      if (!name?.trim()) return;
+      try {
+        const d = await fetch('/api/programs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), source_prompt: run?.prompt }),
+        }).then((r) => r.json());
+        if (!d.program?.id) return;
+        setPrograms((ps) => [d.program, ...ps]);
+        target = d.program.id;
+      } catch {
+        return;
+      }
+    }
     setRecruiting(p.creator_id ?? p.username);
     try {
-      await recruitOne(pid, p);
+      await recruitOne(target, p);
     } finally {
       setRecruiting(null);
     }
@@ -2035,13 +2056,52 @@ export function LiveSearch({
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10" /></svg>
                             </span>
                           ) : (
-                            <IconBtn onClick={() => void addToShortlist(p)} disabled={recruiting === (p.creator_id ?? p.username)} title="Add to campaign">
-                              {recruiting === (p.creator_id ?? p.username) ? (
-                                <span className="w-3.5 h-3.5 rounded-full border-2 border-[#ddd] border-t-[#6C4DF6] animate-spin" />
-                              ) : (
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                            <div className="relative">
+                              <IconBtn
+                                onClick={() => setPickerFor((cur) => (cur === (p.creator_id ?? p.username) ? null : (p.creator_id ?? p.username)))}
+                                disabled={recruiting === (p.creator_id ?? p.username)}
+                                title="Add to a campaign"
+                              >
+                                {recruiting === (p.creator_id ?? p.username) ? (
+                                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#ddd] border-t-[#6C4DF6] animate-spin" />
+                                ) : (
+                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                                )}
+                              </IconBtn>
+                              {pickerFor === (p.creator_id ?? p.username) && (
+                                <>
+                                  {/* click-away backdrop */}
+                                  <div className="fixed inset-0 z-40" onClick={() => setPickerFor(null)} />
+                                  <div className="absolute right-0 top-9 z-50 w-56 rounded-xl border border-[#ececf2] bg-white shadow-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                    <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#9a9aa8] border-b border-[#f0f0f4]">
+                                      Add to campaign
+                                    </div>
+                                    <div className="max-h-60 overflow-y-auto py-1">
+                                      {programs.length === 0 && (
+                                        <div className="px-3 py-2 text-[12px] text-[#9a9aa8]">No campaigns yet.</div>
+                                      )}
+                                      {programs.map((prog) => (
+                                        <button
+                                          key={prog.id}
+                                          onClick={() => void addToProgram(p, prog.id)}
+                                          className="w-full text-left px-3 py-2 text-[13px] text-[#2a2a33] hover:bg-[#f6f4ff] truncate"
+                                          title={prog.name}
+                                        >
+                                          {prog.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <button
+                                      onClick={() => void addToProgram(p, '__new__')}
+                                      className="w-full text-left px-3 py-2 text-[13px] font-medium border-t border-[#f0f0f4] hover:bg-[#f6f4ff]"
+                                      style={{ color: ACCENT }}
+                                    >
+                                      ＋ New campaign…
+                                    </button>
+                                  </div>
+                                </>
                               )}
-                            </IconBtn>
+                            </div>
                           )}
                           <a
                             href={`https://instagram.com/${p.username}`}
