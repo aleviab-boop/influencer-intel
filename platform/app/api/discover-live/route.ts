@@ -5,6 +5,7 @@ import {
   liveDiscover,
   resolveNameToSeeds,
   resolveTopicToSeeds,
+  resolveHashtagToSeeds,
   profilesFromHandles,
   tokenize,
   classifyPrompt,
@@ -317,6 +318,20 @@ export async function POST(req: NextRequest) {
       for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
         seeds.push(m.handle);
         autoSeeds.push({ handle: m.handle, followers: m.followers });
+      }
+      // Free handle-guessing found nothing → PAID Apify hashtag search finds REAL
+      // handles posting under the topic (the login-walled search we can't do for
+      // free). No-op without APIFY_TOKEN, and only ever fires on a cold prompt
+      // that produced zero free seeds — so it never adds cost to normal searches.
+      if (seeds.length === 0) {
+        try {
+          for (const m of await resolveHashtagToSeeds(prompt)) {
+            seeds.push(m.handle);
+            autoSeeds.push({ handle: m.handle, followers: m.followers });
+          }
+        } catch (err) {
+          console.error('[discover-live] hashtag seed resolve failed:', err);
+        }
       }
     }
     const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));

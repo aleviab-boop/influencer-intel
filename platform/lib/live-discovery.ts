@@ -15,6 +15,7 @@
 // ============================================================
 
 import { igFetch } from './ig-fetch';
+import { apifyHashtag } from './apify';
 
 const APP_ID = '936619743392459';
 const PROFILE_URL = (u: string) =>
@@ -503,6 +504,53 @@ export async function resolveTopicToSeeds(
         followers: user.edge_followed_by?.count ?? 0,
       });
     }
+  }
+  return matches.sort((a, b) => b.followers - a.followers);
+}
+
+// ---- prompt → hashtag seeds (PAID Apify fallback) -----------------------
+//
+// resolveTopicToSeeds can only PROBE guessed "<city><niche>" handles for free —
+// on cold prompts where no guessed handle exists it comes back empty. Instagram's
+// real hashtag search IS login-walled to us, but the Apify hashtag scraper can
+// reach it. So when the free path finds no seeds, we search the topic hashtag and
+// take the top handles posting under it as REAL crawl seeds.
+
+// The best hashtag(s) for a prompt: prefer a specific "<city><niche>" tag, then
+// the niche alone, then the city. Alphanumeric, 3+ chars (valid IG hashtags).
+export function hashtagCandidates(prompt: string): string[] {
+  const toks = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t));
+  if (toks.length === 0) return [];
+  const cities = toks.filter((t) => KNOWN_CITIES.has(t));
+  const niches = toks.filter((t) => isNiche(t));
+  const others = toks.filter((t) => !KNOWN_CITIES.has(t) && !isNiche(t));
+  const locs = cities.length ? cities : others;
+  const subs = niches.length ? niches : others.length ? others : niches;
+  const out: string[] = [];
+  for (const loc of locs) for (const n of subs) if (loc !== n) out.push(`${loc}${n}`);
+  for (const n of subs) out.push(n);
+  for (const loc of locs) out.push(loc);
+  return Array.from(new Set(out.filter((h) => /^[a-z0-9]{3,}$/.test(h))));
+}
+
+// Search the top hashtag for a prompt via Apify and return the handles posting
+// under it as crawl seeds (deduped, most-followed first). No-op — returns [] —
+// when APIFY_TOKEN is unset or no hashtag can be derived, so it's free-safe.
+export async function resolveHashtagToSeeds(
+  prompt: string,
+  opts: { limit?: number; postsPerTag?: number } = {},
+): Promise<NameMatch[]> {
+  const limit = opts.limit ?? 10;
+  const cands = hashtagCandidates(prompt);
+  if (cands.length === 0) return [];
+  const hits = await apifyHashtag(cands[0]!, opts.postsPerTag ?? 30);
+  const seen = new Set<string>();
+  const matches: NameMatch[] = [];
+  for (const h of hits) {
+    const handle = h.handle.trim().toLowerCase();
+    if (!handle || seen.has(handle) || matches.length >= limit) continue;
+    seen.add(handle);
+    matches.push({ handle, full_name: '', followers: h.followers ?? 0 });
   }
   return matches.sort((a, b) => b.followers - a.followers);
 }
