@@ -25,15 +25,19 @@ Relay  (tools/ig-relay.mjs on :8787)       │ system_config│                 
 
 **Cookie rotation:** live IG requests authenticate with real session cookies pulled from the captured-account pool (`service_accounts`). `igFetch` rotates across accounts and **fails over on 401/403 (dead cookie) or 429 (throttle)** to the next healthy account, so live data self-heals instead of dying on one bad session.
 
+**Paid fallback (Apify):** when the free relay path is fully blocked (every pooled cookie 401s), profile enrichment falls through to the **Apify** Instagram actors — but only if `APIFY_TOKEN` is set (otherwise behaviour is unchanged, and it throws `blocked` as before). Apify is also the **primary** path for hashtag discovery, which the login-free scraper can't do at all (Instagram's search is login-walled). It's an on-demand, pay-per-result safety net — not a bulk crawler.
+
 ## Discovery pipeline (how a search works)
 
 An agency search (`/api/discover-live`) runs three sources and merges them, India-first:
 
 1. **AI web search** — `gpt-4o-mini-search-preview` browses the web to name **real** Indian creators for the niche+city. Each handle is validated against Instagram (hallucinations dropped) and passed through an OpenAI relevance/geo filter (off-niche or foreign accounts dropped).
 2. **Database** — the `creators` table, ranked by weighted relevance (location > niche/name > bio) and **India-first** (known-foreign creators sink).
-3. **Live crawl** — for cold prompts, the worker is enqueued a `search_query` job to crawl Instagram and grow the DB.
+3. **Live crawl** — for cold prompts with no existing seeds, discovery resolves the brief to Instagram **hashtags** and pulls seed creators from them (via the Apify hashtag actor, since login-free keyword search is walled), then expands through IG's related-accounts graph. A **niche-relevance gate** drops off-topic matches, and the worker is also enqueued a `search_query` job to grow the DB for next time.
 
 Every surfaced creator is stored (verified or as a stub to enrich later), flagged Indian, and given a 0–10 data-completeness score.
+
+**Campaign mode.** A brief carrying campaign/collab vocabulary ("influencers for a denim campaign", "creators for durga puja") is treated as discovery-intent: it skips the free handle-guessing step and goes straight to wider Apify hashtag discovery, floating **proven brand-collaborators** (posts with a paid-partnership disclosure) to the front. Product words ("denim", "saree") expand to creator-oriented tags and festival words to the event's real hashtags — with an **India bias** applied when no city is named. Ambiguous name-tokens that double as personal names (e.g. "puja", "durga") only pass the relevance gate when they **co-occur** or sit beside an unambiguous festival tag, so a search for a festival campaign surfaces festival creators, not everyone *named* Puja.
 
 ## How we read/write to Boltic
 
@@ -55,8 +59,8 @@ influencer-intel/
 │   ├── src/                 # TypeScript orchestrator + jobs + account pool + capture-session CLI
 │   └── extension/           # legacy Chrome MV3 extension (no longer the auth path)
 ├── platform/                # Next.js — deploys to VERCEL (root dir = platform)
-│   ├── app/                 # routes (API + UI), incl. api/discover-live, api/ig-profile, api/cron/monitor
-│   ├── lib/                 # business logic (ig-fetch relay client, creator-db-search, live-discovery…)
+│   ├── app/                 # routes (API + UI): api/discover-live, api/ig-profile, api/cron/{monitor,session-extend}, api/apify-health
+│   ├── lib/                 # business logic (ig-fetch relay client, creator-db-search, live-discovery, apify…)
 │   └── components/          # React components (live-search.tsx = the agency lander)
 ├── tools/
 │   └── ig-relay.mjs         # the home-IP relay (run on the laptop, tunnelled to Vercel)
@@ -94,13 +98,16 @@ IG_RELAY_KEY=<shared secret, matches RELAY_KEY on the relay>
 IG_SESSIONID=...  IG_DS_USER_ID=...  IG_CSRFTOKEN=...
 SERVICE_ACCOUNT_HANDLE=<default account for capture-session>
 SLACK_WEBHOOK_URL=<incoming webhook for operator alerts>
+# Optional paid fallback for IG enrichment + hashtag discovery when the free relay is blocked.
+# If unset, the app behaves exactly as before (no Apify calls).
+APIFY_TOKEN=apify_api_...
 ```
 
 ### 2. Capture an Instagram account session
 ```bash
 npm run scraper:capture -- <handle>        # e.g. bha_ti3772 (or omit to use SERVICE_ACCOUNT_HANDLE)
 ```
-Opens a **Camoufox** window → log in as that account manually → wait for the feed → press Enter. The session (cookies + localStorage) is written to `service_accounts`. Re-run when IG expires it (~30 days). Revive several, staggered, so they don't all expire the same week.
+Opens a **Camoufox** window → log in as that account manually → wait for the feed → press Enter. The session (cookies + localStorage) is written to `service_accounts`. IG sessionids actually live **~1 year** — the `session-extend` cron re-validates each cookie against Instagram and pushes its expiry forward while it's healthy, so you only re-capture when a cookie **actually** dies (a 401), not on a fixed timer. Revive several, staggered, for redundancy.
 
 ### 3. Run the relay + tunnel (live data path)
 ```bash
@@ -123,7 +130,7 @@ npm --workspace platform run dev   # → http://localhost:3000
 
 - The platform is a Vercel project with **root directory = `platform`**; it auto-deploys on push to `main`.
 - Set env vars in the Vercel dashboard (`BOLTIC_DATABASE_URL`, `OPENAI_API_KEY`, `IG_RELAY_KEY`, cookie fallbacks, `SLACK_WEBHOOK_URL`, …). `IG_RELAY` is optional — the DB `relay_url` is authoritative.
-- Cron jobs live in `platform/vercel.json` (news digest + the operational monitor). On the Hobby plan crons run at most daily; the on-host relay keeper curls `/api/cron/monitor` every 5 min for real-time alerting.
+- Cron jobs live in `platform/vercel.json`: the **news digest**, the operational **monitor**, and **session-extend** (validates each captured cookie against IG and extends the expiry of healthy ones so live sessions aren't retired on a false timer). On the Hobby plan crons run at most daily; the on-host relay keeper curls `/api/cron/monitor` every 5 min for real-time alerting.
 
 ## Operations
 
@@ -140,5 +147,5 @@ The `validation/` folder has pre-build settlement artefacts — customer-discove
 - **The laptop must be on.** The relay + worker run there; when it's off, live data and crawling stop (the DB keeps serving cached data). Durable fix: a dedicated always-on host.
 - **Shared home IP.** All accounts route through one residential IP, so heavy usage gets the IP rate-limited (429). Fix: residential proxy per account.
 - **Free-tunnel URL churn.** Handled by the DB-stored `relay_url` (self-healing); a named tunnel / stable URL would remove even that.
-- **Session upkeep.** Burner sessions expire (~30 days, sooner if IG watches an account); revival is a manual login (staggered). Aged accounts + proxies reduce this.
+- **Session upkeep.** Burner sessions eventually die (IG sessionids last ~1 year, sooner if IG flags an account); the `session-extend` cron keeps healthy ones alive automatically, so revival — a manual, staggered login — is only needed when a cookie truly dies. Aged accounts + proxies reduce this further.
 - **launchd auto-start isn't possible from `~/Downloads`** on a managed Mac (macOS TCC blocks it); use the Terminal-run `run-relay.sh` / `run-worker.sh` keepers.
