@@ -1064,32 +1064,14 @@ export function LiveSearch({
     setRecruited((m) => ({ ...m, [cid]: pid }));
   }
 
-  // Add a creator to a SPECIFIC campaign chosen from the per-row picker. Passing
-  // '__new__' prompts for a new campaign name and creates it first. Unlike
-  // addToShortlist this never falls back to the default/first campaign.
+  // Add a creator to a SPECIFIC campaign chosen from the per-row picker. Unlike
+  // the old addToShortlist this never falls back to the default/first campaign.
   async function addToProgram(p: LiveProfile, pid: string) {
     if (recruiting) return;
     setPickerFor(null);
-    let target = pid;
-    if (target === '__new__') {
-      const name = window.prompt('New campaign name');
-      if (!name?.trim()) return;
-      try {
-        const d = await fetch('/api/programs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), source_prompt: run?.prompt }),
-        }).then((r) => r.json());
-        if (!d.program?.id) return;
-        setPrograms((ps) => [d.program, ...ps]);
-        target = d.program.id;
-      } catch {
-        return;
-      }
-    }
     setRecruiting(p.creator_id ?? p.username);
     try {
-      await recruitOne(target, p);
+      await recruitOne(pid, p);
     } finally {
       setRecruiting(null);
     }
@@ -2091,13 +2073,13 @@ export function LiveSearch({
                                         </button>
                                       ))}
                                     </div>
-                                    <button
-                                      onClick={() => void addToProgram(p, '__new__')}
-                                      className="w-full text-left px-3 py-2 text-[13px] font-medium border-t border-[#f0f0f4] hover:bg-[#f6f4ff]"
+                                    <a
+                                      href="/campaigns"
+                                      className="block w-full text-left px-3 py-2 text-[13px] font-medium border-t border-[#f0f0f4] hover:bg-[#f6f4ff]"
                                       style={{ color: ACCENT }}
                                     >
                                       ＋ New campaign…
-                                    </button>
+                                    </a>
                                   </div>
                                 </>
                               )}
