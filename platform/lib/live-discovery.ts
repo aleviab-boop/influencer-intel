@@ -445,7 +445,9 @@ function isNiche(token: string): boolean {
 // words, can be filtered out. Returns [] when the prompt has no subject words
 // (e.g. a bare "@handle" or "creators in delhi"), in which case there's no gate.
 export function nicheKeywords(prompt: string): string[] {
-  const toks = tokenize(prompt).filter((t) => !isLocationToken(t) && !SUFFIX_WORDS.has(t));
+  const toks = tokenize(prompt).filter(
+    (t) => !isLocationToken(t) && !SUFFIX_WORDS.has(t) && !CAMPAIGN_FILLER.has(t),
+  );
   const out = new Set<string>();
   for (const t of toks) {
     if (t.length > 2) out.add(t);
@@ -457,14 +459,41 @@ export function nicheKeywords(prompt: string): string[] {
   return Array.from(out);
 }
 
+// Some subject words are ALSO common Indian personal names / deity names
+// ("Durga", "Puja", "Kali", "Lakshmi"…). A festival brief ("durga puja campaign")
+// expands to these tokens, but on their own they match every person NAMED that:
+// "Puja Sharma" the food blogger, or a shop called "Durga Fashion" — none of whom
+// make festival content. So these tokens are AMBIGUOUS: they only count as real
+// subject evidence when they CO-OCCUR (both "durga" AND "puja" → the festival) or
+// alongside an unambiguous festival token. The specific event hashtags
+// (durgapuja, pujovibes, pandalhopping…) are NOT ambiguous and pass on their own.
+const AMBIGUOUS_SUBJECT_TOKENS = new Set([
+  'durga', 'puja', 'kali', 'laxmi', 'lakshmi', 'radha', 'ganesh', 'ganesha',
+  'saraswati', 'shiva', 'krishna', 'ram', 'rama',
+]);
+
 // Does a profile's combined text (handle + name + bio + category) show evidence
-// of the search's subject? Word-boundary match on any niche keyword. An empty
-// keyword list means "no gate" → always true. Tokens are alphanumeric (tokenize
-// strips punctuation), so no regex escaping is needed.
+// of the search's subject? Word-boundary match on the niche keywords, with one
+// refinement: an AMBIGUOUS token (a common name that doubles as a subject word)
+// only counts when it co-occurs with other evidence — a single "puja"/"durga"
+// hit is a PERSON, not proof of festival content. An empty keyword list means
+// "no gate" → always true. Tokens are alphanumeric, so no regex escaping needed.
 export function hasNicheEvidence(text: string, keywords: string[]): boolean {
   if (keywords.length === 0) return true;
   const t = text.toLowerCase();
-  return keywords.some((k) => new RegExp(`(^|[^a-z0-9])${k}([^a-z0-9]|$)`).test(t));
+  const hit = (k: string) => new RegExp(`(^|[^a-z0-9])${k}([^a-z0-9]|$)`).test(t);
+
+  let strong = false; // an unambiguous subject token matched
+  let ambiguous = 0; // count of ambiguous (common-name) tokens matched
+  for (const k of keywords) {
+    if (!hit(k)) continue;
+    if (AMBIGUOUS_SUBJECT_TOKENS.has(k)) ambiguous++;
+    else strong = true;
+  }
+  // Unambiguous evidence is enough on its own. Ambiguous name-tokens need to
+  // co-occur (≥2, e.g. "Durga" + "Puja" = the festival) to count — otherwise a
+  // lone "Puja"/"Durga" in a personal name would wrongly pass the gate.
+  return strong || ambiguous >= 2;
 }
 
 // Split a prompt into a region (known city), a niche (recognised category),
