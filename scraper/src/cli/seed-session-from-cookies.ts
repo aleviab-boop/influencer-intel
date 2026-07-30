@@ -65,7 +65,10 @@ async function main(): Promise<void> {
 
   const db = getBolticClient();
   const now = new Date().toISOString();
-  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  // IG sessionids live ~1yr; the session-extend cron re-validates and pushes
+  // this forward, so 180d is a floor (not a real deadline) that avoids retiring
+  // still-valid sessions on a false timer.
+  const expires = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
 
   await db.upsert(
     'service_accounts',

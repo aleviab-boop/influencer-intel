@@ -126,7 +126,10 @@ async function main() {
       handle,
       storage_state: storageState,
       storage_captured_at: new Date().toISOString(),
-      storage_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      // IG sessionids live ~1yr; the session-extend cron re-validates against IG
+      // and pushes this forward on healthy cookies, so this is just a floor, not
+      // a real deadline. 180d avoids retiring live sessions on a false timer.
+      storage_expires_at: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
       status: 'active',
       // Clear any parked/resting cooldown — a fresh session revives the account,
       // so it must re-enter rotation immediately instead of staying skipped.

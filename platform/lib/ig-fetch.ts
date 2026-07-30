@@ -51,10 +51,28 @@ const SESSIONID = process.env.IG_SESSIONID?.trim();
 const DS_USER_ID = process.env.IG_DS_USER_ID?.trim();
 const CSRFTOKEN = process.env.IG_CSRFTOKEN?.trim();
 
-interface SessionCookie {
+export interface SessionCookie {
   sessionid: string;
   ds_user_id?: string;
   csrftoken?: string;
+}
+
+// Pull a SessionCookie out of a Playwright storage_state blob (the shape stored
+// in service_accounts.storage_state). Returns null when there's no sessionid.
+export function cookieFromStorageState(storage_state: unknown): SessionCookie | null {
+  try {
+    const ss = (typeof storage_state === 'string' ? JSON.parse(storage_state) : storage_state) as
+      | { cookies?: Array<{ name?: string; value?: string; domain?: string }> }
+      | null;
+    const cs = ss?.cookies ?? [];
+    const get = (n: string) =>
+      cs.find((x) => x.name === n && String(x.domain ?? '').includes('instagram'))?.value;
+    const sessionid = get('sessionid');
+    if (!sessionid) return null;
+    return { sessionid, ds_user_id: get('ds_user_id'), csrftoken: get('csrftoken') };
+  } catch {
+    return null;
+  }
 }
 
 // Rotating pool of session cookies pulled from the captured accounts. Cached
@@ -173,4 +191,32 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
     if (res.status !== 401 && res.status !== 403 && res.status !== 429) break;
   }
   return res;
+}
+
+// Probe ONE specific session cookie (not the pool) against Instagram, returning
+// the raw HTTP status. Used by the session-extend cron to decide, per account,
+// whether a cookie is still alive (200), dead (401/403), or just throttled
+// (429). Goes out through the same relay/proxy path as igFetch so it works from
+// Vercel's data-center IP. Returns 0 on a network error/timeout (unknown → the
+// caller should leave the account untouched rather than retire a live cookie).
+const PROBE_URL = 'https://www.instagram.com/api/v1/users/web_profile_info/?username=instagram';
+const PROBE_HEADERS: Record<string, string> = {
+  'x-ig-app-id': '936619743392459',
+  'user-agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  accept: '*/*',
+  'accept-language': 'en-US,en;q=0.9',
+  referer: 'https://www.instagram.com/instagram/',
+  'x-requested-with': 'XMLHttpRequest',
+  'sec-fetch-site': 'same-origin',
+};
+
+export async function probeCookie(cookie: SessionCookie): Promise<number> {
+  const relay = await relayUrl();
+  try {
+    const res = await sendOnce(PROBE_URL, {}, withAuth({ ...PROBE_HEADERS }, cookie), relay);
+    return res.status;
+  } catch {
+    return 0; // network/timeout → unknown, don't touch the account
+  }
 }
