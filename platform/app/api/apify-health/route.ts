@@ -57,9 +57,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         source: 'apify-hashtag-scraper',
-        hashtag_tried: hashtagCandidates(hashtag)[0] ?? null,
+        hashtags_tried: hashtagCandidates(hashtag).slice(0, 2),
         seed_count: seeds.length,
-        seeds: seeds.map((s) => s.handle),
+        proven_collaborators: seeds.filter((s) => s.collab_signal).length,
+        seeds: seeds.map((s) => ({
+          handle: s.handle,
+          followers: s.followers,
+          collab_signal: !!s.collab_signal,
+        })),
       });
     } catch (err) {
       return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 502 });

@@ -211,6 +211,7 @@ export interface NameMatch {
   handle: string;
   full_name: string;
   followers: number;
+  collab_signal?: boolean; // caption showed brand-collab evidence (proven collaborator)
 }
 
 export function handleVariations(name: string): string[] {
@@ -362,6 +363,39 @@ const NICHE_SYNONYMS: Record<string, string[]> = {
 const SUFFIX_WORDS = new Set([
   'blogger', 'bloggers', 'blog', 'page', 'official', 'diaries', 'creator', 'creators',
 ]);
+
+// Campaign-brief jargon that frames INTENT but isn't a searchable subject —
+// "influencers for a denim CAMPAIGN", "BRAND DEAL", "PROMO", "COLLAB". Left in,
+// these produce junk hashtags (#campaignfashion) and pollute the niche gate. We
+// strip them so the real niche/city drives discovery. Generic across categories.
+const CAMPAIGN_FILLER = new Set([
+  'campaign', 'campaigns', 'brand', 'brands', 'branded', 'deal', 'deals',
+  'promo', 'promos', 'promotion', 'promotions', 'launch', 'launches',
+  'collab', 'collabs', 'collaboration', 'collaborations', 'sponsored',
+  'sponsorship', 'ad', 'ads', 'paid', 'partnership', 'partnerships',
+]);
+
+// Generic brand-collaboration signal — the PUBLIC fingerprint a creator leaves
+// when they've done paid brand work, identical across every niche (no per-brand
+// list needed). Instagram/ASCI disclosure rules mean real collabs carry one of
+// these markers; a bare "#ad" counts because \b matches across the '#'.
+const COLLAB_MARKERS =
+  /\b(ad|ads|sponsored|sponsorship|collab|collaboration|partner(?:ed|ship)?|paidpartnership|brandambassador|ambassador|gifted|associationwith|poweredby)\b/i;
+
+// Score a post caption for brand-collab evidence, generically:
+//   2 → disclosure marker AND an @brand mention (disclosed + tagged) → strongest
+//   1 → disclosure marker only
+//   0 → no collab signal (plain niche content)
+// Used to float PROVEN collaborators to the front of the crawl queue so, under a
+// limited crawl budget, the creators who actually do brand deals get enriched
+// and surfaced first — for ANY "influencers for <x> campaign" search.
+export function collabScore(caption: string | null | undefined): number {
+  if (!caption) return 0;
+  const hasMarker = COLLAB_MARKERS.test(caption);
+  if (!hasMarker) return 0;
+  const hasBrandMention = /@[a-z0-9._]{2,}/i.test(caption);
+  return hasBrandMention ? 2 : 1;
+}
 
 const HANDLE_SUFFIXES = [
   '', 's', 'official', 'blogger', 'bloggers', 'diaries', 'gram', 'hub', 'page',
@@ -519,7 +553,7 @@ export async function resolveTopicToSeeds(
 // The best hashtag(s) for a prompt: prefer a specific "<city><niche>" tag, then
 // the niche alone, then the city. Alphanumeric, 3+ chars (valid IG hashtags).
 export function hashtagCandidates(prompt: string): string[] {
-  const toks = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t));
+  const toks = tokenize(prompt).filter((t) => !SUFFIX_WORDS.has(t) && !CAMPAIGN_FILLER.has(t));
   if (toks.length === 0) return [];
   const cities = toks.filter((t) => KNOWN_CITIES.has(t));
   const niches = toks.filter((t) => isNiche(t));
@@ -538,21 +572,54 @@ export function hashtagCandidates(prompt: string): string[] {
 // when APIFY_TOKEN is unset or no hashtag can be derived, so it's free-safe.
 export async function resolveHashtagToSeeds(
   prompt: string,
-  opts: { limit?: number; postsPerTag?: number } = {},
+  opts: { limit?: number; postsPerTag?: number; tags?: number } = {},
 ): Promise<NameMatch[]> {
   const limit = opts.limit ?? 10;
   const cands = hashtagCandidates(prompt);
   if (cands.length === 0) return [];
-  const hits = await apifyHashtag(cands[0]!, opts.postsPerTag ?? 30);
-  const seen = new Set<string>();
-  const matches: NameMatch[] = [];
-  for (const h of hits) {
-    const handle = h.handle.trim().toLowerCase();
-    if (!handle || seen.has(handle) || matches.length >= limit) continue;
-    seen.add(handle);
-    matches.push({ handle, full_name: '', followers: h.followers ?? 0 });
+  const tagCount = Math.min(opts.tags ?? 2, cands.length);
+  const perTag = opts.postsPerTag ?? 30;
+
+  // Search the top few candidate hashtags in parallel and merge their posters —
+  // more seeds, and robust to a thin top hashtag. Each apifyHashtag no-ops to []
+  // without APIFY_TOKEN, so this stays free-safe.
+  const batches = await Promise.all(
+    cands.slice(0, tagCount).map((c) => apifyHashtag(c, perTag).catch(() => [])),
+  );
+
+  // Merge by handle, keeping the strongest collab signal + any known follower
+  // count seen across the hashtags a creator appeared under.
+  const merged = new Map<string, { followers: number; collab: number }>();
+  for (const hits of batches) {
+    for (const h of hits) {
+      const handle = h.handle.trim().toLowerCase();
+      if (!handle) continue;
+      const collab = collabScore(h.caption);
+      const prev = merged.get(handle);
+      if (prev) {
+        prev.collab = Math.max(prev.collab, collab);
+        if (!prev.followers && h.followers) prev.followers = h.followers;
+      } else {
+        merged.set(handle, { followers: h.followers ?? 0, collab });
+      }
+    }
   }
-  return matches.sort((a, b) => b.followers - a.followers);
+
+  const matches: NameMatch[] = Array.from(merged, ([handle, v]) => ({
+    handle,
+    full_name: '',
+    followers: v.followers,
+    collab_signal: v.collab > 0,
+  }));
+  // PROVEN collaborators first (strongest signal), then by reach. Under a limited
+  // crawl budget this ordering decides who actually gets enriched and surfaced.
+  matches.sort((a, b) => {
+    const ca = a.collab_signal ? 1 : 0;
+    const cb = b.collab_signal ? 1 : 0;
+    if (ca !== cb) return cb - ca;
+    return b.followers - a.followers;
+  });
+  return matches.slice(0, limit);
 }
 
 // Validate a list of (possibly AI-suggested) handles against Instagram and
