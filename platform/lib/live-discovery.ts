@@ -357,6 +357,25 @@ const NICHE_SYNONYMS: Record<string, string[]> = {
   realestate: ['realestate', 'property', 'realtor', 'homes'],
   sports: ['sports', 'cricket', 'football', 'athlete', 'sportsman'],
   beautyblogger: ['beauty', 'makeup', 'mua'],
+  // Product/apparel words — a campaign brief names the PRODUCT ("denim campaign",
+  // "saree shoot"), not the niche. Map each to CREATOR-oriented tags so discovery
+  // searches where people post looks (#denimstyle/#ootd), not the bare product tag
+  // (#denim = shops/resellers). Extend this list as new product verticals come up.
+  denim: ['denim', 'denimstyle', 'denimfashion', 'ootd', 'jeans'],
+  jeans: ['jeans', 'denim', 'denimstyle', 'ootd'],
+  saree: ['saree', 'sareelove', 'sareefashion', 'sareedraping', 'ethnicwear'],
+  ethnic: ['ethnicwear', 'indianwear', 'traditionalwear', 'kurta', 'ethnic'],
+  sneakers: ['sneakers', 'sneakerhead', 'streetstyle', 'sneakercommunity', 'shoes'],
+  streetwear: ['streetwear', 'streetstyle', 'ootd', 'fashion'],
+  jewellery: ['jewellery', 'jewelry', 'jewellerylove', 'accessories', 'earrings'],
+  watch: ['watch', 'watches', 'wristwatch', 'watchesofinstagram', 'horology'],
+  // Festival / cultural-event campaigns — the "campaign" is a THEME, so relevance
+  // is topical (who makes this content), not brand-collab. Expand to the event's
+  // real hashtags incl. regional spellings so we find people who post it.
+  puja: ['puja', 'pujo', 'durgapuja', 'durgapujo', 'pandalhopping', 'pujovibes'],
+  festival: ['festival', 'festive', 'festivevibes', 'tyohaar', 'celebration'],
+  diwali: ['diwali', 'deepavali', 'festivevibes', 'diwalivibes'],
+  navratri: ['navratri', 'garba', 'dandiya', 'navratrivibes'],
 };
 
 // Words that act as handle suffixes rather than niche roots.
@@ -559,7 +578,22 @@ export function hashtagCandidates(prompt: string): string[] {
   const niches = toks.filter((t) => isNiche(t));
   const others = toks.filter((t) => !KNOWN_CITIES.has(t) && !isNiche(t));
   const locs = cities.length ? cities : others;
-  const subs = niches.length ? niches : others.length ? others : niches;
+
+  // Build the SUBJECT hashtags. For a recognized niche/product word, EXPAND it
+  // into its creator-oriented synonym tags (denim → denimstyle, ootd, fashion) so
+  // we search where creators post looks, not the bare product tag. Unrecognized
+  // subject words (e.g. "durgapuja") fall through as-is — they're still valid
+  // event/topic hashtags that surface people who post that content.
+  const subjectTokens = niches.length ? niches : others;
+  const subs: string[] = [];
+  const pushUniq = (h: string) => { if (h && !subs.includes(h)) subs.push(h); };
+  for (const t of subjectTokens) {
+    pushUniq(t);
+    const syns = NICHE_SYNONYMS[t] ?? NICHE_SYNONYMS[t.replace(/s$/, '')];
+    if (syns) for (const s of syns) pushUniq(s);
+  }
+  if (subs.length === 0) for (const t of others) pushUniq(t);
+
   const out: string[] = [];
   for (const loc of locs) for (const n of subs) if (loc !== n) out.push(`${loc}${n}`);
   for (const n of subs) out.push(n);
