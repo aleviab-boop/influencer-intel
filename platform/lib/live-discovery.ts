@@ -15,7 +15,7 @@
 // ============================================================
 
 import { igFetch } from './ig-fetch';
-import { apifyHashtag } from './apify';
+import { apifyHashtag, apifyProfileOrNull } from './apify';
 
 const APP_ID = '936619743392459';
 const PROFILE_URL = (u: string) =>
@@ -161,7 +161,53 @@ interface RawUser {
   };
 }
 
-async function fetchProfile(username: string, budgetMs: number): Promise<RawUser | null> {
+// Map an Apify ScrapedProfile onto the web_profile_info RawUser shape so a
+// paid-fallback enrichment is a drop-in for the free one — same scoring, same
+// engagement math, same contact extraction downstream. The Apify profile actor
+// has no "related profiles" graph, so edge_related_profiles is empty: an
+// Apify-enriched seed still yields full data (followers/bio/posts) but can't be
+// crawled outward. That's fine — outward crawl needs a live cookie anyway.
+async function apifyProfileAsRawUser(username: string): Promise<RawUser | null> {
+  const p = await apifyProfileOrNull(username); // null if APIFY_TOKEN unset or run failed
+  if (!p?.handle) return null;
+  return {
+    username: p.handle,
+    full_name: p.display_name ?? undefined,
+    biography: p.biography ?? undefined,
+    category_name: p.category ?? undefined,
+    is_private: false,
+    is_verified: p.is_verified,
+    profile_pic_url: p.profile_photo_url ?? undefined,
+    external_url: p.external_url,
+    business_email: null,
+    public_email: null,
+    edge_followed_by: { count: p.follower_count },
+    edge_related_profiles: { edges: [] },
+    edge_owner_to_timeline_media: {
+      edges: p.recent_posts.map((post) => ({
+        node: {
+          shortcode: post.platform_post_id,
+          edge_media_to_caption: { edges: post.caption ? [{ node: { text: post.caption } }] : [] },
+          edge_liked_by: { count: post.like_count },
+          edge_media_to_comment: { count: post.comment_count },
+        },
+      })),
+    },
+  };
+}
+
+// Fetch a profile from Instagram's free endpoint. `allowApify` opts THIS call
+// into the PAID Apify fallback when the free path is blocked (401/403/429) — set
+// only for the profiles we actually display (seed enrichment), never for the
+// wider graph crawl, so a dead cookie still yields enriched results without
+// fanning Apify calls across every probed handle. A genuine 404 / empty-200
+// (handle doesn't exist) never triggers Apify — we don't pay to disprove a
+// hallucination. No-op unless APIFY_TOKEN is set, so free-only users are unchanged.
+async function fetchProfile(
+  username: string,
+  budgetMs: number,
+  allowApify = false,
+): Promise<RawUser | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), Math.min(12_000, budgetMs));
   try {
@@ -169,9 +215,14 @@ async function fetchProfile(username: string, budgetMs: number): Promise<RawUser
       headers: REQUEST_HEADERS,
       signal: ctrl.signal,
     });
-    if (!res.ok) return null; // 404 / 401 / 429 → skip this handle
-    const json = (await res.json()) as { data?: { user?: RawUser } };
-    return json?.data?.user ?? null;
+    if (res.ok) {
+      const json = (await res.json()) as { data?: { user?: RawUser } };
+      return json?.data?.user ?? null; // 200 with no user = doesn't exist → no Apify
+    }
+    if (allowApify && (res.status === 401 || res.status === 403 || res.status === 429)) {
+      return await apifyProfileAsRawUser(username); // free path blocked → paid net
+    }
+    return null; // 404 / other → skip this handle
   } catch {
     return null; // network error / abort / non-JSON login wall
   } finally {
@@ -747,7 +798,14 @@ export async function profilesFromHandles(
     } else if (status === 404 || status === 200) {
       continue; // confirmed not to exist → drop (real hallucination filter)
     } else {
-      out.push(stubProfile(h, tokens)); // couldn't verify → keep, enrich later
+      // Free path blocked (401/403/429/timeout) → try the paid Apify fallback so a
+      // dead cookie still yields real numbers; only stub if Apify is off/misses.
+      const viaApify = await apifyProfileAsRawUser(h);
+      out.push(
+        viaApify?.username
+          ? { ...summarize(viaApify, tokens), from_ai: true }
+          : stubProfile(h, tokens),
+      );
     }
   }
   return out;
@@ -884,7 +942,11 @@ export async function liveDiscover(
     if (Date.now() - startedAt > budgetMs) break;
     const { username, hop } = queue.shift()!;
 
-    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt));
+    // Seeds (hop 0) are the creators we discovered and will display — enrich them
+    // via the paid Apify fallback if the free cookie path is blocked. Deeper hops
+    // (graph expansion) stay free-only: they're a bonus that needs a live cookie
+    // anyway, and Apify-ing every crawled node would be slow and costly.
+    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt), hop === 0);
     await sleep(delayMs);
     if (!user || !user.username) continue;
 

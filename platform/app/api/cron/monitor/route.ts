@@ -23,8 +23,23 @@ const PROBE_HEADERS: Record<string, string> = {
   'Sec-Fetch-Site': 'same-origin',
 };
 
+// Alerts the operator has intentionally muted (comma-separated alert_state keys).
+// Defaults to the FREE-pipeline alerts that become expected noise once discovery
+// + enrichment run on the Apify paid fallback: the IG-cookie 401 (`live_cookie`)
+// and the worker-idle ping (`worker_stalled`). These monitor the free cookie/relay
+// path, which Apify intentionally bypasses — so they'd flap red↔green forever.
+// Set MONITOR_MUTED_ALERTS='' to re-enable everything, or list your own keys
+// (e.g. live_cookie,worker_stalled,live_relay,live_ratelimit,acct_none).
+const MUTED = new Set(
+  (process.env.MONITOR_MUTED_ALERTS ?? 'live_cookie,worker_stalled')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
 // Fire an alert at most once per `cooldownMin` while a problem persists.
 async function alertOnce(key: string, text: string, cooldownMin = 60): Promise<void> {
+  if (MUTED.has(key)) return; // operator-muted → stay silent
   const db = getBolticClient();
   try {
     const rows = await db.query<{ last_sent_at: string }>(
@@ -49,7 +64,9 @@ async function clearAlert(key: string, recoveryText?: string): Promise<void> {
   const db = getBolticClient();
   try {
     const rows = await db.query(`DELETE FROM alert_state WHERE key = $1 RETURNING key`, [key]);
-    if (rows.length > 0 && recoveryText) await notifySlack(recoveryText);
+    // Muted keys clear state silently (no recovery ping) so a flapping muted
+    // alert can't sneak its green "recovered" message through.
+    if (!MUTED.has(key) && rows.length > 0 && recoveryText) await notifySlack(recoveryText);
   } catch {
     /* best-effort */
   }
