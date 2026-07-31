@@ -368,7 +368,7 @@ export async function POST(req: NextRequest) {
       // elapsed time is what stops the two Apify phases from together tripping the
       // 504 we hit with a fixed budget. Floored so the batch always gets a usable
       // slice. Normal prompts stay lean and free-path-dominated.
-      const campaignBudget = Math.max(20_000, 53_000 - (Date.now() - t0));
+      const campaignBudget = Math.max(20_000, 44_000 - (Date.now() - t0));
       const run = await liveDiscover(prompt, uniqueSeeds, {
         depth,
         max: isCampaign ? Math.max(max, 24) : max,
@@ -382,7 +382,12 @@ export async function POST(req: NextRequest) {
     }
   })();
 
-  await Promise.all([aiPipeline, crawlPipeline]);
+  // HARD CEILING: never let the two pipelines run the function to Vercel's 60s
+  // kill (a 504 returns NOTHING and still bills the Apify runs). Cap the wait at
+  // 54s — whatever enrichment finished by then is used; anything still in flight
+  // is dropped (its seeds were already persisted, so they surface on the next
+  // search). This turns a worst-case 504 into a graceful, partial 200.
+  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 50_000, null);
 
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
