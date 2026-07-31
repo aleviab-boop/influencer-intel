@@ -353,10 +353,14 @@ export async function POST(req: NextRequest) {
       // higher ceiling, and wide seed concurrency so many profiles hydrate in
       // parallel within that budget. Non-campaign prompts stay lean/cheap.
       const isCampaign = isCampaignPrompt(prompt);
+      // Campaign budget must fit the batched Apify enrichment (a ~13-18 handle run
+      // measures ~35-45s) inside the route's 60s maxDuration, leaving room for the
+      // upstream hashtag discovery + DB topup. 48s is the safe envelope; normal
+      // prompts stay lean (15s, free-path-dominated).
       const run = await liveDiscover(prompt, uniqueSeeds, {
         depth,
         max: isCampaign ? Math.max(max, 24) : max,
-        budgetMs: isCampaign ? 30_000 : 15_000,
+        budgetMs: isCampaign ? 48_000 : 15_000,
         seedConcurrency: isCampaign ? 12 : 8,
       });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));

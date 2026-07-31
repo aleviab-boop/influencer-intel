@@ -1019,14 +1019,20 @@ export async function liveDiscover(
   const seedList = cleanSeeds.slice(0, max);
   const seedUsers = await fetchProfilesConcurrent(
     seedList,
-    Math.min(budgetMs, 12_000), // leave headroom in the budget for the Apify batch
+    Math.min(budgetMs, 8_000), // short free-first window; batch Apify gets the rest
     false, // free path only here; misses go to the batched Apify run below
     seedConcurrency,
   );
-  const missing = seedList.filter((u) => !seedUsers.get(u)?.username);
+  // Whatever the free cookie path couldn't resolve → enrich in ONE Apify run.
+  // Measured: a ~13-handle batch returns full data in ~35s, so we cap the batch
+  // (APIFY_BATCH_CAP) to keep the run comfortably inside the request's 60s ceiling
+  // while still returning well over the "10+ creators" bar. The race timeout is the
+  // remaining budget, which the caller sizes so the batch has room to finish.
+  const APIFY_BATCH_CAP = 18;
+  const missing = seedList.filter((u) => !seedUsers.get(u)?.username).slice(0, APIFY_BATCH_CAP);
   if (missing.length > 0) {
     const remaining = budgetMs - (Date.now() - startedAt);
-    if (remaining > 3_000) {
+    if (remaining > 8_000) {
       const viaApify = await apifyProfilesAsRawUsers(missing, remaining);
       for (const [h, user] of viaApify) seedUsers.set(h, user);
     }
