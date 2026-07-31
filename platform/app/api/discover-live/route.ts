@@ -347,7 +347,18 @@ export async function POST(req: NextRequest) {
     const uniqueSeeds = Array.from(new Set(seeds.map((s) => s.trim()).filter(Boolean)));
     if (uniqueSeeds.length === 0) return;
     try {
-      const run = await liveDiscover(prompt, uniqueSeeds, { depth, max, budgetMs: 15_000 });
+      // Campaign prompts want a DEEP, well-filled result page (10+ enriched, on-
+      // niche creators). The free cookie path is often dead, so seeds enrich via
+      // Apify — which is slower per profile. Give campaigns a bigger budget, a
+      // higher ceiling, and wide seed concurrency so many profiles hydrate in
+      // parallel within that budget. Non-campaign prompts stay lean/cheap.
+      const isCampaign = isCampaignPrompt(prompt);
+      const run = await liveDiscover(prompt, uniqueSeeds, {
+        depth,
+        max: isCampaign ? Math.max(max, 24) : max,
+        budgetMs: isCampaign ? 30_000 : 15_000,
+        seedConcurrency: isCampaign ? 12 : 8,
+      });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
     } catch (err) {
       console.error('[discover-live] crawl failed:', err);

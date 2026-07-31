@@ -107,10 +107,11 @@ export interface LiveDiscoveryResult {
 }
 
 export interface LiveDiscoveryOptions {
-  depth?: number;       // how many hops to expand outward (default 2)
-  max?: number;         // stop after visiting this many profiles (default 40)
-  delayMs?: number;     // throttle between profile fetches (default 350)
-  budgetMs?: number;    // overall time budget so the request never hangs (default 25s)
+  depth?: number;          // how many hops to expand outward (default 2)
+  max?: number;            // stop after visiting this many profiles (default 40)
+  delayMs?: number;        // throttle between profile fetches (default 350)
+  budgetMs?: number;       // overall time budget so the request never hangs (default 25s)
+  seedConcurrency?: number; // how many seed profiles to enrich in parallel (default 12)
 }
 
 // Words that frame an age/count constraint but aren't searchable themselves —
@@ -167,8 +168,14 @@ interface RawUser {
 // has no "related profiles" graph, so edge_related_profiles is empty: an
 // Apify-enriched seed still yields full data (followers/bio/posts) but can't be
 // crawled outward. That's fine — outward crawl needs a live cookie anyway.
-async function apifyProfileAsRawUser(username: string): Promise<RawUser | null> {
-  const p = await apifyProfileOrNull(username); // null if APIFY_TOKEN unset or run failed
+async function apifyProfileAsRawUser(username: string, timeoutMs = 15_000): Promise<RawUser | null> {
+  // Cap each paid enrichment so a slow Apify run can't blow the request's
+  // maxDuration when many run in parallel. The underlying run may still finish
+  // (and bill) in the background; we just stop waiting on it past the cap.
+  const p = await Promise.race([
+    apifyProfileOrNull(username), // null if APIFY_TOKEN unset or run failed
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
   if (!p?.handle) return null;
   return {
     username: p.handle,
@@ -228,6 +235,35 @@ async function fetchProfile(
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Fetch many profiles with BOUNDED CONCURRENCY. This is the throughput fix for
+// the Apify enrichment path: enriching seeds one-at-a-time meant a dead-cookie
+// campaign search only surfaced ~1 creator before the time budget ran out (each
+// paid profile call takes a few seconds). Running a pool of them at once fills a
+// full page in the same window. Free (cookie-alive) fetches parallelize too, but
+// concurrency is capped to stay polite to Instagram. Returns handle→RawUser for
+// whatever resolved before the shared budget expired.
+async function fetchProfilesConcurrent(
+  usernames: string[],
+  budgetMs: number,
+  allowApify: boolean,
+  concurrency: number,
+): Promise<Map<string, RawUser>> {
+  const out = new Map<string, RawUser>();
+  const startedAt = Date.now();
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < usernames.length) {
+      if (Date.now() - startedAt > budgetMs) return; // out of time → stop dispatching
+      const u = usernames[cursor++]!;
+      const user = await fetchProfile(u, budgetMs - (Date.now() - startedAt), allowApify);
+      if (user?.username) out.set(u, user);
+    }
+  };
+  const lanes = Math.max(1, Math.min(concurrency, usernames.length));
+  await Promise.all(Array.from({ length: lanes }, worker));
+  return out;
 }
 
 // Like fetchProfile but also reports the HTTP status, so callers can tell a
@@ -933,20 +969,41 @@ export async function liveDiscover(
 
   const visited = new Map<string, LiveProfile>();
   const seen = new Set<string>(cleanSeeds);
-  const queue: Array<{ username: string; hop: number }> = cleanSeeds.map((s) => ({
-    username: s,
-    hop: 0,
-  }));
 
+  // 1) SEEDS — the creators we discovered and will display. Enrich them
+  //    CONCURRENTLY (free path first, paid Apify fallback when the cookie is
+  //    blocked). Parallelizing here is what turns a dead-cookie campaign page from
+  //    ~1 result into the full seed set within one budget. Concurrency is capped
+  //    to stay polite on the free path / within the Apify plan's run limit.
+  const seedConcurrency = options.seedConcurrency ?? 12;
+  const seedUsers = await fetchProfilesConcurrent(
+    cleanSeeds.slice(0, max),
+    budgetMs,
+    true,
+    seedConcurrency,
+  );
+  const queue: Array<{ username: string; hop: number }> = [];
+  for (const username of cleanSeeds) {
+    const user = seedUsers.get(username);
+    if (!user?.username) continue;
+    visited.set(username, summarize(user, tokens));
+    if (depth > 0) {
+      for (const next of discoverLinks(user)) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          queue.push({ username: next, hop: 1 });
+        }
+      }
+    }
+  }
+
+  // 2) GRAPH EXPANSION (hop ≥ 1) — free-only and politely serialized. This is a
+  //    bonus that needs a live cookie anyway, so we never spend Apify on it.
   while (queue.length > 0 && visited.size < max) {
     if (Date.now() - startedAt > budgetMs) break;
     const { username, hop } = queue.shift()!;
 
-    // Seeds (hop 0) are the creators we discovered and will display — enrich them
-    // via the paid Apify fallback if the free cookie path is blocked. Deeper hops
-    // (graph expansion) stay free-only: they're a bonus that needs a live cookie
-    // anyway, and Apify-ing every crawled node would be slow and costly.
-    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt), hop === 0);
+    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt), false);
     await sleep(delayMs);
     if (!user || !user.username) continue;
 
