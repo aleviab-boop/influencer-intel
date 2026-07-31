@@ -15,7 +15,8 @@
 // ============================================================
 
 import { igFetch } from './ig-fetch';
-import { apifyHashtag, apifyProfileOrNull } from './apify';
+import { apifyHashtag, apifyProfileOrNull, apifyProfilesBatch } from './apify';
+import type { ScrapedProfile } from './instagram-scraper';
 
 const APP_ID = '936619743392459';
 const PROFILE_URL = (u: string) =>
@@ -168,15 +169,11 @@ interface RawUser {
 // has no "related profiles" graph, so edge_related_profiles is empty: an
 // Apify-enriched seed still yields full data (followers/bio/posts) but can't be
 // crawled outward. That's fine — outward crawl needs a live cookie anyway.
-async function apifyProfileAsRawUser(username: string, timeoutMs = 15_000): Promise<RawUser | null> {
-  // Cap each paid enrichment so a slow Apify run can't blow the request's
-  // maxDuration when many run in parallel. The underlying run may still finish
-  // (and bill) in the background; we just stop waiting on it past the cap.
-  const p = await Promise.race([
-    apifyProfileOrNull(username), // null if APIFY_TOKEN unset or run failed
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
-  ]);
-  if (!p?.handle) return null;
+// Map Apify's ScrapedProfile onto the web_profile_info RawUser shape the whole
+// pipeline (summarize / discoverLinks / scoring) already speaks, so an Apify-
+// enriched seed is a drop-in for a cookie-enriched one. Apify gives no related-
+// profiles graph, so graph expansion off an Apify seed is empty (expected).
+function scrapedToRawUser(p: ScrapedProfile): RawUser {
   return {
     username: p.handle,
     full_name: p.display_name ?? undefined,
@@ -201,6 +198,39 @@ async function apifyProfileAsRawUser(username: string, timeoutMs = 15_000): Prom
       })),
     },
   };
+}
+
+async function apifyProfileAsRawUser(username: string, timeoutMs = 15_000): Promise<RawUser | null> {
+  // Cap each paid enrichment so a slow Apify run can't blow the request's
+  // maxDuration when many run in parallel. The underlying run may still finish
+  // (and bill) in the background; we just stop waiting on it past the cap.
+  const p = await Promise.race([
+    apifyProfileOrNull(username), // null if APIFY_TOKEN unset or run failed
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+  ]);
+  if (!p?.handle) return null;
+  return scrapedToRawUser(p);
+}
+
+// Enrich MANY handles through ONE Apify run (the profile scraper batches an array
+// of usernames). This is what makes a dead-cookie campaign page fill: a single
+// billed run returns the whole seed set, versus per-profile runs that each cost a
+// 20–60s cold-start and so only surfaced ~1 result before the budget expired.
+// Returns handle→RawUser for whatever resolved. No-op (empty) without APIFY_TOKEN.
+async function apifyProfilesAsRawUsers(
+  usernames: string[],
+  timeoutMs = 100_000,
+): Promise<Map<string, RawUser>> {
+  const out = new Map<string, RawUser>();
+  if (usernames.length === 0) return out;
+  const batch = await Promise.race([
+    apifyProfilesBatch(usernames),
+    new Promise<Map<string, ScrapedProfile>>((resolve) =>
+      setTimeout(() => resolve(new Map()), timeoutMs),
+    ),
+  ]);
+  for (const [h, p] of batch) out.set(h, scrapedToRawUser(p));
+  return out;
 }
 
 // Fetch a profile from Instagram's free endpoint. `allowApify` opts THIS call
@@ -976,18 +1006,31 @@ export async function liveDiscover(
   const visited = new Map<string, LiveProfile>();
   const seen = new Set<string>(cleanSeeds);
 
-  // 1) SEEDS — the creators we discovered and will display. Enrich them
-  //    CONCURRENTLY (free path first, paid Apify fallback when the cookie is
-  //    blocked). Parallelizing here is what turns a dead-cookie campaign page from
-  //    ~1 result into the full seed set within one budget. Concurrency is capped
-  //    to stay polite on the free path / within the Apify plan's run limit.
+  // 1) SEEDS — the creators we discovered and will display. Two-stage enrichment:
+  //    (a) try the FREE cookie path concurrently for every seed (fast + no cost
+  //        when the relay is alive), then
+  //    (b) for whatever the free path couldn't resolve (relay down / cookie
+  //        blocked), enrich them all in ONE batched Apify run.
+  //    Batching is the throughput fix: a per-profile Apify run costs a 20–60s
+  //    cold-start, so enriching seeds one-at-a-time only surfaced ~1 result before
+  //    the budget ran out. One run returns the whole seed set at once — that's how
+  //    a dead-cookie campaign page actually fills.
   const seedConcurrency = options.seedConcurrency ?? 12;
+  const seedList = cleanSeeds.slice(0, max);
   const seedUsers = await fetchProfilesConcurrent(
-    cleanSeeds.slice(0, max),
-    budgetMs,
-    true,
+    seedList,
+    Math.min(budgetMs, 12_000), // leave headroom in the budget for the Apify batch
+    false, // free path only here; misses go to the batched Apify run below
     seedConcurrency,
   );
+  const missing = seedList.filter((u) => !seedUsers.get(u)?.username);
+  if (missing.length > 0) {
+    const remaining = budgetMs - (Date.now() - startedAt);
+    if (remaining > 3_000) {
+      const viaApify = await apifyProfilesAsRawUsers(missing, remaining);
+      for (const [h, user] of viaApify) seedUsers.set(h, user);
+    }
+  }
   const queue: Array<{ username: string; hop: number }> = [];
   for (const username of cleanSeeds) {
     const user = seedUsers.get(username);

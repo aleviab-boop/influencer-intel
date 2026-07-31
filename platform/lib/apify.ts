@@ -147,6 +147,37 @@ export async function apifyProfileOrNull(rawHandle: string): Promise<ScrapedProf
   }
 }
 
+// Enrich MANY profiles in ONE actor run. The profile scraper accepts an array of
+// usernames and returns them all in a single dataset — so a campaign page of ~24
+// seeds costs one run (one cold-start, one billed run) instead of 24. This is the
+// throughput fix for the search path: per-profile runs each take 20–60s, so
+// enriching seeds one-at-a-time never filled a page within the request budget.
+// Returns handle→ScrapedProfile for whatever resolved; missing handles are absent.
+export async function apifyProfilesBatch(rawHandles: string[]): Promise<Map<string, ScrapedProfile>> {
+  const out = new Map<string, ScrapedProfile>();
+  if (!APIFY_TOKEN) return out;
+  const handles = Array.from(
+    new Set(rawHandles.map((h) => h.trim().replace(/^@/, '').replace(/\/.*$/, '').toLowerCase()).filter(Boolean)),
+  );
+  if (handles.length === 0) return out;
+  let items: ApifyProfile[];
+  try {
+    items = await runActor<ApifyProfile>(
+      'apify~instagram-profile-scraper',
+      { usernames: handles, resultsLimit: handles.length },
+      120_000, // a big batch legitimately takes longer than a single profile
+    );
+  } catch {
+    return out; // no token / blocked / timeout → caller falls back to stubs
+  }
+  for (const u of items) {
+    const h = u?.username?.trim().toLowerCase();
+    if (!h) continue;
+    out.set(h, toScrapedProfile(u, h));
+  }
+  return out;
+}
+
 // ---- Instagram Hashtag Scraper (discovery) --------------------------------
 
 export interface ApifyHashtagHit {
