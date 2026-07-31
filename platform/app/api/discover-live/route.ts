@@ -374,6 +374,7 @@ export async function POST(req: NextRequest) {
         max: isCampaign ? Math.max(max, 24) : max,
         budgetMs: isCampaign ? campaignBudget : 15_000,
         seedConcurrency: isCampaign ? 12 : 8,
+        apifyDirect: isCampaign, // campaign → straight to Apify; normal → free-first
       });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
     } catch (err) {

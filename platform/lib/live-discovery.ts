@@ -113,6 +113,10 @@ export interface LiveDiscoveryOptions {
   delayMs?: number;        // throttle between profile fetches (default 350)
   budgetMs?: number;       // overall time budget so the request never hangs (default 25s)
   seedConcurrency?: number; // how many seed profiles to enrich in parallel (default 12)
+  apifyDirect?: boolean;    // campaign mode: skip the free cookie stage and enrich
+                            // seeds straight from Apify. Normal mode (false) tries
+                            // the free/relay path first and only falls to Apify on
+                            // break — "my scraper first, Apify when it breaks".
 }
 
 // Words that frame an age/count constraint but aren't searchable themselves —
@@ -1016,13 +1020,21 @@ export async function liveDiscover(
   //    the budget ran out. One run returns the whole seed set at once — that's how
   //    a dead-cookie campaign page actually fills.
   const seedConcurrency = options.seedConcurrency ?? 12;
+  const apifyDirect = options.apifyDirect ?? false;
   const seedList = cleanSeeds.slice(0, max);
-  const seedUsers = await fetchProfilesConcurrent(
-    seedList,
-    Math.min(budgetMs, 8_000), // short free-first window; batch Apify gets the rest
-    false, // free path only here; misses go to the batched Apify run below
-    seedConcurrency,
-  );
+  // Free cookie stage. Campaign mode (apifyDirect) SKIPS this and goes straight to
+  // the batched Apify run below — both because the user wants "campaign → Apify"
+  // and because it removes a latency variable: a stale/slow relay can hang each
+  // free fetch up to its abort, eating the window the batch needs. Normal mode
+  // enriches free-first and only the misses fall to Apify.
+  const seedUsers: Map<string, RawUser> = apifyDirect
+    ? new Map()
+    : await fetchProfilesConcurrent(
+        seedList,
+        Math.min(budgetMs, 8_000), // short free-first window; batch Apify gets the rest
+        false, // free path only here; misses go to the batched Apify run below
+        seedConcurrency,
+      );
   // Whatever the free cookie path couldn't resolve → enrich in ONE Apify run.
   // Measured: a ~13-handle batch returns full data in ~35s, so we cap the batch
   // (APIFY_BATCH_CAP) to keep the run comfortably inside the request's 60s ceiling
