@@ -1028,7 +1028,7 @@ export async function liveDiscover(
   // (APIFY_BATCH_CAP) to keep the run comfortably inside the request's 60s ceiling
   // while still returning well over the "10+ creators" bar. The race timeout is the
   // remaining budget, which the caller sizes so the batch has room to finish.
-  const APIFY_BATCH_CAP = 18;
+  const APIFY_BATCH_CAP = 14;
   const missing = seedList.filter((u) => !seedUsers.get(u)?.username).slice(0, APIFY_BATCH_CAP);
   if (missing.length > 0) {
     const remaining = budgetMs - (Date.now() - startedAt);

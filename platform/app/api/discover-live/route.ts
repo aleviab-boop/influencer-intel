@@ -94,6 +94,12 @@ async function dbBackedAiProfiles(handles: string[]): Promise<LiveProfile[]> {
 }
 
 export async function POST(req: NextRequest) {
+  // Wall-clock start. Campaign discovery chains TWO sequential Apify phases
+  // (hashtag discovery → batched profile enrichment); each is ~20-35s. We budget
+  // the enrichment against a hard deadline measured from here so the pair always
+  // lands inside the route's 60s maxDuration instead of 504-ing when phase 1 runs
+  // long.
+  const t0 = Date.now();
   const body = await req.json().catch(() => null);
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
 
@@ -334,7 +340,10 @@ export async function POST(req: NextRequest) {
       // posts for richer, collab-ranked seeds; normal prompts stay lean.
       if (seeds.length === 0) {
         try {
-          const hopts = campaign ? { limit: 20, tags: 3, postsPerTag: 40 } : {};
+          // Lean hashtag discovery for campaigns: fewer posts/tags so phase 1
+          // finishes fast and leaves the 60s window's bulk to phase 2 (profile
+          // batch). 2 tags x 25 posts still yields 20-40 candidate seeds.
+          const hopts = campaign ? { limit: 20, tags: 2, postsPerTag: 25 } : {};
           for (const m of await resolveHashtagToSeeds(prompt, hopts)) {
             seeds.push(m.handle);
             autoSeeds.push({ handle: m.handle, followers: m.followers });
@@ -353,14 +362,17 @@ export async function POST(req: NextRequest) {
       // higher ceiling, and wide seed concurrency so many profiles hydrate in
       // parallel within that budget. Non-campaign prompts stay lean/cheap.
       const isCampaign = isCampaignPrompt(prompt);
-      // Campaign budget must fit the batched Apify enrichment (a ~13-18 handle run
-      // measures ~35-45s) inside the route's 60s maxDuration, leaving room for the
-      // upstream hashtag discovery + DB topup. 48s is the safe envelope; normal
-      // prompts stay lean (15s, free-path-dominated).
+      // Enrichment gets whatever remains until a 53s wall-clock deadline (leaving
+      // ~7s for DB topup + serialization under the 60s ceiling). Because phase 1
+      // (hashtag discovery) already consumed part of the window, subtracting the
+      // elapsed time is what stops the two Apify phases from together tripping the
+      // 504 we hit with a fixed budget. Floored so the batch always gets a usable
+      // slice. Normal prompts stay lean and free-path-dominated.
+      const campaignBudget = Math.max(20_000, 53_000 - (Date.now() - t0));
       const run = await liveDiscover(prompt, uniqueSeeds, {
         depth,
         max: isCampaign ? Math.max(max, 24) : max,
-        budgetMs: isCampaign ? 48_000 : 15_000,
+        budgetMs: isCampaign ? campaignBudget : 15_000,
         seedConcurrency: isCampaign ? 12 : 8,
       });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
