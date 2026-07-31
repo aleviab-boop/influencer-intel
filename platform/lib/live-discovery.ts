@@ -231,7 +231,13 @@ async function fetchProfile(
     }
     return null; // 404 / other → skip this handle
   } catch {
-    return null; // network error / abort / non-JSON login wall
+    // igFetch THREW: the relay/tunnel is unreachable (laptop off) or the request
+    // aborted/timed out. That's the "free path is blocked" case the paid net was
+    // built for — the fallback would be dead weight if it only fired on a live
+    // relay's 401. A genuine 404 / empty-200 is a *returned* status (handled
+    // above), never a throw, so we still never pay to disprove a hallucination.
+    if (allowApify) return await apifyProfileAsRawUser(username);
+    return null; // graph-expansion crawl: free-only, skip on error
   } finally {
     clearTimeout(timer);
   }
