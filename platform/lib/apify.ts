@@ -147,33 +147,70 @@ export async function apifyProfileOrNull(rawHandle: string): Promise<ScrapedProf
   }
 }
 
-// Enrich MANY profiles in ONE actor run. The profile scraper accepts an array of
-// usernames and returns them all in a single dataset — so a campaign page of ~24
-// seeds costs one run (one cold-start, one billed run) instead of 24. This is the
-// throughput fix for the search path: per-profile runs each take 20–60s, so
-// enriching seeds one-at-a-time never filled a page within the request budget.
+const cleanHandle = (h: string): string =>
+  h.trim().replace(/^@/, '').replace(/\/.*$/, '').toLowerCase();
+
+// FAST enrichment path: apify~instagram-api-scraper hits Instagram's private API
+// directly (no headless browser), so it skips the ~20–30s Chrome cold-start the
+// profile scraper pays. Same canonical IG output field names (followersCount,
+// latestPosts, …), so toScrapedProfile maps it unchanged. Input differs though:
+// this actor wants profile URLs + resultsType:'details', NOT a usernames array.
+async function apifyProfilesViaApi(handles: string[], timeoutMs: number): Promise<ApifyProfile[]> {
+  const directUrls = handles.map((h) => `https://www.instagram.com/${h}/`);
+  return runActor<ApifyProfile>(
+    'apify~instagram-api-scraper',
+    { directUrls, resultsType: 'details', resultsLimit: 12 },
+    timeoutMs,
+  );
+}
+
+// Enrich MANY profiles in ONE actor run. A campaign page of ~24 seeds resolves in
+// a single billed run (one dataset) instead of 24 — the throughput fix for search,
+// since per-profile runs each take 20–60s and never filled a page in the budget.
+//
+// Two-tier for speed + safety:
+//   1) apify~instagram-api-scraper (API-based, no browser cold-start, cheaper).
+//      We only trust a result that carries real follower data, so a schema/field
+//      surprise degrades to the fallback instead of returning zero-stat profiles.
+//   2) apify~instagram-profile-scraper (proven browser actor) for whatever the
+//      fast path missed. On the happy path #2 never runs, so cost = one cheap run.
 // Returns handle→ScrapedProfile for whatever resolved; missing handles are absent.
 export async function apifyProfilesBatch(rawHandles: string[]): Promise<Map<string, ScrapedProfile>> {
   const out = new Map<string, ScrapedProfile>();
   if (!APIFY_TOKEN) return out;
-  const handles = Array.from(
-    new Set(rawHandles.map((h) => h.trim().replace(/^@/, '').replace(/\/.*$/, '').toLowerCase()).filter(Boolean)),
-  );
+  const handles = Array.from(new Set(rawHandles.map(cleanHandle).filter(Boolean)));
   if (handles.length === 0) return out;
-  let items: ApifyProfile[];
+
+  // 1) Fast path — API-based actor.
   try {
-    items = await runActor<ApifyProfile>(
-      'apify~instagram-profile-scraper',
-      { usernames: handles, resultsLimit: handles.length },
-      120_000, // a big batch legitimately takes longer than a single profile
-    );
+    const items = await apifyProfilesViaApi(handles, 90_000);
+    for (const u of items) {
+      const h = u?.username?.trim().toLowerCase();
+      if (!h) continue;
+      if (num(u.followersCount) <= 0) continue; // no follower data → let #2 retry it
+      out.set(h, toScrapedProfile(u, h));
+    }
   } catch {
-    return out; // no token / blocked / timeout → caller falls back to stubs
+    /* no token / blocked / timeout / schema mismatch → fall through to browser actor */
   }
-  for (const u of items) {
-    const h = u?.username?.trim().toLowerCase();
-    if (!h) continue;
-    out.set(h, toScrapedProfile(u, h));
+
+  // 2) Fallback — browser actor for whatever the fast path didn't resolve.
+  const missing = handles.filter((h) => !out.has(h));
+  if (missing.length > 0) {
+    try {
+      const items = await runActor<ApifyProfile>(
+        'apify~instagram-profile-scraper',
+        { usernames: missing, resultsLimit: missing.length },
+        120_000, // a big batch legitimately takes longer than a single profile
+      );
+      for (const u of items) {
+        const h = u?.username?.trim().toLowerCase();
+        if (!h) continue;
+        out.set(h, toScrapedProfile(u, h));
+      }
+    } catch {
+      /* no token / blocked / timeout → caller falls back to stubs */
+    }
   }
   return out;
 }
