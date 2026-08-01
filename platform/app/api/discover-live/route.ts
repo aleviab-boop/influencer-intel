@@ -7,6 +7,7 @@ import {
   resolveTopicToSeeds,
   resolveHashtagToSeeds,
   isCampaignPrompt,
+  campaignKey,
   profilesFromHandles,
   tokenize,
   classifyPrompt,
@@ -113,6 +114,7 @@ export async function POST(req: NextRequest) {
   const max = clampInt(body?.max, 5, 80, 40);
   const tokens = tokenize(prompt);
   const mode = body?.mode === 'db' ? 'db' : 'live';
+  const isCampaign = isCampaignPrompt(prompt);
 
   // DIRECT-HANDLE LOOKUP. Rule: a prompt that starts with '@' names an exact
   // Instagram account, not a niche. We turn it into a crawl seed so the live
@@ -227,13 +229,20 @@ export async function POST(req: NextRequest) {
     // fashion creators from the DB that AREN'T from Guwahati, so a pure empty
     // check would never fire. We instead crawl the first time the exact prompt is
     // searched, to pull genuinely local, on-target creators.
-    searchedBefore = await promptSearchedBefore(prompt);
+    // A campaign brief is identified by its canonical key, so any re-wording of
+    // the same brief ("influencers for durga puja campaign" vs "creators for durga
+    // puja campaign") counts as ALREADY searched — and is served from the DB the
+    // second time instead of re-scraping. Non-campaign prompts match exactly.
+    searchedBefore = isCampaign
+      ? await campaignSearchedBefore(prompt)
+      : await promptSearchedBefore(prompt);
     // OpenAI web search + the DB now run on EVERY search (below) — so AI-found
     // creators show even for repeat prompts, and even when the account/relay side
     // is throttled (the OpenAI suggester doesn't depend on IG accounts, so it
     // "never dies"). We only enqueue a deep worker crawl for a genuinely NEW
-    // prompt, so we don't re-crawl — and re-throttle accounts on — a known one.
-    if (!searchedBefore && !handleLookup) workerJobId = await enqueueSearchJob(prompt);
+    // NON-campaign prompt: campaigns fill the DB synchronously via the Apify crawl
+    // below and then cache their key, so they don't need the worker.
+    if (!searchedBefore && !handleLookup && !isCampaign) workerJobId = await enqueueSearchJob(prompt);
     // (no early return — execution continues into the AI + crawl pipelines)
   }
 
@@ -261,6 +270,10 @@ export async function POST(req: NextRequest) {
   // kept as stubs). Only on Lander (db-mode) searches.
   const aiPipeline = (async () => {
     if (mode !== 'db' || handleLookup) return;
+    // Cached campaign: skip the (nondeterministic) OpenAI suggester too, so a
+    // repeat search returns the SAME DB creators every time rather than a slightly
+    // different AI-found set each run.
+    if (isCampaign && searchedBefore) return;
     try {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
@@ -317,13 +330,12 @@ export async function POST(req: NextRequest) {
 
   // Pipeline B — resolve topic seeds (handle-guessing) and crawl their network.
   const crawlPipeline = (async () => {
-    // Live Instagram crawl runs ONLY for a cold prompt. Known prompts get OpenAI
-    // + DB (already crawled once), so we don't burn account budget re-crawling —
-    // "then do scraping, and throttle accounts accordingly." EXCEPTION: a campaign
-    // brief always re-runs the Apify discovery, even on a repeat search — the rule
-    // is "when the 'campaign' word is used, scrape Apify and get results," so we
-    // never silently downgrade a campaign to a DB-only read.
-    if (mode === 'db' && searchedBefore && !handleLookup && !isCampaignPrompt(prompt)) return;
+    // Live Instagram crawl / Apify discovery runs ONLY for a cold prompt (campaign
+    // or otherwise). Once a prompt — or, for a campaign, its canonical key — has
+    // been searched, the creators it found are already in the DB, so a repeat is
+    // served from the DB instead of re-scraping. This is what makes "search durga
+    // puja campaign twice → same results, no second scrape" work.
+    if (mode === 'db' && searchedBefore && !handleLookup) return;
     if (seeds.length === 0 && names.length === 0) {
       // Campaign/brand-brief prompts are pure DISCOVERY intent. The free handle-
       // guessing is slow AND can return junk handles that satisfy seeds.length>0
@@ -364,7 +376,6 @@ export async function POST(req: NextRequest) {
       // Apify — which is slower per profile. Give campaigns a bigger budget, a
       // higher ceiling, and wide seed concurrency so many profiles hydrate in
       // parallel within that budget. Non-campaign prompts stay lean/cheap.
-      const isCampaign = isCampaignPrompt(prompt);
       // Enrichment gets whatever remains until a 53s wall-clock deadline (leaving
       // ~7s for DB topup + serialization under the 60s ceiling). Because phase 1
       // (hashtag discovery) already consumed part of the window, subtracting the
@@ -537,6 +548,16 @@ export async function POST(req: NextRequest) {
     { region: cls.region, niche, tags, placeTokens, nicheKeywords: nicheGate },
   );
 
+  // Cache this campaign's canonical key so a re-worded repeat serves the SAME
+  // creators from the DB next time instead of re-scraping. Only mark it AFTER we
+  // actually surfaced a page for it, so a run that flopped (nothing found) isn't
+  // cached — the next attempt is then free to scrape again. Awaited (not fire-
+  // and-forget) so the marker is durably written before the serverless function
+  // returns and the runtime can freeze.
+  if (isCampaign && !searchedBefore && results.length > 0) {
+    await markCampaignSearched(prompt);
+  }
+
   // OpenAI-found accounts we couldn't confirm this run (0 followers / unverified
   // stubs) are excluded from `results` — but instead of dropping them from view,
   // return them as `enriching` so the UI can show a "Found — enriching…" section.
@@ -590,6 +611,53 @@ async function promptSearchedBefore(prompt: string): Promise<boolean> {
     return rows.length > 0;
   } catch {
     return true;
+  }
+}
+
+// Campaign cache markers are stored as inert (status='completed') search_query
+// rows whose target_handle is the canonical campaign key behind this prefix — so
+// they never collide with real prompt rows and the deep worker (which only picks
+// up queued jobs) ignores them.
+const CAMPAIGN_CACHE_PREFIX = 'campaign:';
+
+// Campaign counterpart of promptSearchedBefore: has this brief's canonical key
+// been searched (and its creators persisted) before? Matches any re-wording of
+// the same brief. Fails SAFE (true) on a DB error so a hiccup never triggers a
+// re-scrape storm. Empty key (no subject words) → treat as not-searched.
+async function campaignSearchedBefore(prompt: string): Promise<boolean> {
+  const key = campaignKey(prompt);
+  if (!key) return false;
+  try {
+    const rows = await getBolticClient().query<{ one: number }>(
+      `SELECT 1 AS one FROM scrape_jobs
+        WHERE job_type = 'search_query'
+          AND lower(trim(target_handle)) = $1
+        LIMIT 1`,
+      [CAMPAIGN_CACHE_PREFIX + key],
+    );
+    return rows.length > 0;
+  } catch {
+    return true;
+  }
+}
+
+// Record that a campaign's canonical key has been searched + persisted, so the
+// next re-wording of the same brief is served from the DB. Best-effort.
+async function markCampaignSearched(prompt: string): Promise<void> {
+  const key = campaignKey(prompt);
+  if (!key) return;
+  try {
+    await getBolticClient().insert('scrape_jobs', {
+      job_type: 'search_query',
+      target_platform: 'instagram',
+      target_handle: CAMPAIGN_CACHE_PREFIX + key,
+      priority: 5,
+      status: 'completed', // inert marker — the worker only crawls queued jobs
+      attempts: 0,
+      queued_at: new Date().toISOString(),
+    });
+  } catch {
+    /* best-effort marker */
   }
 }
 

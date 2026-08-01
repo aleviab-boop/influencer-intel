@@ -532,6 +532,20 @@ export function isCampaignPrompt(prompt: string): boolean {
   return CAMPAIGN_INTENT.test(prompt);
 }
 
+// Canonical identity for a campaign brief: the meaningful SUBJECT tokens, with
+// filler stripped (stopwords like "influencers"/"creators"/"for" drop in
+// tokenize; campaign jargon and suffix words drop here) and sorted so word order
+// doesn't matter. So "influencers for durga puja campaign" and "creators for
+// durga puja campaign" both reduce to "durga puja" — the SAME search. The API
+// uses this to serve the same cached DB results on a repeat instead of
+// re-scraping every time. Empty string when a prompt has no subject words.
+export function campaignKey(prompt: string): string {
+  return tokenize(prompt)
+    .filter((t) => !CAMPAIGN_FILLER.has(t) && !SUFFIX_WORDS.has(t))
+    .sort()
+    .join(' ');
+}
+
 // Generic brand-collaboration signal — the PUBLIC fingerprint a creator leaves
 // when they've done paid brand work, identical across every niche (no per-brand
 // list needed). Instagram/ASCI disclosure rules mean real collabs carry one of
