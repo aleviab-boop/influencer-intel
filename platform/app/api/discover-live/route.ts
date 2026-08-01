@@ -319,8 +319,11 @@ export async function POST(req: NextRequest) {
   const crawlPipeline = (async () => {
     // Live Instagram crawl runs ONLY for a cold prompt. Known prompts get OpenAI
     // + DB (already crawled once), so we don't burn account budget re-crawling —
-    // "then do scraping, and throttle accounts accordingly."
-    if (mode === 'db' && searchedBefore && !handleLookup) return;
+    // "then do scraping, and throttle accounts accordingly." EXCEPTION: a campaign
+    // brief always re-runs the Apify discovery, even on a repeat search — the rule
+    // is "when the 'campaign' word is used, scrape Apify and get results," so we
+    // never silently downgrade a campaign to a DB-only read.
+    if (mode === 'db' && searchedBefore && !handleLookup && !isCampaignPrompt(prompt)) return;
     if (seeds.length === 0 && names.length === 0) {
       // Campaign/brand-brief prompts are pure DISCOVERY intent. The free handle-
       // guessing is slow AND can return junk handles that satisfy seeds.length>0
@@ -368,7 +371,7 @@ export async function POST(req: NextRequest) {
       // elapsed time is what stops the two Apify phases from together tripping the
       // 504 we hit with a fixed budget. Floored so the batch always gets a usable
       // slice. Normal prompts stay lean and free-path-dominated.
-      const campaignBudget = Math.max(20_000, 44_000 - (Date.now() - t0));
+      const campaignBudget = Math.max(24_000, 50_000 - (Date.now() - t0));
       const run = await liveDiscover(prompt, uniqueSeeds, {
         depth,
         max: isCampaign ? Math.max(max, 24) : max,
@@ -387,7 +390,7 @@ export async function POST(req: NextRequest) {
   // 54s — whatever enrichment finished by then is used; anything still in flight
   // is dropped (its seeds were already persisted, so they surface on the next
   // search). This turns a worst-case 504 into a graceful, partial 200.
-  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 50_000, null);
+  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 53_000, null);
 
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
@@ -710,7 +713,7 @@ async function persist(
   let ok = 0;
   try {
     const db = getBolticClient();
-    for (const p of results) {
+    const persistOne = async (p: LiveProfile): Promise<void> => {
       try {
         let id: string | undefined;
         const cscore = completenessScore(p); // 0–10, stored so it's queryable/sortable
@@ -807,7 +810,17 @@ async function persist(
       } catch {
         /* skip a single bad row, keep going */
       }
-    }
+    };
+    // Bounded concurrency: ~24 sequential upserts (each an upsert + a tag UPDATE)
+    // added several seconds to the request tail, which — right after a full
+    // campaign enrichment — risked tripping the 60s ceiling. A small pool cuts
+    // that time without hammering the DB.
+    const CONCURRENCY = 6;
+    let cursor = 0;
+    const worker = async (): Promise<void> => {
+      while (cursor < results.length) await persistOne(results[cursor++]!);
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, results.length) }, worker));
   } catch {
     /* DB unreachable — live results still returned to the user */
   }
