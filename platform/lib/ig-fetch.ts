@@ -178,8 +178,13 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
   if (SESSIONID) candidates.push(null); // env fallback
   if (candidates.length === 0) candidates.push(null); // no auth configured → plain fetch
 
-  // Cap failover attempts so a fully-dead pool doesn't fan out into many IG hits.
-  const maxTries = Math.min(candidates.length, 3);
+  // Cap failover attempts so a fully-dead pool doesn't fan out into many IG hits,
+  // but keep the cap at least as large as a small pool so a request always reaches
+  // the one healthy cookie even when most of the pool is transiently throttled
+  // (a burst of fetches can 401 several accounts at once; capping at 3 would then
+  // miss the lone survivor and degrade to the DB fallback). Healthy cookies short-
+  // circuit on the first JSON 200, so the extra tries only happen while throttled.
+  const maxTries = Math.min(candidates.length, 6);
   let res!: Response;
   for (let i = 0; i < maxTries; i++) {
     res = await sendOnce(url, init, withAuth(baseHeaders, candidates[i]!), relay);
