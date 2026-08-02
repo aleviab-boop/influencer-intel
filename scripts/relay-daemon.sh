@@ -39,7 +39,7 @@ cloudflared tunnel --protocol http2 --url http://localhost:8787 2>&1 | while IFS
   echo "$line"
   case "$line" in
     *trycloudflare.com*)
-      url=$(echo "$line" | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)
+      url=$(echo "$line" | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | grep -v '://api\.' | head -1)
       if [ -n "$url" ]; then
         echo "$url" > /tmp/ig-tunnel-url.txt
         # Write the fresh URL to the DB so the deployed platform picks it up

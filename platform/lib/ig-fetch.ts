@@ -187,8 +187,18 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
     // (429): a 429 means THAT session is rate-limited, so retrying with a
     // different, un-throttled account recovers the request instead of returning
     // 429. The retry uses a DIFFERENT account, so it never adds load to the
-    // throttled one. Any other status (200, 404, 5xx) → stop.
-    if (res.status !== 401 && res.status !== 403 && res.status !== 429) break;
+    // throttled one.
+    //
+    // ALSO fail over on a 200 that returns HTML: a checkpointed/logged-out cookie
+    // doesn't get a 401 — IG serves its login page with HTTP 200 text/html. The
+    // status code alone can't catch it, so without this check igFetch would stop
+    // on that un-parseable 200 and the whole request silently degrades to the DB
+    // fallback (dp + posts go missing) even though a HEALTHY cookie sits next in
+    // the pool. Every igFetch caller expects JSON, so an HTML 200 is always a
+    // failed auth we should retry past. Any real result (JSON 200, 404, 5xx) → stop.
+    const ct = res.headers.get('content-type') ?? '';
+    const htmlWall = res.status === 200 && ct.includes('text/html');
+    if (res.status !== 401 && res.status !== 403 && res.status !== 429 && !htmlWall) break;
   }
   return res;
 }

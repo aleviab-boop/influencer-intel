@@ -328,7 +328,7 @@ async function dbProfile(handle: string) {
     const code = (p.code as string) ?? '';
     return {
       shortcode: code,
-      thumbnail: thumbByCode.get(code) ?? null,
+      thumbnail: (typeof p.thumbnail === 'string' && p.thumbnail) ? p.thumbnail : (thumbByCode.get(code) ?? null),
       likes: typeof p.likes === 'number' ? p.likes : 0,
       comments: typeof p.comments === 'number' ? p.comments : 0,
       is_video: p.media_type === 'video',
@@ -465,6 +465,7 @@ export async function GET(req: NextRequest) {
     // persist for the Lander's DB search + drawer warmth (best-effort)
     const geoPosts = recent.map((p) => ({
       code: p.shortcode,
+      thumbnail: p.thumbnail,
       likes: p.likes,
       comments: p.comments,
       media_type: p.is_video ? 'video' : 'image',

@@ -45,7 +45,7 @@ exec caffeinate -i bash -c '
     CF_PID=$!
     TUNNEL_URL=""
     for _ in $(seq 1 30); do
-      TUNNEL_URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" /tmp/ig-cf.log | head -1)
+      TUNNEL_URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" /tmp/ig-cf.log | grep -v "://api\." | head -1)
       [ -n "$TUNNEL_URL" ] && break
       sleep 1
     done
@@ -71,7 +71,7 @@ exec caffeinate -i bash -c '
 
     # Catch a late URL if cloudflared was slow to print its banner.
     if [ -z "$TUNNEL_URL" ] && kill -0 "$CF_PID" 2>/dev/null; then
-      TUNNEL_URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" /tmp/ig-cf.log | head -1)
+      TUNNEL_URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" /tmp/ig-cf.log | grep -v "://api\." | head -1)
       if [ -n "$TUNNEL_URL" ]; then
         echo "$TUNNEL_URL" > /tmp/ig-tunnel-url.txt
         node scripts/set-relay-url.mjs "$TUNNEL_URL" >> /tmp/relay-url-write.log 2>&1
