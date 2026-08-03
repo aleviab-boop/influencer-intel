@@ -14,6 +14,7 @@ import {
   classifyPrompt,
   inferNiche,
   isLocationToken,
+  expandStateTokens,
   nicheKeywords,
   hasNicheEvidence,
   looksLikeBusinessAccount,
@@ -608,7 +609,7 @@ export async function POST(req: NextRequest) {
   const tags = Array.from(new Set([...cls.tags, ...(niche ? [niche] : [])]));
   // Location tokens in this search — used by persist() to gate region/location
   // tagging so only creators actually from the place get stamped with it.
-  const placeTokens = cls.tags.filter((t) => isLocationToken(t));
+  const placeTokens = expandStateTokens(cls.tags).filter((t) => isLocationToken(t));
   // Persist EVERY creator surfaced by the search — AI-found (verified AND
   // unverified), plus crawled — so the DB keeps building in the background. The
   // unverified ones (IG was throttled/timed out, so we couldn't confirm them
@@ -799,10 +800,16 @@ function extractPlace(prompt: string, tokens: string[]): string | null {
 // word appearing in the profile text. Lets the UI warn "no locals found, showing
 // the broader niche" when a location search has zero true-local results.
 function countLocals(results: LiveProfile[], place: string): number {
-  const wb = new RegExp(`(^|[^a-z])${place}([^a-z]|$)`);
-  return results.filter(
-    (r) => r.loc_match || wb.test(`${r.username} ${r.full_name} ${r.biography} ${r.category}`.toLowerCase()),
-  ).length;
+  // A state query ("kerala") is local if the profile mentions the state OR any of
+  // its cities (kochi, trivandrum, …) — so state-level searches count their
+  // city-level creators as genuine locals.
+  const words = [place, ...(STATE_CITIES[place.toLowerCase()] ?? [])];
+  const wbs = words.map((w) => new RegExp(`(^|[^a-z])${w}([^a-z]|$)`));
+  return results.filter((r) => {
+    if (r.loc_match) return true;
+    const text = `${r.username} ${r.full_name} ${r.biography} ${r.category}`.toLowerCase();
+    return wbs.some((re) => re.test(text));
+  }).length;
 }
 
 // For a location query ("...in pondicherry"), flag loc_match on any result whose
@@ -811,7 +818,10 @@ function countLocals(results: LiveProfile[], place: string): number {
 // mega-account. Callers sort loc_match first, so this just guarantees the flag is
 // set consistently across DB + live results. No-op for queries without a place.
 function flagLocals(list: LiveProfile[], tokens: string[]): LiveProfile[] {
-  const locTokens = tokens.filter((t) => isLocationToken(t));
+  // Expand any state token ("kerala") into its cities so a Kochi/Trivandrum
+  // creator gets flagged local on a state-level search, not just an exact
+  // "kerala" text match.
+  const locTokens = expandStateTokens(tokens).filter((t) => isLocationToken(t));
   if (locTokens.length === 0) return list;
   const wb = (t: string) => new RegExp(`(^|[^a-z])${t}([^a-z]|$)`);
   for (const p of list) {
