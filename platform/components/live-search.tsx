@@ -70,6 +70,29 @@ interface ProfileData {
   collabs?: { handle: string; count: number }[];
   sponsored_posts?: number;
   engagement?: number | null;
+  analytics?: {
+    authenticity: {
+      score: number;
+      label: 'authentic' | 'mostly authentic' | 'questionable' | 'high risk' | 'unknown';
+      flags: string[];
+      er: number | null;
+      comment_ratio: number | null;
+    };
+    posting: {
+      posts_per_week: number | null;
+      cadence_label: string;
+      consistency: number | null;
+      most_active_day: string | null;
+      video_share: number | null;
+      span_days: number | null;
+    };
+    hashtags: { tag: string; count: number }[];
+    campaign_fit: {
+      score: number;
+      grade: 'A' | 'B' | 'C' | 'D';
+      breakdown: { niche: number; engagement: number; reach: number; authenticity: number };
+    };
+  };
   source?: 'db' | 'live' | 'db_cached' | 'pending';
   refreshing?: boolean;
   last_scraped_at?: string | null;
@@ -2893,6 +2916,11 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
       {/* analytics + media — masonry so cards fill the space evenly instead of
           leaving a tall column beside short ones */}
       <div className="min-w-0 lg:columns-2 [column-gap:1rem]">
+        {profile.analytics && (
+          <div className="break-inside-avoid mb-4">
+            <CampaignFitCard profile={profile} />
+          </div>
+        )}
         <div className="break-inside-avoid mb-4">
           <BrandFitCard profile={profile} engagement={engagement} blacklistHits={blacklistHits} initialBrief={initialBrief} />
         </div>
@@ -3011,6 +3039,112 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
 // Authenticity score, explained: a ring for the headline number, a labelled bar
 // + plain-English reason per factor, and a per-post engagement chart so the
 // score is backed by visible evidence rather than a bare number.
+// Campaign-fit card: the headline "should I book them" number, computed server-
+// side from the raw posts (no OpenAI guesswork, no extra Apify cost). Bundles the
+// fit grade + factor breakdown, the fake-engagement verdict with its flags, the
+// posting cadence, and the top hashtags — the four analytics we compute
+// deterministically. Renders nothing for older cached responses without the block.
+function CampaignFitCard({ profile }: { profile: ProfileData }) {
+  const a = profile.analytics;
+  if (!a) return null;
+  const { campaign_fit: fit, authenticity: auth, posting, hashtags } = a;
+
+  const gradeColor =
+    fit.grade === 'A' ? '#059669' : fit.grade === 'B' ? '#6C4DF6' : fit.grade === 'C' ? '#b45309' : '#dc2626';
+  const authColor =
+    auth.label === 'authentic' ? '#059669'
+    : auth.label === 'mostly authentic' ? '#6C4DF6'
+    : auth.label === 'questionable' ? '#b45309'
+    : auth.label === 'high risk' ? '#dc2626' : '#999';
+  const barColor = (v: number) => (v >= 70 ? '#10b981' : v >= 45 ? '#f59e0b' : '#ef4444');
+
+  const factors: [string, number][] = [
+    ['Niche fit', fit.breakdown.niche],
+    ['Engagement', fit.breakdown.engagement],
+    ['Reach', fit.breakdown.reach],
+    ['Authenticity', fit.breakdown.authenticity],
+  ];
+
+  return (
+    <div className="rounded-2xl border border-[#e3def9] bg-gradient-to-br from-[#faf9ff] to-white p-4" style={{ animation: 'ii-fadeup .4s .08s both' }}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-3">Campaign fit score</div>
+
+      <div className="flex items-center gap-4">
+        <div className="shrink-0 w-16 h-16 rounded-2xl grid place-items-center text-white" style={{ background: `linear-gradient(135deg, ${gradeColor}, ${gradeColor}cc)` }}>
+          <div className="text-center leading-none">
+            <div className="text-[26px] font-black">{fit.grade}</div>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[22px] font-black tabular-nums text-[#111] leading-none">{fit.score}<span className="text-[13px] font-semibold text-[#999]">/100</span></div>
+          <p className="mt-1 text-[12px] text-[#666] leading-snug">
+            {fit.score >= 80 ? 'Strong fit — book with confidence.'
+             : fit.score >= 65 ? 'Good fit — worth reaching out.'
+             : fit.score >= 45 ? 'Mixed fit — check the breakdown.'
+             : 'Weak fit for a paid campaign.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3.5 space-y-2.5">
+        {factors.map(([label, v]) => (
+          <div key={label}>
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-[#444] font-medium">{label}</span>
+              <span className="tabular-nums font-semibold text-[#555]">{v}</span>
+            </div>
+            <div className="mt-1 h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: barColor(v) }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* fake-engagement verdict */}
+      <div className="mt-4 rounded-xl border border-[#eee] bg-white p-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[#999]">Engagement authenticity</span>
+          <span className="text-[12px] font-bold capitalize" style={{ color: authColor }}>
+            {auth.label === 'unknown' ? '—' : auth.label}{auth.score > 0 ? ` · ${auth.score}` : ''}
+          </span>
+        </div>
+        <ul className="space-y-1">
+          {auth.flags.map((f, i) => (
+            <li key={i} className="text-[11.5px] text-[#666] leading-snug flex gap-1.5">
+              <span className="shrink-0" style={{ color: auth.score >= 60 ? '#10b981' : '#f59e0b' }}>{auth.score >= 60 ? '✓' : '⚠'}</span>
+              <span>{f}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* posting behaviour */}
+      {posting.posts_per_week != null && (
+        <div className="mt-3 flex flex-wrap gap-1.5 text-[11.5px]">
+          <span className="px-2.5 py-1 rounded-full bg-[#f6f4ff] border border-[#e3def9] text-[#555]">📅 {posting.cadence_label}</span>
+          {posting.most_active_day && <span className="px-2.5 py-1 rounded-full bg-[#f6f4ff] border border-[#e3def9] text-[#555]">Most active {posting.most_active_day}</span>}
+          {posting.consistency != null && <span className="px-2.5 py-1 rounded-full bg-[#f6f4ff] border border-[#e3def9] text-[#555]">{posting.consistency}% consistent</span>}
+          {posting.video_share != null && posting.video_share > 0 && <span className="px-2.5 py-1 rounded-full bg-[#f6f4ff] border border-[#e3def9] text-[#555]">{posting.video_share}% video</span>}
+        </div>
+      )}
+
+      {/* top hashtags */}
+      {hashtags.length > 0 && (
+        <div className="mt-3">
+          <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Top hashtags</div>
+          <div className="flex flex-wrap gap-1.5">
+            {hashtags.slice(0, 10).map((h) => (
+              <span key={h.tag} className="px-2 py-0.5 rounded-full text-[11.5px] font-medium border border-[#e3def9] bg-white text-[#6C4DF6]">
+                #{h.tag}{h.count > 1 ? ` ·${h.count}` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AuthenticityCard({ profile, engagement }: { profile: ProfileData; engagement: number | null }) {
   const report = authenticityReport(profile, engagement);
   if (!report) {

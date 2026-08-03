@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { extractContact } from '@/lib/live-discovery';
+import {
+  toPostSample,
+  analyzeAuthenticity,
+  analyzePosting,
+  topHashtags,
+  campaignFit,
+} from '@/lib/creator-analytics';
 import { igFetch } from '@/lib/ig-fetch';
 import { apifyProfileOrNull } from '@/lib/apify';
 import type { ScrapedProfile } from '@/lib/instagram-scraper';
@@ -143,6 +150,28 @@ interface RecentPost {
   is_video: boolean;
   taken_at: number | null;
   caption: string;
+}
+
+// Compute the deterministic analytics block the drawer renders — authenticity /
+// fake-engagement, posting behaviour, top hashtags and a campaign-fit score — all
+// from the raw recent posts we already fetched. Shared by the DB, live and Apify
+// response paths so every drawer shows the same panels. nicheMatch is null here
+// (a per-profile view has no brief), so campaign fit weights ER + reach +
+// authenticity and treats niche as neutral.
+function buildAnalytics(followers: number, recent: RecentPost[]) {
+  const samples = recent.map(toPostSample);
+  const authenticity = analyzeAuthenticity(followers, samples);
+  return {
+    authenticity,
+    posting: analyzePosting(samples),
+    hashtags: topHashtags(samples),
+    campaign_fit: campaignFit({
+      followers,
+      er: authenticity.er,
+      nicheMatch: null,
+      authenticityScore: authenticity.score,
+    }),
+  };
 }
 
 interface FeedItem {
@@ -384,6 +413,7 @@ async function dbProfile(handle: string) {
     collabs,
     sponsored_posts: sponsored,
     engagement: er,
+    analytics: buildAnalytics(followers, recent),
     source: 'db',
     last_scraped_at: (c.last_scraped_at as string) ?? null,
     refreshing: false,
@@ -445,6 +475,7 @@ async function apifyDrawerResponse(handle: string, sp: ScrapedProfile): Promise<
     collabs,
     sponsored_posts: 0,
     engagement: er,
+    analytics: buildAnalytics(sp.follower_count, recent),
     source: 'live',
     last_scraped_at: new Date().toISOString(),
     refreshing: false,
@@ -625,6 +656,7 @@ export async function GET(req: NextRequest) {
       collabs,
       sponsored_posts: 0,
       engagement: er,
+      analytics: buildAnalytics(followers, recent),
       source: 'live',
       last_scraped_at: new Date().toISOString(),
       refreshing: false,
