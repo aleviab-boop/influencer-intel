@@ -9,15 +9,68 @@
 //                          shape fetchInstagramProfile returns (drop-in).
 //   apifyHashtag(tag)    → discovery: fresh handles posting under a hashtag.
 //
-// Actors used (both free to add on Apify, billed per result on run):
-//   apify/instagram-profile-scraper  (~$2.30 / 1k profiles)
-//   apify/instagram-hashtag-scraper  (compute-unit billed)
+// Actors (all free to add on Apify, billed per result on run):
+//   apify/instagram-api-scraper      (~$0.50 / 1k)  ← DEFAULT: profiles + posts
+//   apify/instagram-profile-scraper  (~$1.60 / 1k)  ← classic fallback (usernames)
+//   apify/instagram-hashtag-scraper  (~$1.90 / 1k)  ← classic hashtag fallback
+//
+// The unified `instagram-api-scraper` is ~3–4× cheaper and returns the SAME JSON
+// field names as the classic actors (verified against live runs), so it drops in
+// with no mapper changes — it only takes a different INPUT (directUrls +
+// resultsType, instead of usernames / hashtags). We default to it and keep the
+// classic actors one env-flag away: set APIFY_CHEAP_ACTOR=0 to revert instantly.
 // ============================================================
 
 import type { ScrapedProfile, ScrapedPost } from './instagram-scraper';
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN?.trim();
 const BASE = 'https://api.apify.com/v2/acts';
+
+// Actor slugs (~ is Apify's owner/name separator in the API path).
+const API_ACTOR = 'apify~instagram-api-scraper'; // cheap, unified: profiles + posts
+const PROFILE_ACTOR = 'apify~instagram-profile-scraper'; // classic profiles (usernames)
+const HASHTAG_ACTOR = 'apify~instagram-hashtag-scraper'; // classic hashtag discovery
+
+// Route through the cheap unified actor by default. Flip APIFY_CHEAP_ACTOR=0 to
+// fall back to the classic profile/hashtag actors (same output, higher cost).
+const USE_CHEAP_ACTOR = process.env.APIFY_CHEAP_ACTOR !== '0';
+
+const igProfileUrl = (h: string) => `https://www.instagram.com/${h}/`;
+const igTagUrl = (t: string) => `https://www.instagram.com/explore/tags/${t}/`;
+
+// Fetch profile JSON for one or many handles, from whichever actor is active.
+// Cheap actor: directUrls + resultsType 'details'. Classic: usernames. Both
+// return the ApifyProfile shape toScrapedProfile expects.
+async function runProfileActor(handles: string[], timeoutMs: number): Promise<ApifyProfile[]> {
+  if (USE_CHEAP_ACTOR) {
+    return runActor<ApifyProfile>(
+      API_ACTOR,
+      { directUrls: handles.map(igProfileUrl), resultsType: 'details', resultsLimit: 1 },
+      timeoutMs,
+    );
+  }
+  return runActor<ApifyProfile>(
+    PROFILE_ACTOR,
+    { usernames: handles, resultsLimit: handles.length },
+    timeoutMs,
+  );
+}
+
+// Fetch recent posts under a hashtag, from whichever actor is active. Cheap
+// actor: the tag's /explore/tags/ URL + resultsType 'posts'. Classic: hashtags[].
+// Both return the ApifyHashtagItem shape (ownerUsername/ownerFullName/url/caption);
+// the cheap actor omits ownerFollowersCount (fine — follower sort degrades to the
+// collab signal, and reach is filled at enrichment).
+async function runHashtagActor(tag: string, limit: number): Promise<ApifyHashtagItem[]> {
+  if (USE_CHEAP_ACTOR) {
+    return runActor<ApifyHashtagItem>(API_ACTOR, {
+      directUrls: [igTagUrl(tag)],
+      resultsType: 'posts',
+      resultsLimit: limit,
+    });
+  }
+  return runActor<ApifyHashtagItem>(HASHTAG_ACTOR, { hashtags: [tag], resultsLimit: limit });
+}
 
 const num = (v: unknown): number => {
   const x = Number(v);
@@ -129,10 +182,7 @@ function toScrapedProfile(u: ApifyProfile, handle: string): ScrapedProfile {
 export async function apifyProfile(rawHandle: string): Promise<ScrapedProfile> {
   const handle = rawHandle.trim().replace(/^@/, '').replace(/\/.*$/, '');
   if (!handle) throw new Error('handle required');
-  const items = await runActor<ApifyProfile>('apify~instagram-profile-scraper', {
-    usernames: [handle],
-    resultsLimit: 1,
-  });
+  const items = await runProfileActor([handle], 90_000);
   const u = items.find((x) => x?.username) ?? items[0];
   if (!u?.username) throw new Error('not_found');
   return toScrapedProfile(u, handle);
@@ -174,11 +224,8 @@ export async function apifyProfilesBatch(rawHandles: string[]): Promise<Map<stri
   if (handles.length === 0) return out;
   let items: ApifyProfile[];
   try {
-    items = await runActor<ApifyProfile>(
-      'apify~instagram-profile-scraper',
-      { usernames: handles, resultsLimit: handles.length },
-      120_000, // a big batch legitimately takes longer than a single profile
-    );
+    // a big batch legitimately takes longer than a single profile
+    items = await runProfileActor(handles, 120_000);
   } catch {
     return out; // no token / blocked / timeout → caller falls back to stubs
   }
@@ -215,10 +262,7 @@ export async function apifyHashtag(tag: string, limit = 50): Promise<ApifyHashta
   if (!clean) return [];
   let items: ApifyHashtagItem[];
   try {
-    items = await runActor<ApifyHashtagItem>('apify~instagram-hashtag-scraper', {
-      hashtags: [clean],
-      resultsLimit: limit,
-    });
+    items = await runHashtagActor(clean, limit);
   } catch {
     return [];
   }
