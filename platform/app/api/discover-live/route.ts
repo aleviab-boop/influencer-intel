@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
       const handles = await withTimeout(
-        getOpenAIClient().suggestHandlesFromPrompt(prompt, 20).catch(() => [] as string[]),
+        getOpenAIClient().suggestHandlesFromPrompt(prompt, 30).catch(() => [] as string[]),
         18_000,
         [] as string[],
       );
@@ -294,7 +294,7 @@ export async function POST(req: NextRequest) {
       const haveHandles = new Set(dbBacked.map((p) => p.username.toLowerCase()));
       const missing = handles.filter((h) => !haveHandles.has(h.trim().toLowerCase().replace(/^@/, '')));
       let liveValidated = (
-        await profilesFromHandles(missing, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })
+        await profilesFromHandles(missing, tokens, { max: 20, budgetMs: 15_000, delayMs: 200 })
       ).map((p) => ({ ...p, from: 'live' as const }));
 
       // Free path throttled? Any AI handle that came back as a 0-follower STUB is a
