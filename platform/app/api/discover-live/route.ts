@@ -271,10 +271,9 @@ export async function POST(req: NextRequest) {
   // kept as stubs). Only on Lander (db-mode) searches.
   const aiPipeline = (async () => {
     if (mode !== 'db' || handleLookup) return;
-    // Cached campaign: skip the (nondeterministic) OpenAI suggester too, so a
-    // repeat search returns the SAME DB creators every time rather than a slightly
-    // different AI-found set each run.
-    if (isCampaign && searchedBefore) return;
+    // The OpenAI suggester runs on EVERY db-mode search, including repeat
+    // campaigns — the AI-named creators are the headline (ChatGPT-style) result the
+    // user wants, so we never suppress them for caching's sake.
     try {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
@@ -365,21 +364,36 @@ export async function POST(req: NextRequest) {
       // skip the guess and go straight to Apify hashtag discovery (wider coverage:
       // more tags, more posts). Non-campaign prompts keep the free-first behaviour.
       const campaign = isCampaignPrompt(prompt);
-      if (!campaign) {
+      if (campaign) {
+        // OpenAI-FIRST for campaigns. The web-search suggester names REAL Indian
+        // creators for the brief (Komal Pandey, Juhi Godambe, thatbohogirl…) — the
+        // same list ChatGPT returns. Seed the crawl with THEM so the Apify batch
+        // below enriches the right accounts, instead of #denim global thrift shops.
+        // (The bare hashtag path pulled foreign resale/thrift stores and starved
+        // this AI stage under the request ceiling — that's what returned junk.)
+        try {
+          const aiSeeds = await getOpenAIClient()
+            .suggestHandlesFromPrompt(prompt, 20)
+            .catch(() => [] as string[]);
+          for (const h of aiSeeds) {
+            seeds.push(h);
+            autoSeeds.push({ handle: h, followers: 0 });
+          }
+        } catch (err) {
+          console.error('[discover-live] campaign AI seed resolve failed:', err);
+        }
+      } else {
         for (const m of await resolveTopicToSeeds(prompt, { budgetMs: 9_000 })) {
           seeds.push(m.handle);
           autoSeeds.push({ handle: m.handle, followers: m.followers });
         }
       }
-      // Free path found nothing (or was skipped) → PAID Apify hashtag search finds
-      // REAL handles posting under the topic (the login-walled search we can't do
-      // for free). No-op without APIFY_TOKEN. Campaign prompts search more tags /
-      // posts for richer, collab-ranked seeds; normal prompts stay lean.
-      if (seeds.length === 0) {
+      // Still thin → PAID Apify hashtag search as a FALLBACK finds real handles
+      // posting under the topic. Only fires when the AI/free seeds came back few,
+      // so campaigns lead with AI-named creators rather than hashtag noise. No-op
+      // without APIFY_TOKEN.
+      if (seeds.length < 8) {
         try {
-          // Lean hashtag discovery for campaigns: fewer posts/tags so phase 1
-          // finishes fast and leaves the 60s window's bulk to phase 2 (profile
-          // batch). 2 tags x 25 posts still yields 20-40 candidate seeds.
           const hopts = campaign ? { limit: 20, tags: 2, postsPerTag: 25 } : {};
           for (const m of await resolveHashtagToSeeds(prompt, hopts)) {
             seeds.push(m.handle);
@@ -410,7 +424,12 @@ export async function POST(req: NextRequest) {
         max: isCampaign ? Math.max(max, 24) : max,
         budgetMs: isCampaign ? campaignBudget : 15_000,
         seedConcurrency: isCampaign ? 12 : 8,
-        apifyDirect: isCampaign, // campaign → straight to Apify; normal → free-first
+        // Campaign flow is now: OpenAI names the creators (seeds above) → Apify
+        // ENRICHES them with real follower/post data (one batched run). The junk
+        // came from the old HASHTAG seed source (#denim → global thrift shops), NOT
+        // from Apify — so we keep Apify as the enrichment engine, just pointed at
+        // the right, OpenAI-found accounts.
+        apifyDirect: isCampaign,
       });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
     } catch (err) {
@@ -499,7 +518,11 @@ export async function POST(req: NextRequest) {
       nicheGate,
     );
   }
-  const relevant = nicheGate.length > 0 ? merged.filter((p) => p.niche_match || p.curated) : merged;
+  // from_ai creators are exempt: OpenAI already web-searched + relevance-verified
+  // them for THIS brief, so a keyword gate must not drop a real "Fashion" creator
+  // just because their bio doesn't literally contain "denim".
+  const relevant =
+    nicheGate.length > 0 ? merged.filter((p) => p.niche_match || p.curated || p.from_ai) : merged;
   const gated = relevant.length > 0 ? relevant : merged;
 
   const results = gated
