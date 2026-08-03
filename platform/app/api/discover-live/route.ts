@@ -9,6 +9,7 @@ import {
   isCampaignPrompt,
   campaignKey,
   profilesFromHandles,
+  enrichHandlesViaApifyBatch,
   tokenize,
   classifyPrompt,
   inferNiche,
@@ -291,9 +292,30 @@ export async function POST(req: NextRequest) {
       const dbBacked = await dbBackedAiProfiles(handles);
       const haveHandles = new Set(dbBacked.map((p) => p.username.toLowerCase()));
       const missing = handles.filter((h) => !haveHandles.has(h.trim().toLowerCase().replace(/^@/, '')));
-      const liveValidated = (
+      let liveValidated = (
         await profilesFromHandles(missing, tokens, { max: 10, budgetMs: 13_000, delayMs: 300 })
       ).map((p) => ({ ...p, from: 'live' as const }));
+
+      // Free path throttled? Any AI handle that came back as a 0-follower STUB is a
+      // real creator GPT found that we just couldn't confirm live. Batch-enrich the
+      // stubs through ONE Apify run so they show with real numbers instead of being
+      // dropped by the followers>0 display filter — this is what makes a campaign /
+      // cold search return the ChatGPT-style named-creator page. Bounded to a single
+      // paid run; only fires when the free pool is down (no stubs → no Apify spend).
+      const stubHandles = liveValidated.filter((p) => p.unverified).map((p) => p.username);
+      if (stubHandles.length > 0) {
+        try {
+          const enriched = await enrichHandlesViaApifyBatch(stubHandles, tokens, 40_000);
+          if (enriched.length > 0) {
+            const byHandle = new Map(
+              enriched.map((p) => [p.username.toLowerCase(), { ...p, from: 'live' as const }]),
+            );
+            liveValidated = liveValidated.map((p) => byHandle.get(p.username.toLowerCase()) ?? p);
+          }
+        } catch (err) {
+          console.error('[discover-live] AI Apify batch-enrich failed:', err);
+        }
+      }
 
       // Merge, DB-backed first (data-backed + stable), then live finds. Dedupe.
       const merged = new Map<string, LiveProfile>();

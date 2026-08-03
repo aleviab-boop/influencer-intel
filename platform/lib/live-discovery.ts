@@ -905,6 +905,35 @@ export async function profilesFromHandles(
   return out;
 }
 
+// Enrich a set of handles through ONE batched Apify run, mapped to display-ready
+// LiveProfiles. This is the reliability path for OpenAI-suggested creators: the
+// web-search suggester names REAL Indian creators (Komal Pandey, thatbohogirl…),
+// but when the free cookie pool is throttled, per-handle validation returns
+// 0-follower stubs that the results filter drops — so the names GPT found never
+// show. One batch run hydrates them all with real follower/post data in a single
+// cold-start, so a campaign / cold search returns a full, ChatGPT-style page
+// instead of an empty one. No-op (empty) without APIFY_TOKEN.
+export async function enrichHandlesViaApifyBatch(
+  handles: string[],
+  tokens: string[],
+  timeoutMs = 45_000,
+): Promise<LiveProfile[]> {
+  const clean = Array.from(
+    new Set(
+      handles
+        .map((h) => h.trim().toLowerCase().replace(/^@/, ''))
+        .filter((h) => /^[a-z0-9._]{2,30}$/.test(h)),
+    ),
+  );
+  if (clean.length === 0) return [];
+  const users = await apifyProfilesAsRawUsers(clean, timeoutMs);
+  const out: LiveProfile[] = [];
+  for (const user of users.values()) {
+    if (user?.username) out.push({ ...summarize(user, tokens), from_ai: true });
+  }
+  return out;
+}
+
 // A minimal, unverified profile for an AI-suggested handle we couldn't confirm
 // on Instagram right now (session throttled/down). Scored off the handle text
 // so niche/city tokens still rank it. Enriched later when the cookie recovers.
