@@ -304,7 +304,7 @@ export async function POST(req: NextRequest) {
       const stubHandles = liveValidated.filter((p) => p.unverified).map((p) => p.username);
       if (stubHandles.length > 0) {
         try {
-          const enriched = await enrichHandlesViaApifyBatch(stubHandles, tokens, 40_000);
+          const enriched = await enrichHandlesViaApifyBatch(stubHandles, tokens, 22_000);
           if (enriched.length > 0) {
             const byHandle = new Map(
               enriched.map((p) => [p.username.toLowerCase(), { ...p, from: 'live' as const }]),
@@ -357,6 +357,14 @@ export async function POST(req: NextRequest) {
     // served from the DB instead of re-scraping. This is what makes "search durga
     // puja campaign twice → same results, no second scrape" work.
     if (mode === 'db' && searchedBefore && !handleLookup) return;
+    // Campaigns are served ENTIRELY by the AI pipeline (OpenAI names the creators →
+    // validate live → Apify batch-enrich the stubs). Running the heavy apifyDirect
+    // crawl here in parallel too — a second OpenAI suggest PLUS a ~50s Apify batch —
+    // pushed the function past Vercel's 60s kill (the 504). The AI pipeline alone
+    // already returns the ChatGPT-style named-creator page the user wants, so for
+    // campaigns we skip this crawl and let the AI pipeline carry the result. Explicit
+    // @handle lookups still crawl (handleLookup short-circuits the campaign check).
+    if (isCampaign && !handleLookup) return;
     if (seeds.length === 0 && names.length === 0) {
       // Campaign/brand-brief prompts are pure DISCOVERY intent. The free handle-
       // guessing is slow AND can return junk handles that satisfy seeds.length>0
@@ -442,7 +450,7 @@ export async function POST(req: NextRequest) {
   // 54s — whatever enrichment finished by then is used; anything still in flight
   // is dropped (its seeds were already persisted, so they surface on the next
   // search). This turns a worst-case 504 into a graceful, partial 200.
-  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 53_000, null);
+  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 50_000, null);
 
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
