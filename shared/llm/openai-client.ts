@@ -294,6 +294,22 @@ Generate 30-50 candidate Instagram handles.`,
     // plain model guessing from training memory. Search models don't accept
     // temperature / json response_format, so we prompt for JSON and parse
     // leniently (they often reply with prose + citations).
+
+    // FESTIVAL / occasion briefs ("durga puja campaign", "diwali creators") are
+    // ambiguous to the model on their own — it drifts to food or accounts that
+    // merely have the festival's NAME in the handle. Steer it explicitly toward
+    // festive-FASHION / ethnic-wear / lifestyle creators (who a brand actually
+    // hires for a festive campaign), and warn it off name-matches and event pages.
+    const isFestival =
+      /\b(durga\s*puja|durgapujo?|pujo|navratri|navaratri|garba|dandiya|diwali|deepavali|onam|ganesh\s*chaturthi|pongal|holi|raksha\s*bandhan|rakhi|karwa\s*chauth|eid|christmas|festive|festival)\b/i.test(
+        prompt,
+      );
+    const userContent = isFestival
+      ? `${prompt}
+
+This is a FESTIVE / occasion campaign brief. Suggest Indian FASHION, ethnic-wear, styling, beauty and lifestyle creators who post festive OUTFIT / look / celebration content for this occasion (saree & ethnic-wear styling, festive GRWM, traditional-wear hauls, celebration lifestyle). Do NOT suggest: accounts that merely contain the festival's name in their handle, event / community / pandal / temple pages, brands or sarees shops, or people simply named after a deity. Real, currently-active Indian creators only.`
+      : prompt;
+
     const res = await this.client.chat.completions.create({
       model: 'gpt-4o-mini-search-preview',
       web_search_options: { search_context_size: 'medium' },
@@ -309,7 +325,7 @@ Rules:
 - Only real, existing handles you can find via search — never invent or guess.
 Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["username1","username2"]} with at most ${max} handles, no @ prefix.`,
         },
-        { role: 'user', content: prompt },
+        { role: 'user', content: userContent },
       ],
     });
     const content = res.choices[0]?.message?.content ?? '';
