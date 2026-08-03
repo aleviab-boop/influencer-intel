@@ -915,10 +915,24 @@ export async function profilesFromHandles(
   // dropped (the hallucination filter). So "whatever comes up — 10, 15, 20 —"
   // all lands in the DB.
   let validated = 0;
+  // As soon as the free cookie pool signals it's dead/throttled (the first
+  // 401/403/429/timeout), we STOP hammering it handle-by-handle: further handles
+  // are collected and hydrated in ONE batched Apify run at the end. This is both
+  // faster (no per-handle cold-start) and cheaper (one billed run, not N) than the
+  // old per-handle Apify fallback — "cookie dead → switch to Apify" as a mode, not
+  // a per-call retry.
+  let poolBlocked = false;
+  const blocked: string[] = []; // handles the dead pool couldn't verify → batch Apify
   for (const raw of handles) {
     const h = raw.trim().toLowerCase().replace(/^@/, '');
     if (!/^[a-z0-9._]{2,30}$/.test(h) || seen.has(h)) continue;
     seen.add(h);
+    // Once the pool is known-dead, don't spend the free path on the rest — queue
+    // them straight for the batched Apify run below.
+    if (poolBlocked) {
+      blocked.push(h);
+      continue;
+    }
     if (validated >= max || Date.now() - startedAt > budgetMs) {
       out.push(stubProfile(h, tokens)); // over validation budget → keep as stub, don't drop
       continue;
@@ -931,12 +945,23 @@ export async function profilesFromHandles(
     } else if (status === 404 || status === 200) {
       continue; // confirmed not to exist → drop (real hallucination filter)
     } else {
-      // Free path blocked (401/403/429/timeout) → try the paid Apify fallback so a
-      // dead cookie still yields real numbers; only stub if Apify is off/misses.
-      const viaApify = await apifyProfileAsRawUser(h);
+      // Free path blocked (401/403/429/timeout) → the pool is dead/throttled. Flip
+      // to Apify mode: queue THIS handle and route every remaining handle to the
+      // single batched Apify run instead of retrying dead cookies one at a time.
+      poolBlocked = true;
+      blocked.push(h);
+    }
+  }
+  // One batched Apify run for everything the dead pool couldn't verify. Bounded to
+  // `max` so a fully-dead pool can't fan an unbounded paid run; the rest stub out.
+  if (blocked.length > 0) {
+    const toEnrich = blocked.slice(0, max);
+    const hydrated = await apifyProfilesAsRawUsers(toEnrich, budgetMs);
+    for (const h of blocked) {
+      const user = hydrated.get(h);
       out.push(
-        viaApify?.username
-          ? { ...summarize(viaApify, tokens), from_ai: true }
+        user?.username
+          ? { ...summarize(user, tokens), from_ai: true }
           : stubProfile(h, tokens),
       );
     }
