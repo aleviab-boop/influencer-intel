@@ -651,6 +651,35 @@ export function hasNicheEvidence(text: string, keywords: string[]): boolean {
   return strong || ambiguous >= 2;
 }
 
+// Business / brand / shop accounts vs individual CREATORS. A brand searching for a
+// fashion "influencer" wants PEOPLE, but the DB was seeded/scraped with apparel
+// labels, boutiques and saree stores that got tagged "fashion" (Pakeeza Collection,
+// JS Garments Bridal Wear, Happy Moments | Ethnic Wear, ABSTRACT MENS). Those are
+// shops, not creators, and pad the results with non-influencers. This flags them so
+// the discovery page can drop/demote them. Deliberately CONSERVATIVE — matches only
+// strong retail vocabulary in the handle/name, or an explicit shopping/retail
+// category — so a real creator (whose bio merely says "fashion") is never misflagged.
+const BUSINESS_WORDS = [
+  'collection', 'collections', 'garment', 'garments', 'apparel', 'couture',
+  'boutique', 'clothing', 'textile', 'textiles', 'emporium', 'bazaar', 'wholesale',
+  'export', 'exports', 'jeweller', 'jewellers', 'readymade', 'manufacturer',
+  'enterprise', 'enterprises', 'fashions',
+];
+const BUSINESS_NAME_WORDS = /\b(wear|store|mart|shoppe)\b/;
+const BUSINESS_CATEGORY = /(shopping|retail|wholesale|apparel|clothing|boutique|manufacturer|e-?commerce|brand store)/;
+export function looksLikeBusinessAccount(handle: string, name: string, category: string): boolean {
+  const cat = (category || '').toLowerCase();
+  if (BUSINESS_CATEGORY.test(cat)) return true;
+  const nm = ` ${(name || '').toLowerCase()} `;
+  if (BUSINESS_NAME_WORDS.test(nm)) return true;
+  const h = (handle || '').toLowerCase();
+  const idText = ` ${`${h} ${name}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  for (const w of BUSINESS_WORDS) {
+    if (idText.includes(` ${w} `) || h.includes(w)) return true;
+  }
+  return false;
+}
+
 // Split a prompt into a region (known city), a niche (recognised category),
 // and the full token list — used to tag saved creators so they're findable.
 export function classifyPrompt(prompt: string): { region: string | null; niche: string | null; tags: string[] } {

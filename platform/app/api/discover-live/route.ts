@@ -16,6 +16,7 @@ import {
   isLocationToken,
   nicheKeywords,
   hasNicheEvidence,
+  looksLikeBusinessAccount,
   completenessScore,
   extractContact,
   STATE_CITIES,
@@ -452,8 +453,10 @@ export async function POST(req: NextRequest) {
   // search). This turns a worst-case 504 into a graceful, partial 200.
   await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 46_000, null);
 
-  // 2. Database is supplementary — used to top up the live results.
-  const dbMatches = await searchCreatorsInDb(tokens, max);
+  // 2. Database is supplementary — used to top up the live results. Fetch a wider
+  //    slice (2×) so that after dropping apparel shops/brands below we still have
+  //    enough real creators to fill the page.
+  const dbMatches = await searchCreatorsInDb(tokens, max * 2);
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {
@@ -531,7 +534,22 @@ export async function POST(req: NextRequest) {
   // just because their bio doesn't literally contain "denim".
   const relevant =
     nicheGate.length > 0 ? merged.filter((p) => p.niche_match || p.curated || p.from_ai) : merged;
-  const gated = relevant.length > 0 ? relevant : merged;
+  const nicheGated = relevant.length > 0 ? relevant : merged;
+
+  // BRAND / SHOP filter. The DB was seeded with apparel labels, boutiques and saree
+  // stores tagged "fashion" (Pakeeza Collection, JS Garments Bridal Wear, Happy
+  // Moments | Ethnic Wear) — a brand looking for INFLUENCERS shouldn't get a page of
+  // other shops. Drop accounts that look like businesses. Exempt: OpenAI finds
+  // (from_ai — the model already excludes brands) and a direct @handle lookup (the
+  // user asked for that exact account). Safety net: if removing shops would empty
+  // the page (a niche where the DB only has shops), keep the unfiltered set.
+  const notBrand = nicheGated.filter(
+    (p) =>
+      p.from_ai ||
+      (handleLookup && p.username.toLowerCase() === lookupHandle) ||
+      !looksLikeBusinessAccount(p.username, p.full_name, p.category),
+  );
+  const gated = notBrand.length > 0 ? notBrand : nicheGated;
 
   const results = gated
     // Only DISPLAY creators we actually have data for — no un-enriched stubs
