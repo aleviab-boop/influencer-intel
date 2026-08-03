@@ -450,7 +450,7 @@ export async function POST(req: NextRequest) {
   // 54s — whatever enrichment finished by then is used; anything still in flight
   // is dropped (its seeds were already persisted, so they surface on the next
   // search). This turns a worst-case 504 into a graceful, partial 200.
-  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 50_000, null);
+  await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 46_000, null);
 
   // 2. Database is supplementary — used to top up the live results.
   const dbMatches = await searchCreatorsInDb(tokens, max);
