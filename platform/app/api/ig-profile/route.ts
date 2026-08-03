@@ -142,6 +142,14 @@ function captionOf(node: MediaNode): string {
   return node.edge_media_to_caption?.edges?.[0]?.node?.text ?? '';
 }
 
+// Coerce a loosely-typed stored value (number, or a NUMERIC/BIGINT string from
+// pg, or undefined) into a finite number. Post engagement is sometimes persisted
+// as a string, which silently reads as 0 under a `typeof === 'number'` check.
+function coerceNum(v: unknown): number {
+  const x = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(x) ? x : 0;
+}
+
 interface RecentPost {
   shortcode: string;
   thumbnail: string | null;
@@ -360,25 +368,46 @@ async function dbProfile(handle: string) {
     return {
       shortcode: code,
       thumbnail: (typeof p.thumbnail === 'string' && p.thumbnail) ? p.thumbnail : (thumbByCode.get(code) ?? null),
-      likes: typeof p.likes === 'number' ? p.likes : 0,
-      comments: typeof p.comments === 'number' ? p.comments : 0,
+      likes: coerceNum(p.likes),
+      comments: coerceNum(p.comments),
       is_video: p.media_type === 'video',
       taken_at: Number.isFinite(ts) ? ts : null,
       caption: (p.caption_excerpt as string) ?? '',
     };
   });
-  if (recent.length === 0 && gridPosts.length > 0) {
+  // geo.posts can exist but carry no engagement (older/partial writes). If it has
+  // no likes anywhere but recent_posts does, prefer recent_posts so the drawer's
+  // ER + authenticity aren't stuck at zero.
+  const geoHasEngagement = recent.some((p) => p.likes > 0 || p.comments > 0);
+  if ((recent.length === 0 || !geoHasEngagement) && gridPosts.length > 0) {
     recent = gridPosts.map((g) => {
       const url = typeof g.post_url === 'string' ? g.post_url : '';
-      const code = (g.platform_post_id as string) || url.match(/\/(?:p|reel|tv)\/([^/?#]+)/)?.[1] || '';
+      const code =
+        (g.shortcode as string) ||
+        (g.platform_post_id as string) ||
+        url.match(/\/(?:p|reel|tv)\/([^/?#]+)/)?.[1] ||
+        '';
+      // recent_posts is stored in two shapes across historical writes:
+      //   scraper/Apify shape → { like_count, comment_count, post_type, posted_at }
+      //   clean/live shape     → { likes, comments, is_video, taken_at }
+      // Read BOTH so DB-served drawers show real engagement instead of zeros.
+      const likes = coerceNum(g.like_count ?? g.likes);
+      const comments = coerceNum(g.comment_count ?? g.comments);
+      const rawTs = g.taken_at ?? g.posted_at ?? g.timestamp;
+      let ts: number | null = null;
+      if (typeof rawTs === 'number' && Number.isFinite(rawTs)) ts = rawTs;
+      else if (typeof rawTs === 'string' && rawTs) {
+        const parsed = Math.floor(Date.parse(rawTs) / 1000);
+        ts = Number.isFinite(parsed) ? parsed : null;
+      }
       return {
         shortcode: code,
         thumbnail: (g.thumbnail_url as string) || (g.thumbnail as string) || null,
-        likes: typeof g.like_count === 'number' ? g.like_count : 0,
-        comments: typeof g.comment_count === 'number' ? g.comment_count : 0,
-        is_video: g.post_type === 'reel',
-        taken_at: null,
-        caption: (g.caption as string) ?? '',
+        likes,
+        comments,
+        is_video: g.post_type === 'reel' || g.post_type === 'video' || g.is_video === true,
+        taken_at: ts,
+        caption: (g.caption as string) ?? (g.caption_excerpt as string) ?? '',
       };
     });
   }
