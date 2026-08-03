@@ -117,6 +117,10 @@ export interface LiveDiscoveryOptions {
                             // seeds straight from Apify. Normal mode (false) tries
                             // the free/relay path first and only falls to Apify on
                             // break — "my scraper first, Apify when it breaks".
+  expansionApifyCap?: number; // max graph-expansion nodes allowed to fall through
+                              // to paid Apify when the free crawl is throttled
+                              // (default 6). Only spent on 401/403/429; a healthy
+                              // pool never pays. 0 disables expansion-stage Apify.
 }
 
 // Words that frame an age/count constraint but aren't searchable themselves —
@@ -1078,13 +1082,22 @@ export async function liveDiscover(
     }
   }
 
-  // 2) GRAPH EXPANSION (hop ≥ 1) — free-only and politely serialized. This is a
-  //    bonus that needs a live cookie anyway, so we never spend Apify on it.
+  // 2) GRAPH EXPANSION (hop ≥ 1) — politely serialized. Normally free-only, but
+  //    when the cookie pool is throttled the free crawl yields nothing and the page
+  //    degrades to just the 1–2 seed profiles. So we let a BOUNDED number of the
+  //    FIRST expansion nodes fall through to paid Apify. Actual spend only happens
+  //    when the free path returns 401/403/429 (fetchProfile decides) — a healthy
+  //    pool free-succeeds and never pays. The cap stops a fully-dead pool from
+  //    fanning Apify across the whole crawl. Campaign mode already Apify-batched
+  //    its seeds, so it gets no extra expansion budget.
+  let apifyExpansionBudget = apifyDirect ? 0 : (options.expansionApifyCap ?? 6);
   while (queue.length > 0 && visited.size < max) {
     if (Date.now() - startedAt > budgetMs) break;
     const { username, hop } = queue.shift()!;
 
-    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt), false);
+    const allowApify = apifyExpansionBudget > 0;
+    if (allowApify) apifyExpansionBudget--;
+    const user = await fetchProfile(username, budgetMs - (Date.now() - startedAt), allowApify);
     await sleep(delayMs);
     if (!user || !user.username) continue;
 

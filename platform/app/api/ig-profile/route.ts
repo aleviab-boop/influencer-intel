@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { extractContact } from '@/lib/live-discovery';
 import { igFetch } from '@/lib/ig-fetch';
+import { apifyProfileOrNull } from '@/lib/apify';
+import type { ScrapedProfile } from '@/lib/instagram-scraper';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient } from '@influencer-intel/shared/llm';
 
@@ -388,6 +390,115 @@ async function dbProfile(handle: string) {
   });
 }
 
+// Shape an Apify ScrapedProfile into the EXACT drawer response the live path
+// returns, so the UI renders identically (photo + 12-tile grid with thumbnails).
+async function apifyDrawerResponse(handle: string, sp: ScrapedProfile): Promise<NextResponse> {
+  const recent: RecentPost[] = sp.recent_posts.map((p) => ({
+    shortcode: p.platform_post_id || (p.post_url.match(/\/(?:p|reel|tv)\/([^/?#]+)/)?.[1] ?? ''),
+    thumbnail: p.thumbnail_url,
+    likes: p.like_count,
+    comments: p.comment_count,
+    is_video: p.post_type === 'video',
+    taken_at: p.posted_at ? (Math.floor(Date.parse(p.posted_at) / 1000) || null) : null,
+    caption: (p.caption ?? '').slice(0, 200),
+  }));
+
+  const bio = sp.biography ?? '';
+  const contact = extractContact(bio, { externalUrl: sp.external_url });
+  // sp.engagement_rate is a fraction (e.g. 0.016); the drawer wants a percent.
+  const er = sp.engagement_rate != null ? Math.round(sp.engagement_rate * 1000) / 10 : null;
+
+  // brand mentions in captions → collabs panel (same derivation as the live path)
+  const mentionCount = new Map<string, number>();
+  for (const p of recent) {
+    for (const m of p.caption.matchAll(/@([a-z0-9_.]{2,30})/gi)) {
+      const h = m[1]!.toLowerCase();
+      if (h !== handle.toLowerCase()) mentionCount.set(h, (mentionCount.get(h) ?? 0) + 1);
+    }
+  }
+  const collabs = Array.from(mentionCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([h, count]) => ({ handle: h, count }));
+
+  const related = await dbRelated(handle, sp.category ?? '', sp.follower_count);
+
+  // Warm the DB copy in the background so a later DB-serve still has the grid.
+  after(() => persistApify(handle, sp, er));
+
+  return NextResponse.json({
+    handle: sp.handle,
+    full_name: sp.display_name ?? '',
+    biography: bio,
+    category: sp.category ?? '',
+    followers: sp.follower_count,
+    following: sp.following_count,
+    posts: sp.posts_count,
+    is_verified: sp.is_verified,
+    is_private: false,
+    profile_pic_url: sp.profile_photo_url,
+    external_url: contact.link ?? sp.external_url,
+    email: contact.email,
+    phone: contact.phone,
+    recent,
+    related,
+    collabs,
+    sponsored_posts: 0,
+    engagement: er,
+    source: 'live',
+    last_scraped_at: new Date().toISOString(),
+    refreshing: false,
+  });
+}
+
+// Persist an Apify-sourced profile back into `creators` (best-effort). Mirrors
+// persistLive's shape AND writes recent_posts (with thumbnail_url) so both the
+// drawer grid AND the quality scorer have real per-post engagement to work with.
+async function persistApify(handle: string, sp: ScrapedProfile, er: number | null): Promise<void> {
+  const db = getBolticClient();
+  const geoPosts = sp.recent_posts.map((p) => ({
+    code: p.platform_post_id,
+    thumbnail: p.thumbnail_url,
+    likes: p.like_count,
+    comments: p.comment_count,
+    media_type: p.post_type === 'video' ? 'video' : 'image',
+    timestamp: p.posted_at,
+    caption_excerpt: (p.caption ?? '').slice(0, 200),
+  }));
+  const patch: Record<string, unknown> = {
+    display_name: sp.display_name ?? '',
+    bio: sp.biography ?? '',
+    follower_count: sp.follower_count,
+    following_count: sp.following_count,
+    posts_count: sp.posts_count,
+    is_verified: sp.is_verified,
+    profile_photo_url: sp.profile_photo_url,
+    engagement_rate: er != null ? er / 100 : sp.engagement_rate,
+    recent_posts: sp.recent_posts,
+    raw_metadata: { geo: { posts: geoPosts } },
+    last_scraped_at: new Date().toISOString(),
+  };
+  try {
+    const rows = await db.query(
+      `SELECT 1 FROM creators WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
+      [handle],
+    );
+    if (rows.length > 0) {
+      await db.update('creators', { handle, platform: 'instagram' }, patch);
+    } else {
+      await db.insert('creators', {
+        handle,
+        platform: 'instagram',
+        is_active: true,
+        source: 'scrape',
+        ...patch,
+      });
+    }
+  } catch {
+    /* best-effort — the response already went out */
+  }
+}
+
 export async function GET(req: NextRequest) {
   const handle = (req.nextUrl.searchParams.get('handle') ?? '').trim().replace(/^@/, '');
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
@@ -518,6 +629,18 @@ export async function GET(req: NextRequest) {
       last_scraped_at: new Date().toISOString(),
       refreshing: false,
     });
+  }
+
+  // 1b) The free cookie path failed but IG did NOT say the handle is gone (401/
+  //     403/429/network → the pool is blocked/throttled, not a real 404). The
+  //     account is almost certainly live, so fall through to the PAID Apify actor
+  //     BEFORE dropping to the (possibly grid-less) DB row. This is what keeps the
+  //     drawer's photo + full 12-post grid rendering during a throttle instead of
+  //     going blank. No-op when APIFY_TOKEN is unset (apifyProfileOrNull → null),
+  //     so behavior is unchanged for anyone without Apify configured.
+  if (!notFound) {
+    const sp = await apifyProfileOrNull(handle);
+    if (sp) return apifyDrawerResponse(handle, sp);
   }
 
   // Live fetch DEFINITIVELY 404'd → if this was an un-enriched hallucinated stub,

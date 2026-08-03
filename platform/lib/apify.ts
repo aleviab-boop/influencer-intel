@@ -56,6 +56,8 @@ interface ApifyPost {
   likesCount?: number;
   commentsCount?: number;
   videoViewCount?: number;
+  displayUrl?: string; // the grid tile image (Apify's post thumbnail)
+  images?: string[]; // sometimes populated instead of displayUrl on carousels
 }
 
 interface ApifyProfile {
@@ -88,6 +90,7 @@ function toScrapedProfile(u: ApifyProfile, handle: string): ScrapedProfile {
       view_count: num(p.videoViewCount),
       like_count: num(p.likesCount),
       comment_count: num(p.commentsCount),
+      thumbnail_url: p.displayUrl || (Array.isArray(p.images) ? p.images[0] : null) || null,
     };
   });
 

@@ -23,6 +23,9 @@ export interface ScrapedPost {
   view_count: number;
   like_count: number;
   comment_count: number;
+  // Grid tile image. Both the free crawl and Apify populate this so the drawer
+  // grid renders identical thumbnails regardless of which path produced the post.
+  thumbnail_url: string | null;
 }
 
 export interface ScrapedProfile {
@@ -105,6 +108,7 @@ export async function fetchInstagramProfile(rawHandle: string): Promise<ScrapedP
       view_count: num(node.video_view_count),
       like_count: likes,
       comment_count: comments,
+      thumbnail_url: (node.thumbnail_src as string) || (node.display_url as string) || null,
     };
   });
 
