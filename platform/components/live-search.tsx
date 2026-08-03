@@ -1605,6 +1605,10 @@ export function LiveSearch({
             )}
           </button>
         </div>
+        {/* hint: how to look up a specific account */}
+        <div className="mt-2 pl-0.5 text-[11.5px] text-[#9aa]">
+          Tip: to look up a specific account, search its exact username with <span className="font-medium text-[#6C4DF6]">@username</span>
+        </div>
       </div>
 
       {/* recently searched — auto-tracked, click to re-run, × to forget */}
