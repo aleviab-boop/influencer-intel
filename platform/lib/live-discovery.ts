@@ -503,10 +503,20 @@ const NICHE_SYNONYMS: Record<string, string[]> = {
   // Festival / cultural-event campaigns — the "campaign" is a THEME, so relevance
   // is topical (who makes this content), not brand-collab. Expand to the event's
   // real hashtags incl. regional spellings so we find people who post it.
-  puja: ['puja', 'pujo', 'durgapuja', 'durgapujo', 'pandalhopping', 'pujovibes'],
-  festival: ['festival', 'festive', 'festivevibes', 'tyohaar', 'celebration'],
-  diwali: ['diwali', 'deepavali', 'festivevibes', 'diwalivibes'],
-  navratri: ['navratri', 'garba', 'dandiya', 'navratrivibes'],
+  puja: ['puja', 'pujo', 'durgapuja', 'durgapujo', 'pandalhopping', 'pujovibes', 'festive', 'ethnicwear'],
+  // "pujo" (Bengali) and the event hashtags are UNAMBIGUOUS festival words — a
+  // lone "pujo"/"durgapuja" means the festival, never a person's name — so they're
+  // their own niche keys (isNiche → true) and each maps to the festival's real
+  // hashtags. This is what makes "pujo creators" or "durga puja campaign" classify
+  // as a festival brief and pull festive-fashion/lifestyle creators, not people
+  // literally named "Puja". (Bare "puja"/"durga" stay AMBIGUOUS — see below.)
+  pujo: ['pujo', 'puja', 'durgapuja', 'durgapujo', 'pandalhopping', 'pujovibes', 'festive', 'ethnicwear'],
+  durgapuja: ['durgapuja', 'durgapujo', 'pujo', 'pandalhopping', 'pujovibes', 'festive', 'ethnicwear'],
+  durgapujo: ['durgapujo', 'durgapuja', 'pujo', 'pandalhopping', 'pujovibes', 'festive', 'ethnicwear'],
+  festival: ['festival', 'festive', 'festivevibes', 'tyohaar', 'celebration', 'ethnicwear'],
+  diwali: ['diwali', 'deepavali', 'festivevibes', 'diwalivibes', 'festive', 'ethnicwear'],
+  navratri: ['navratri', 'navaratri', 'garba', 'dandiya', 'navratrivibes', 'festive', 'ethnicwear'],
+  onam: ['onam', 'onamcelebration', 'onam2026', 'festive', 'kerala'],
 };
 
 // Words that act as handle suffixes rather than niche roots.
@@ -970,6 +980,46 @@ export function extractContact(
   return { email, phone, link: opts.externalUrl || null };
 }
 
+// India-only platform: decide whether an enriched profile is Indian from its own
+// text (name + bio + category + external link). Returns:
+//   true      — a positive India signal (Indian city/state, "india", ₹, +91, a
+//               .in link, or an Indian-script character) → surfaces normally.
+//   false     — a positive FOREIGN signal (a foreign city/country, £/€, a foreign
+//               ccTLD) AND no India signal → known-foreign, SINKS in ranking.
+//   undefined — no signal either way → treated as Indian (safe default; we don't
+//               punish a sparse bio on an India-only platform).
+// This is what makes Apify enrichment (and the free crawl) India-centric: a global
+// #vegan / #denim account that Apify returns gets flagged foreign here and drops
+// below the real Indian creators, instead of padding the page with UK/US handles.
+const FOREIGN_MARKERS = [
+  'london', 'uk', 'united kingdom', 'england', 'manchester', 'usa', 'u.s.a', 'united states',
+  'new york', 'nyc', 'los angeles', 'california', 'texas', 'chicago', 'canada', 'toronto',
+  'australia', 'sydney', 'melbourne', 'dubai', 'uae', 'singapore', 'germany', 'berlin',
+  'france', 'paris', 'netherlands', 'amsterdam', 'spain', 'italy', 'pakistan', 'bangladesh',
+  'nepal', 'sri lanka',
+];
+function detectIndian(text: string, externalUrl?: string | null): boolean | undefined {
+  const t = ` ${text.toLowerCase()} `;
+  const url = (externalUrl ?? '').toLowerCase();
+  // Positive India signals.
+  const indianScript = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0B00-\u0B7F\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/.test(text);
+  const wordHit = (w: string) => new RegExp(`(^|[^a-z0-9])${w}([^a-z0-9]|$)`).test(t);
+  const indiaSignal =
+    indianScript ||
+    /\+91|₹|\binr\b/.test(t) ||
+    /\.in(\/|$|\b)/.test(url) ||
+    wordHit('india') || wordHit('indian') || wordHit('bharat') || wordHit('desi') ||
+    [...KNOWN_CITIES].some((c) => wordHit(c)) ||
+    Object.keys(STATE_CITIES).some((s) => wordHit(s));
+  if (indiaSignal) return true;
+  // Negative (foreign) signals — only decisive when there's no India signal.
+  const foreignSignal =
+    /£|€|\.co\.uk|\.com\.au|\bgbp\b|\busd\b/.test(t) ||
+    FOREIGN_MARKERS.some((m) => wordHit(m));
+  if (foreignSignal) return false;
+  return undefined;
+}
+
 function summarize(user: RawUser, tokens: string[]): LiveProfile {
   const followers = user.edge_followed_by?.count ?? 0;
   const contact = extractContact(user.biography, {
@@ -990,6 +1040,10 @@ function summarize(user: RawUser, tokens: string[]): LiveProfile {
     email: contact.email,
     phone: contact.phone,
     link: contact.link,
+    is_indian: detectIndian(
+      `${user.username ?? ''} ${user.full_name ?? ''} ${user.biography ?? ''} ${user.category_name ?? ''}`,
+      user.external_url,
+    ),
   };
   return { ...prof, score: scoreProfile(prof, tokens) };
 }
