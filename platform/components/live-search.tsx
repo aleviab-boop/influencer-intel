@@ -1781,6 +1781,7 @@ export function LiveSearch({
                 <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-[#9b7bff]">
                   <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
                   searching the web &amp; Instagram for more…
+                  <span className="ml-1.5 font-medium text-[#e0245e]">please wait for scraping to be completed</span>
                 </span>
               ) : crawling ? (
                 <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-[#9b7bff]">
