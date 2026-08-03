@@ -291,11 +291,28 @@ export async function POST(req: NextRequest) {
       // far fewer, so validation finishes within budget and barely touches the
       // account pool. This is what makes the AI section reliably ~10 and stable.
       const dbBacked = await dbBackedAiProfiles(handles);
+      // COMMIT-AS-WE-GO: aiProfiles is read by the 46s outer race, which can cut
+      // this pipeline off mid-await (live IG validation + Apify enrichment are both
+      // slow when the relay/cookie is down). Assigning only at the very end meant a
+      // single slow stage discarded EVERYTHING — including DB-backed handles that
+      // already had real data — leaving from_ai:0. Instead we publish the best set
+      // we have after each stage, so a timeout still surfaces the named creators.
+      const commitAi = (extra: LiveProfile[]) => {
+        const m = new Map<string, LiveProfile>();
+        for (const p of [...dbBacked, ...extra]) {
+          const k = p.username.toLowerCase();
+          if (!m.has(k)) m.set(k, p);
+        }
+        aiProfiles = Array.from(m.values());
+      };
+      commitAi([]); // floor: DB-backed AI handles are live-independent and instant
+
       const haveHandles = new Set(dbBacked.map((p) => p.username.toLowerCase()));
       const missing = handles.filter((h) => !haveHandles.has(h.trim().toLowerCase().replace(/^@/, '')));
       let liveValidated = (
         await profilesFromHandles(missing, tokens, { max: 20, budgetMs: 15_000, delayMs: 200 })
       ).map((p) => ({ ...p, from: 'live' as const }));
+      commitAi(liveValidated); // real live finds now included; stubs still 0-follower
 
       // Free path throttled? Any AI handle that came back as a 0-follower STUB is a
       // real creator GPT found that we just couldn't confirm live. Batch-enrich the
@@ -312,6 +329,7 @@ export async function POST(req: NextRequest) {
               enriched.map((p) => [p.username.toLowerCase(), { ...p, from: 'live' as const }]),
             );
             liveValidated = liveValidated.map((p) => byHandle.get(p.username.toLowerCase()) ?? p);
+            commitAi(liveValidated); // enriched stubs now carry real follower counts
           }
         } catch (err) {
           console.error('[discover-live] AI Apify batch-enrich failed:', err);
