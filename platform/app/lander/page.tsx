@@ -364,6 +364,9 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
               </button>
             </div>
           </div>
+          <p className="mt-2.5 text-center text-[13px] text-[#888]">
+            To search a particular username, use <span className="font-semibold" style={{ color: ACCENT }}>@username</span>
+          </p>
         </div>
 
         <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-2xl mx-auto">
