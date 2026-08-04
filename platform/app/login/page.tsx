@@ -245,6 +245,14 @@ export default function LoginPage() {
                 </div>
                 <h3 className="text-[17px] font-semibold text-ink-900">Influencer login — coming soon</h3>
                 <p className="mt-1.5 text-[13px] text-ink-500">We&apos;re building a dedicated portal for creators to manage their profile, track reel performance, and connect with brands. Stay tuned.</p>
+
+                <div className="my-5 flex items-center gap-3 text-[12px] text-ink-400"><span className="flex-1 h-px bg-border" />get early access<span className="flex-1 h-px bg-border" /></div>
+
+                <a href="/api/oauth/instagram?flow=creator" className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold hover:brightness-105 transition" style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+                  Continue with Instagram
+                </a>
+                <p className="mt-2.5 text-[11px] text-ink-400">Sign in securely with your Instagram account. We never see your password, and we&apos;ll use it to show your own posts &amp; reels once the portal is live.</p>
               </div>
             ) : (
             <>
