@@ -626,6 +626,8 @@ export function LiveSearch({
   const bucketCache = useRef<Record<'instagram' | 'trends', RunResponse | null>>({ instagram: null, trends: null });
   // Lander creator-gender filter: 'any' | 'female' | 'male'.
   const [genderFilter, setGenderFilter] = useState<'any' | 'female' | 'male'>('any');
+  // Follower-tier filter (client-side): micro <100k · macro 100k–1M · mega ≥1M.
+  const [tierFilter, setTierFilter] = useState<'all' | 'micro' | 'macro' | 'mega'>('all');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState('');
@@ -1206,6 +1208,10 @@ export function LiveSearch({
         (!verifiedOnly || p.is_verified) &&
         (!healthyOnly || authenticityFlag(followers, er ?? undefined) !== 'low') &&
         (genderFilter === 'any' || p.gender === genderFilter) &&
+        (tierFilter === 'all' ||
+          (tierFilter === 'micro' && followers < 100_000) ||
+          (tierFilter === 'macro' && followers >= 100_000 && followers < 1_000_000) ||
+          (tierFilter === 'mega' && followers >= 1_000_000)) &&
         (!hideContacted || !isContacted(p.username))
       );
     });
@@ -1753,6 +1759,22 @@ export function LiveSearch({
               </button>
             ))}
           </div>
+          {/* follower tier — micro / macro / mega (client-side filter) */}
+          <div className="inline-flex rounded-xl border border-[#e3def9] bg-[#faf9ff] p-1">
+            {([['all', 'All'], ['micro', 'Micro'], ['macro', 'Macro'], ['mega', 'Mega']] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setTierFilter(val)}
+                className="px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-all"
+                style={tierFilter === val
+                  ? { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, color: '#fff' }
+                  : { color: '#777', background: 'transparent' }}
+                title="Filter by follower tier — Micro (<100K) · Macro (100K–1M) · Mega (1M+)"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1822,12 +1844,12 @@ export function LiveSearch({
               <input type="checkbox" checked={hideContacted} onChange={(e) => setHideContacted(e.target.checked)} className="accent-[#6C4DF6]" />
               Hide contacted
             </label>
-            {(minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly || healthyOnly || hideContacted || genderFilter !== 'any') && (
+            {(minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly || healthyOnly || hideContacted || genderFilter !== 'any' || tierFilter !== 'all') && (
               <button
                 onClick={() => {
                   setMinFollowers(0); setMaxFollowers(0); setMinER(0);
                   setVerifiedOnly(false); setHealthyOnly(false); setHideContacted(false);
-                  setGenderFilter('any');
+                  setGenderFilter('any'); setTierFilter('all');
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                 title="Clear all filters"
