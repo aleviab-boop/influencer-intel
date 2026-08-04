@@ -238,6 +238,16 @@ export default function LoginPage() {
               <RoleTab active={role === 'admin'} onClick={() => setRole('admin')} title="Admin" sub="Super admin" icon={ICONS.admin} />
             </div>
 
+            {role === 'influencer' ? (
+              <div className="mt-6 rounded-2xl border border-border bg-ink-50/40 px-6 py-10 text-center" style={{ animation: 'ii-rise .35s both' }}>
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                </div>
+                <h3 className="text-[17px] font-semibold text-ink-900">Influencer login — coming soon</h3>
+                <p className="mt-1.5 text-[13px] text-ink-500">We&apos;re building a dedicated portal for creators to manage their profile, track reel performance, and connect with brands. Stay tuned.</p>
+              </div>
+            ) : (
+            <>
             <form onSubmit={submit} className="mt-5 space-y-4">
               <label className="block">
                 <span className="flex items-center justify-between text-[12px] font-medium text-ink-500 mb-1.5">
@@ -303,21 +313,11 @@ export default function LoginPage() {
                 style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
               >
                 {loading && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                {loading ? 'Logging in…' : role === 'admin' ? 'Enter admin panel' : `Log in as ${role === 'influencer' ? 'influencer' : 'agency'}`}
+                {loading ? 'Logging in…' : role === 'admin' ? 'Enter admin panel' : 'Log in as agency'}
                 {!loading && (
                   <svg className="transition-transform duration-300 group-hover:translate-x-1" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
                 )}
               </button>
-
-              {role === 'influencer' && (
-                <div style={{ animation: 'ii-rise .35s both' }}>
-                  <div className="flex items-center gap-3 text-[12px] text-ink-400 my-1"><span className="flex-1 h-px bg-border" />or<span className="flex-1 h-px bg-border" /></div>
-                  <a href="/api/oauth/instagram?flow=creator" className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold hover:brightness-105 transition" style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
-                    Continue with Instagram
-                  </a>
-                </div>
-              )}
             </form>
 
             {role === 'admin' ? (
@@ -329,6 +329,8 @@ export default function LoginPage() {
                   {role === 'agency' ? 'Agency demo login — agency@gmail.com / agency' : 'Demo login — any email gets you in.'}
                 </p>
               </>
+            )}
+            </>
             )}
           </div>
         </div>
