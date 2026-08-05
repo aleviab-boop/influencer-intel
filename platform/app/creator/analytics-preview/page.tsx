@@ -39,6 +39,15 @@ interface AudienceQuality {
   sample: number;
   signals: { key: string; label: string; score: number; status: 'healthy' | 'watch' | 'concern'; detail: string }[];
 }
+interface GroupStat { count: number; avg_er: number | null; avg_reach: number | null }
+interface ContentAnalysis {
+  hashtags: { tag: string; count: number; avg_er: number | null }[];
+  total_unique_hashtags: number;
+  avg_hashtags_per_post: number | null;
+  sponsored: GroupStat;
+  organic: GroupStat;
+  sponsored_er_delta_pct: number | null;
+}
 interface Analytics {
   connected: boolean;
   reason?: string;
@@ -60,6 +69,7 @@ interface Analytics {
   reel_forecast?: ReelForecast;
   content_breakdown?: ContentBreakdown;
   audience_quality?: AudienceQuality;
+  content_analysis?: ContentAnalysis;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -297,6 +307,16 @@ function AnalyticsPreview() {
       <div className="mt-4">
         <PostingHeatmap posts={allPosts} />
       </div>
+
+      {data.content_analysis && (data.content_analysis.hashtags.length > 0 || data.content_analysis.sponsored.count > 0) && (
+        <>
+          <SectionLabel>Content strategy</SectionLabel>
+          <div className="mt-3 grid lg:grid-cols-2 gap-3">
+            <HashtagCard c={data.content_analysis} />
+            <SponsoredCard c={data.content_analysis} />
+          </div>
+        </>
+      )}
 
       <SectionLabel>Your posts</SectionLabel>
 
@@ -825,6 +845,90 @@ function MoneyTile({ label, value, sub, color, accent }: { label: string; value:
       <div className="text-[10.5px] uppercase tracking-wide text-ink-400">{label}</div>
       <div className="mt-0.5 text-[19px] font-bold tabular-nums" style={{ color: color ?? '#1a1a2e' }}>{value}</div>
       {sub && <div className="text-[10.5px] text-ink-400">{sub}</div>}
+    </div>
+  );
+}
+
+function HashtagCard({ c }: { c: ContentAnalysis }) {
+  const tags = c.hashtags;
+  const maxEr = Math.max(...tags.map((t) => t.avg_er ?? 0), 0.0001);
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Top hashtags</div>
+        <span className="text-[11px] text-ink-400">
+          {c.avg_hashtags_per_post != null ? `~${c.avg_hashtags_per_post}/post` : ''} · {c.total_unique_hashtags} unique
+        </span>
+      </div>
+      {tags.length === 0 ? (
+        <p className="text-[12.5px] text-ink-400">No hashtag used enough times yet to compare.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {tags.map((t) => (
+            <div key={t.tag}>
+              <div className="flex justify-between text-[12px] mb-0.5">
+                <span className="text-ink-700 font-medium truncate">{t.tag} <span className="text-ink-400 font-normal">· {t.count}×</span></span>
+                <span className="text-ink-500 tabular-nums">{pct(t.avg_er)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${((t.avg_er ?? 0) / maxEr) * 100}%`, background: ACCENT }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-[10.5px] text-ink-400">Ranked by average engagement on posts using each tag (used 2+ times).</p>
+    </div>
+  );
+}
+
+function SponsoredCard({ c }: { c: ContentAnalysis }) {
+  const { sponsored, organic, sponsored_er_delta_pct: delta } = c;
+  const hasSponsored = sponsored.count > 0;
+  const maxEr = Math.max(sponsored.avg_er ?? 0, organic.avg_er ?? 0, 0.0001);
+
+  const Row = ({ label, g, color }: { label: string; g: GroupStat; color: string }) => (
+    <div>
+      <div className="flex justify-between text-[12px] mb-0.5">
+        <span className="text-ink-700 font-medium">{label} <span className="text-ink-400 font-normal">· {g.count}</span></span>
+        <span className="text-ink-500 tabular-nums">
+          {pct(g.avg_er)}{g.avg_reach ? ` · ${fmt(g.avg_reach)} reach` : ''}
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${((g.avg_er ?? 0) / maxEr) * 100}%`, background: color }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="text-[13px] font-semibold text-ink-900 mb-3">Sponsored vs organic</div>
+      {!hasSponsored ? (
+        <>
+          <p className="text-[12.5px] text-ink-400 mb-3">No sponsored posts detected in your recent content — here’s your organic baseline.</p>
+          <Row label="Organic" g={organic} color={ACCENT} />
+        </>
+      ) : (
+        <>
+          <div className="space-y-2.5">
+            <Row label="Organic" g={organic} color={ACCENT} />
+            <Row label="Sponsored" g={sponsored} color="#d97706" />
+          </div>
+          {delta != null && (
+            <div className="mt-3 text-[12px] text-ink-600">
+              {delta > 3 ? (
+                <>Sponsored posts see <b className="text-[#d97706]">{delta}% lower</b> engagement than your organic content.</>
+              ) : delta < -3 ? (
+                <>Sponsored posts actually <b style={{ color: '#16a34a' }}>outperform</b> your organic content by {Math.abs(delta)}%.</>
+              ) : (
+                <>Sponsored and organic content perform about the same — brand deals aren’t costing you engagement.</>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      <p className="mt-3 text-[10.5px] text-ink-400">Detected from caption markers (#ad, paid partnership, etc.).</p>
     </div>
   );
 }

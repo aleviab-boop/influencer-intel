@@ -6,6 +6,7 @@ import type { ConnectedAccount } from '@influencer-intel/shared/types';
 import type { IGMedia } from '@influencer-intel/shared/ig-graph/types';
 import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
 import { audienceQuality } from '@/lib/audience-quality';
+import { analyzeContent } from '@/lib/content-analysis';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -244,6 +245,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       reel_forecast: forecastReels(enriched),
       content_breakdown: contentBreakdown(enriched),
       audience_quality: audienceQuality(followers, enriched),
+      content_analysis: analyzeContent(enriched),
       posts,
       demographics,
     });
