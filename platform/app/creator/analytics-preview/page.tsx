@@ -262,6 +262,11 @@ function AnalyticsPreview() {
         <StatCard label="Content mix" value={`${stats?.reels_count ?? 0}/${stats?.images_count ?? 0}`} sub="reels / photos" />
       </div>
 
+      {/* Engagement composition */}
+      <div className="mt-3">
+        <InteractionMix posts={allPosts} />
+      </div>
+
       <SectionLabel>Earnings</SectionLabel>
 
       {/* Earnings */}
@@ -845,6 +850,72 @@ function MoneyTile({ label, value, sub, color, accent }: { label: string; value:
       <div className="text-[10.5px] uppercase tracking-wide text-ink-400">{label}</div>
       <div className="mt-0.5 text-[19px] font-bold tabular-nums" style={{ color: color ?? '#1a1a2e' }}>{value}</div>
       {sub && <div className="text-[10.5px] text-ink-400">{sub}</div>}
+    </div>
+  );
+}
+
+function InteractionMix({ posts }: { posts: Post[] }) {
+  // Aggregate across posts that carry insight fields (saves/shares only exist
+  // on enriched posts). Composition of how the audience interacts.
+  const withInsights = posts.filter((p) => p.saved != null || p.shares != null);
+  const totals = posts.reduce(
+    (acc, p) => {
+      acc.likes += p.like_count || 0;
+      acc.comments += p.comments_count || 0;
+      acc.saves += p.saved ?? 0;
+      acc.shares += p.shares ?? 0;
+      return acc;
+    },
+    { likes: 0, comments: 0, saves: 0, shares: 0 },
+  );
+  const total = totals.likes + totals.comments + totals.saves + totals.shares;
+
+  if (withInsights.length === 0 || total === 0) {
+    return (
+      <div className="rounded-xl bg-white border border-border shadow-card p-4">
+        <div className="text-[13px] font-semibold text-ink-900 mb-1">Engagement composition</div>
+        <p className="text-[12.5px] text-ink-400">Saves &amp; shares appear once Instagram returns per-post insights.</p>
+      </div>
+    );
+  }
+
+  const parts: { key: string; label: string; value: number; color: string }[] = [
+    { key: 'likes', label: 'Likes', value: totals.likes, color: ACCENT },
+    { key: 'comments', label: 'Comments', value: totals.comments, color: '#8134AF' },
+    { key: 'saves', label: 'Saves', value: totals.saves, color: '#16a34a' },
+    { key: 'shares', label: 'Shares', value: totals.shares, color: '#d97706' },
+  ];
+  const valueSignal = Math.round(((totals.saves + totals.shares) / total) * 100);
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Engagement composition</div>
+        <span className="text-[11px] text-ink-400">how your audience interacts</span>
+      </div>
+
+      {/* Stacked bar */}
+      <div className="flex h-3 rounded-full overflow-hidden mb-3">
+        {parts.map((p) => p.value > 0 && (
+          <div key={p.key} title={`${p.label}: ${fmt(p.value)}`} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {parts.map((p) => (
+          <div key={p.key} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: p.color }} />
+            <div className="min-w-0">
+              <div className="text-[13px] font-bold text-ink-900 tabular-nums leading-tight">{fmt(p.value)}</div>
+              <div className="text-[10.5px] text-ink-400">{p.label} · {Math.round((p.value / total) * 100)}%</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-3 text-[11px] text-ink-500">
+        <b style={{ color: '#16a34a' }}>{valueSignal}%</b> of interactions are saves &amp; shares — the strongest signal that people find your content genuinely valuable.
+      </p>
     </div>
   );
 }
