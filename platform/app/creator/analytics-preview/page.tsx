@@ -74,6 +74,25 @@ const dateStr = (s: string): string => {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+const money = (v: number | null | undefined): string => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '₹0';
+  return '₹' + Math.round(n).toLocaleString('en-IN');
+};
+
+interface Earnings {
+  available: boolean;
+  reason?: string;
+  currency?: string;
+  summary?: {
+    total_earned: number; pending: number; lifetime: number;
+    deals_count: number; brands_count: number; next_due: string | null;
+  };
+  deals?: {
+    id: string; brand: string; program: string; rate: number; paid: boolean;
+    paid_at: string | null; status: string; deliverables: string | null; due_date: string | null;
+  }[];
+}
 
 export default function AnalyticsPreviewPage() {
   return (
@@ -85,6 +104,7 @@ export default function AnalyticsPreviewPage() {
 
 function AnalyticsPreview() {
   const [data, setData] = useState<Analytics | null>(null);
+  const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'all' | 'reels' | 'posts'>('all');
   const [sort, setSort] = useState<'recent' | 'top'>('recent');
@@ -96,11 +116,20 @@ function AnalyticsPreview() {
     const handle = params.get('handle');
     if (account) q.set('account', account);
     else if (handle) q.set('handle', handle);
-    fetch(`/api/creator/analytics${q.toString() ? `?${q}` : ''}`)
+    const qs = q.toString() ? `?${q}` : '';
+
+    fetch(`/api/creator/analytics${qs}`)
       .then((r) => r.json())
       .then((d: Analytics) => setData(d))
       .catch(() => setData({ connected: false, reason: 'network' }))
       .finally(() => setLoading(false));
+
+    // Earnings is DB-only (no IG token) — fetch in parallel so it renders even
+    // when the Instagram connection is stale.
+    fetch(`/api/creator/earnings${qs}`)
+      .then((r) => r.json())
+      .then((e: Earnings) => setEarnings(e))
+      .catch(() => setEarnings({ available: false, reason: 'network' }));
   }, []);
 
   if (loading) {
@@ -118,6 +147,12 @@ function AnalyticsPreview() {
     return (
       <Shell>
         <EmptyState reason={data?.reason} />
+        {/* Earnings works without a live IG token, so surface it here too. */}
+        {earnings?.available && (earnings.summary?.deals_count ?? 0) > 0 && (
+          <div className="mt-4">
+            <EarningsSection e={earnings} />
+          </div>
+        )}
       </Shell>
     );
   }
@@ -163,8 +198,10 @@ function AnalyticsPreview() {
         </div>
       </div>
 
+      <SectionLabel>Performance</SectionLabel>
+
       {/* Stat cards */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Avg engagement" value={pct(stats?.avg_er)} sub={`across ${stats?.posts_analyzed ?? 0} recent posts`} accent />
         <StatCard label="Avg likes" value={fmt(stats?.avg_likes)} sub="per post" />
         <StatCard label="Avg comments" value={fmt(stats?.avg_comments)} sub="per post" />
@@ -179,20 +216,31 @@ function AnalyticsPreview() {
         <StatCard label="Content mix" value={`${stats?.reels_count ?? 0}/${stats?.images_count ?? 0}`} sub="reels / photos" />
       </div>
 
+      <SectionLabel>Earnings</SectionLabel>
+
+      {/* Earnings */}
+      <div className="mt-3">
+        <EarningsSection e={earnings} />
+      </div>
+
+      <SectionLabel>Growth &amp; predictions</SectionLabel>
+
       {/* Follower growth */}
-      <div className="mt-4">
+      <div className="mt-3">
         <GrowthChart data={growth} current={profile?.followers_count ?? null} />
       </div>
 
       {/* Reel forecast (prediction) + content-format depth */}
-      <div className="mt-4 grid lg:grid-cols-2 gap-3">
+      <div className="mt-3 grid lg:grid-cols-2 gap-3">
         <ReelForecastCard f={data.reel_forecast} />
         <ContentBreakdownCard b={data.content_breakdown} />
       </div>
 
+      <SectionLabel>Audience &amp; timing</SectionLabel>
+
       {/* Audience demographics */}
       {demographics && (Object.keys(demographics.gender_age).length > 0 || Object.keys(demographics.cities).length > 0) && (
-        <div className="mt-4 grid md:grid-cols-2 gap-3">
+        <div className="mt-3 grid md:grid-cols-2 gap-3">
           <Panel title="Audience — top cities">
             <BreakdownList data={demographics.cities} />
           </Panel>
@@ -207,8 +255,10 @@ function AnalyticsPreview() {
         <PostingHeatmap posts={allPosts} />
       </div>
 
+      <SectionLabel>Your posts</SectionLabel>
+
       {/* Posts / reels grid */}
-      <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
+      <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1.5">
           {(['all', 'reels', 'posts'] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
@@ -302,6 +352,15 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
       <div className="text-[11.5px] uppercase tracking-wide text-ink-400">{label}</div>
       <div className="mt-1 text-[24px] font-bold tabular-nums" style={{ color: accent ? ACCENT : '#1a1a2e' }}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-ink-400">{sub}</div>}
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-7 mb-1 flex items-center gap-2.5">
+      <span className="h-3.5 w-1 rounded-full" style={{ background: ACCENT }} />
+      <span className="text-[12px] font-bold uppercase tracking-wider text-ink-500">{children}</span>
     </div>
   );
 }
@@ -613,6 +672,94 @@ function PostingHeatmap({ posts }: { posts: Post[] }) {
       <p className="mt-2 text-[10.5px] text-ink-400">
         Darker = higher average engagement. Numbers show how many posts landed in each slot · your local time.
       </p>
+    </div>
+  );
+}
+
+function EarningsSection({ e }: { e?: Earnings | null }) {
+  if (!e) return null; // still loading — analytics content already fills the view
+
+  const deals = e.deals ?? [];
+  const s = e.summary;
+
+  // No campaigns for this creator yet — encouraging empty state.
+  if (!e.available || !s || s.deals_count === 0) {
+    return (
+      <div className="rounded-2xl bg-white border border-border shadow-card p-5">
+        <div className="text-[15px] font-bold text-ink-900">Earnings</div>
+        <p className="mt-1.5 text-[12.5px] text-ink-400 max-w-md">
+          No brand campaigns yet. When a brand recruits you into a campaign, everything you’re
+          owed and paid shows up here — with deliverables and due dates.
+        </p>
+      </div>
+    );
+  }
+
+  const statusPill = (d: NonNullable<Earnings['deals']>[number]): { label: string; color: string } => {
+    if (d.paid) return { label: 'Paid', color: '#16a34a' };
+    if (d.status === 'recruited') return { label: 'In progress', color: ACCENT };
+    if (d.status === 'contacted') return { label: 'Contacted', color: '#d97706' };
+    return { label: 'Invited', color: '#6b7280' };
+  };
+
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
+      {/* Summary strip */}
+      <div className="p-5" style={{ background: `linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="text-[15px] font-bold text-ink-900">Earnings</div>
+          {s.next_due && (
+            <span className="text-[11.5px] font-semibold px-2.5 py-1 rounded-full bg-white border border-border text-ink-600">
+              Next due · {dateStr(s.next_due)}
+            </span>
+          )}
+        </div>
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MoneyTile label="Lifetime" value={money(s.lifetime)} />
+          <MoneyTile label="Paid out" value={money(s.total_earned)} color="#16a34a" />
+          <MoneyTile label="Pending" value={money(s.pending)} color={ACCENT} accent />
+          <MoneyTile label="Deals" value={`${s.deals_count}`} sub={`${s.brands_count} brand${s.brands_count === 1 ? '' : 's'}`} />
+        </div>
+      </div>
+
+      {/* Deals list */}
+      <div className="divide-y divide-border">
+        {deals.map((d) => {
+          const pill = statusPill(d);
+          return (
+            <div key={d.id} className="flex items-center gap-3 px-5 py-3">
+              <div className="h-9 w-9 rounded-lg grid place-items-center text-[13px] font-bold shrink-0"
+                style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                {d.brand?.[0]?.toUpperCase() ?? '?'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13.5px] font-semibold text-ink-900 truncate">{d.brand}</div>
+                <div className="text-[11.5px] text-ink-400 truncate">
+                  {d.program}{d.due_date ? ` · due ${dateStr(d.due_date)}` : ''}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-[14px] font-bold text-ink-900 tabular-nums">{money(d.rate)}</div>
+                <span className="inline-block mt-0.5 text-[10.5px] font-semibold px-1.5 py-0.5 rounded-full"
+                  style={{ color: pill.color, background: `${pill.color}14` }}>
+                  {pill.label}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MoneyTile({ label, value, sub, color, accent }: { label: string; value: string; sub?: string; color?: string; accent?: boolean }) {
+  return (
+    <div className={`rounded-xl bg-white p-3 ${accent ? 'border-2' : 'border border-border'}`}
+      style={accent ? { borderColor: ACCENT } : undefined}>
+      <div className="text-[10.5px] uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="mt-0.5 text-[19px] font-bold tabular-nums" style={{ color: color ?? '#1a1a2e' }}>{value}</div>
+      {sub && <div className="text-[10.5px] text-ink-400">{sub}</div>}
     </div>
   );
 }
