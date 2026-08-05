@@ -9,6 +9,7 @@ import type { ReelForecast, ContentBreakdown } from './reel-forecast';
 import type { AudienceQuality } from './audience-quality';
 import type { ContentAnalysis } from './content-analysis';
 import type { CaptionAnalysis } from './caption-analysis';
+import type { PeerBenchmark } from './peer-benchmark';
 
 export interface Recommendation {
   id: string;
@@ -24,6 +25,7 @@ export interface RecommendationInput {
   content_analysis: ContentAnalysis;
   audience_quality: AudienceQuality;
   caption_analysis?: CaptionAnalysis;
+  benchmark?: PeerBenchmark | null;
   posts_per_week: number | null;
   saves_shares_pct: number | null; // 0..100
 }
@@ -134,6 +136,22 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
         body: `Your posts with emojis pull ${cap.emoji_split.lift_pct}% more engagement. Keep adding personality — but don't overdo it on branded posts.`,
       });
     }
+  }
+
+  // 7b) Peer benchmark ----------------------------------------------------
+  const bm = input.benchmark;
+  if (bm?.available && bm.verdict === 'below' && bm.percentile != null) {
+    recs.push({
+      id: 'benchmark-below', kind: 'growth', priority: 7,
+      title: 'You’re trailing similar creators',
+      body: `Your engagement sits in the ${bm.percentile}th percentile among ${bm.cohort_label} (median ${asPct(bm.cohort_median_er)}). Focus on your best format and a stronger hook to close the gap — small consistency gains move this fast.`,
+    });
+  } else if (bm?.available && bm.verdict === 'top' && bm.percentile != null) {
+    recs.push({
+      id: 'benchmark-top', kind: 'money', priority: 4,
+      title: 'Use your standout engagement in pitches',
+      body: `You're in the top ${100 - bm.percentile}% of ${bm.cohort_label} for engagement. Lead brand pitches with this — it justifies higher rates than followers alone suggest.`,
+    });
   }
 
   // 8) Winning hashtag ----------------------------------------------------

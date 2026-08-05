@@ -8,6 +8,8 @@ import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
 import { audienceQuality } from '@/lib/audience-quality';
 import { analyzeContent } from '@/lib/content-analysis';
 import { analyzeCaptions } from '@/lib/caption-analysis';
+import { computeBenchmark, tierLabel, tierWindow } from '@/lib/peer-benchmark';
+import type { PeerBenchmark } from '@/lib/peer-benchmark';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -220,6 +222,58 @@ export async function GET(request: Request): Promise<NextResponse> {
       demographics = null;
     }
 
+    // ---- Peer benchmarking --------------------------------------------------
+    // Rank this creator's engagement against similar-tier (and, if the sample
+    // is big enough, same-niche) creators already in our DB. Best-effort.
+    let benchmark: PeerBenchmark | null = null;
+    try {
+      if (followers > 0 && stats.avg_er != null && stats.avg_er > 0) {
+        const { lo, hi } = tierWindow(followers);
+        // The creator's own niche (category first, vision niche fallback).
+        const nicheRows = await db.query<{ primary_category: string | null; vision_niche: string | null }>(
+          `SELECT primary_category, raw_metadata->'vision'->>'niche' AS vision_niche
+             FROM creators WHERE id = $1 LIMIT 1`,
+          [account.creator_id],
+        );
+        const nicheRaw = (nicheRows[0]?.primary_category ?? nicheRows[0]?.vision_niche ?? '').trim().toLowerCase();
+        const nicheLabel = nicheRaw || null;
+
+        // Same-tier cohort (excluding self), ER as a fraction.
+        const tierRows = await db.query<{ engagement_rate: number | string }>(
+          `SELECT engagement_rate FROM creators
+            WHERE engagement_rate IS NOT NULL AND engagement_rate > 0
+              AND follower_count BETWEEN $1 AND $2
+              AND id <> $3`,
+          [lo, hi, account.creator_id],
+        );
+        const tierErs = tierRows.map((r) => Number(r.engagement_rate)).filter((v) => Number.isFinite(v) && v > 0);
+
+        // Same-tier + same-niche cohort.
+        let nicheErs: number[] = [];
+        if (nicheLabel) {
+          const nicheRowsC = await db.query<{ engagement_rate: number | string }>(
+            `SELECT engagement_rate FROM creators
+              WHERE engagement_rate IS NOT NULL AND engagement_rate > 0
+                AND follower_count BETWEEN $1 AND $2
+                AND id <> $3
+                AND (LOWER(primary_category) = $4 OR LOWER(raw_metadata->'vision'->>'niche') = $4)`,
+            [lo, hi, account.creator_id, nicheLabel],
+          );
+          nicheErs = nicheRowsC.map((r) => Number(r.engagement_rate)).filter((v) => Number.isFinite(v) && v > 0);
+        }
+
+        benchmark = computeBenchmark({
+          your_er: stats.avg_er,
+          tier_label: tierLabel(followers),
+          niche_label: nicheLabel,
+          tier_ers: tierErs,
+          niche_ers: nicheErs,
+        });
+      }
+    } catch {
+      benchmark = null;
+    }
+
     // Predictive + depth analyses, computed from the posts we already enriched
     // with insights (no extra Graph calls).
     const reelForecast = forecastReels(enriched);
@@ -245,6 +299,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_analysis: contentAnalysis,
       audience_quality: audQuality,
       caption_analysis: captionAnalysis,
+      benchmark,
       posts_per_week,
       saves_shares_pct: savesSharesPct,
     });
@@ -277,6 +332,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       audience_quality: audQuality,
       content_analysis: contentAnalysis,
       caption_analysis: captionAnalysis,
+      benchmark,
       posts,
       demographics,
     });

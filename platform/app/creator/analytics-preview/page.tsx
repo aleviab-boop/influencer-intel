@@ -69,6 +69,18 @@ interface CaptionAnalysis {
   cta_split: CaptionSplit | null;
   headline: string | null;
 }
+interface PeerBenchmark {
+  available: boolean;
+  cohort_size: number;
+  cohort_label: string;
+  scope: 'niche' | 'tier';
+  your_er: number | null;
+  cohort_median_er: number | null;
+  cohort_p25_er: number | null;
+  cohort_p75_er: number | null;
+  percentile: number | null;
+  verdict: 'top' | 'above' | 'typical' | 'below' | null;
+}
 interface Analytics {
   connected: boolean;
   reason?: string;
@@ -93,6 +105,7 @@ interface Analytics {
   audience_quality?: AudienceQuality;
   content_analysis?: ContentAnalysis;
   caption_analysis?: CaptionAnalysis;
+  benchmark?: PeerBenchmark | null;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -291,6 +304,13 @@ function AnalyticsPreview() {
         <StatCard label="Avg gap" value={cadence?.avg_days_between_posts != null ? `${cadence.avg_days_between_posts}d` : '—'} sub="between posts" />
         <StatCard label="Content mix" value={`${stats?.reels_count ?? 0}/${stats?.images_count ?? 0}`} sub="reels / photos" />
       </div>
+
+      {/* Peer benchmark */}
+      {data.benchmark?.available && (
+        <div className="mt-3">
+          <BenchmarkCard b={data.benchmark} />
+        </div>
+      )}
 
       {/* Engagement composition */}
       <div className="mt-3">
@@ -927,6 +947,71 @@ function RecommendationsCard({ recs }: { recs: Recommendation[] }) {
           );
         })}
       </ol>
+    </div>
+  );
+}
+
+function BenchmarkCard({ b }: { b: PeerBenchmark }) {
+  const pctl = b.percentile ?? 0;
+  const V: Record<string, { color: string; label: string; blurb: string }> = {
+    top: { color: '#16a34a', label: 'Top performer', blurb: `You're in the top ${100 - pctl}% of ${b.cohort_label}.` },
+    above: { color: '#16a34a', label: 'Above average', blurb: `You out-engage most ${b.cohort_label}.` },
+    typical: { color: '#d97706', label: 'Right on par', blurb: `You engage about the same as ${b.cohort_label}.` },
+    below: { color: '#dc2626', label: 'Room to grow', blurb: `Your engagement trails most ${b.cohort_label}.` },
+  };
+  const v = V[b.verdict ?? 'typical']!;
+
+  // Position markers on a 0..max scale for the little distribution bar.
+  const max = Math.max(b.cohort_p75_er ?? 0, b.your_er ?? 0, b.cohort_median_er ?? 0) * 1.15 || 0.0001;
+  const posOf = (x: number | null): number => (x != null ? Math.min(100, (x / max) * 100) : 0);
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <div>
+          <div className="text-[13px] font-semibold text-ink-900">How you compare</div>
+          <div className="text-[11.5px] text-ink-400">
+            vs {b.cohort_size} {b.cohort_label}{b.scope === 'niche' ? ' in your niche' : ''}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[22px] font-bold leading-none tabular-nums" style={{ color: v.color }}>
+            {pctl}<span className="text-[13px] font-semibold">th</span>
+          </div>
+          <div className="text-[10.5px] text-ink-400 uppercase tracking-wide">percentile</div>
+        </div>
+      </div>
+
+      <div className="rounded-lg px-3 py-2 text-[12.5px] mb-3" style={{ background: `${v.color}12`, color: v.color }}>
+        <b>{v.label}.</b> <span className="text-ink-700">{v.blurb}</span>
+      </div>
+
+      {/* Distribution: p25 — median — p75 range with your marker */}
+      <div className="relative h-9 mb-1">
+        <div className="absolute top-1/2 -translate-y-1/2 h-1.5 w-full rounded-full bg-[#f0eefb]" />
+        {b.cohort_p25_er != null && b.cohort_p75_er != null && (
+          <div className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full bg-[#d9d2f5]"
+            style={{ left: `${posOf(b.cohort_p25_er)}%`, width: `${posOf(b.cohort_p75_er) - posOf(b.cohort_p25_er)}%` }} />
+        )}
+        {b.cohort_median_er != null && (
+          <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-ink-400"
+            style={{ left: `${posOf(b.cohort_median_er)}%` }} title="Cohort median" />
+        )}
+        {b.your_er != null && (
+          <div className="absolute -translate-x-1/2 flex flex-col items-center" style={{ left: `${posOf(b.your_er)}%`, top: 0 }}>
+            <div className="w-3 h-3 rounded-full border-2 border-white shadow" style={{ background: v.color }} />
+            <span className="mt-0.5 text-[10px] font-semibold whitespace-nowrap" style={{ color: v.color }}>You</span>
+          </div>
+        )}
+      </div>
+      <div className="flex justify-between text-[11px] text-ink-500 tabular-nums">
+        <span>Your ER <b className="text-ink-800">{pct(b.your_er)}</b></span>
+        <span>Cohort median <b className="text-ink-800">{pct(b.cohort_median_er)}</b></span>
+      </div>
+
+      <p className="mt-3 text-[10.5px] text-ink-400">
+        Compared against creators within ~3× your follower count in our database. Directional benchmark, not a ranking.
+      </p>
     </div>
   );
 }
