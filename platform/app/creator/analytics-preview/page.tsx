@@ -80,6 +80,23 @@ const money = (v: number | null | undefined): string => {
   return '₹' + Math.round(n).toLocaleString('en-IN');
 };
 
+// Per-post performance band vs the creator's own median engagement.
+type Band = 'breakout' | 'strong' | 'average' | 'soft';
+const BAND_META: Record<Band, { label: string; color: string }> = {
+  breakout: { label: 'Breakout', color: '#8134AF' },
+  strong: { label: 'Strong', color: '#16a34a' },
+  average: { label: 'Average', color: '#6b7280' },
+  soft: { label: 'Soft', color: '#d97706' },
+};
+const bandOf = (ratio: number): Band =>
+  ratio >= 1.5 ? 'breakout' : ratio >= 1.15 ? 'strong' : ratio >= 0.85 ? 'average' : 'soft';
+const medianOf = (nums: number[]): number | null => {
+  if (!nums.length) return null;
+  const s = [...nums].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+};
+
 interface Earnings {
   available: boolean;
   reason?: string;
@@ -162,6 +179,7 @@ function AnalyticsPreview() {
   const { profile, stats, cadence, demographics } = data;
   const growth = data.growth ?? [];
   const allPosts = data.posts ?? [];
+  const medEr = medianOf(allPosts.map((p) => p.er).filter((v): v is number => v != null && v > 0));
   const filtered = allPosts.filter((p) =>
     tab === 'all' ? true : tab === 'reels' ? isReel(p.media_type) : !isReel(p.media_type),
   );
@@ -288,8 +306,23 @@ function AnalyticsPreview() {
         </div>
       </div>
 
+      {medEr != null && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-ink-400">
+          <span>Badges rank each post vs your median engagement ({pct(medEr)}):</span>
+          {(Object.keys(BAND_META) as Band[]).map((b) => (
+            <span key={b} className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full" style={{ background: BAND_META[b].color }} />
+              {BAND_META[b].label}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {shown.map((p) => (
+        {shown.map((p) => {
+          const band = p.er != null && medEr && medEr > 0 ? bandOf(p.er / medEr) : null;
+          const bm = band ? BAND_META[band] : null;
+          return (
           <a key={p.id} href={p.permalink} target="_blank" rel="noreferrer"
             className="group rounded-xl bg-white border border-border overflow-hidden hover:-translate-y-0.5 hover:shadow-card transition-all">
             <div className="relative aspect-square bg-[#f5f5f7]">
@@ -308,6 +341,12 @@ function AnalyticsPreview() {
                   {pct(p.er)}
                 </span>
               )}
+              {bm && (
+                <span className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold text-white"
+                  style={{ background: bm.color }} title={`${bm.label} vs your median engagement`}>
+                  {bm.label}
+                </span>
+              )}
             </div>
             <div className="p-2.5">
               <div className="flex items-center gap-3 text-[11.5px] text-ink-600 font-medium">
@@ -318,7 +357,8 @@ function AnalyticsPreview() {
               <div className="mt-1 text-[10.5px] text-ink-400">{dateStr(p.timestamp)}</div>
             </div>
           </a>
-        ))}
+          );
+        })}
       </div>
       {shown.length === 0 && (
         <div className="py-16 text-center text-ink-400 text-[13px]">No {tab === 'all' ? 'posts' : tab} to show.</div>
