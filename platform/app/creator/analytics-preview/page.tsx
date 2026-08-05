@@ -98,7 +98,7 @@ function AnalyticsPreview() {
   if (!data?.connected) {
     return (
       <Shell>
-        <EmptyState reason={data?.reason} error={data?.error} />
+        <EmptyState reason={data?.reason} />
       </Shell>
     );
   }
@@ -301,7 +301,7 @@ function BreakdownList({ data }: { data: Record<string, number> }) {
   );
 }
 
-function EmptyState({ reason, error }: { reason?: string; error?: string }) {
+function EmptyState({ reason }: { reason?: string }) {
   const copy: Record<string, { t: string; d: string }> = {
     no_account: {
       t: 'No Instagram account connected yet',
@@ -338,7 +338,6 @@ function EmptyState({ reason, error }: { reason?: string; error?: string }) {
           Make sure your Instagram is a Business/Creator account and added as a tester in the Meta app.
         </p>
       )}
-      {error && <p className="mt-4 text-[11px] text-ink-300 font-mono break-all max-w-lg mx-auto">{error}</p>}
     </div>
   );
 }
