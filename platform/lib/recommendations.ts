@@ -8,6 +8,7 @@
 import type { ReelForecast, ContentBreakdown } from './reel-forecast';
 import type { AudienceQuality } from './audience-quality';
 import type { ContentAnalysis } from './content-analysis';
+import type { CaptionAnalysis } from './caption-analysis';
 
 export interface Recommendation {
   id: string;
@@ -22,6 +23,7 @@ export interface RecommendationInput {
   reel_forecast: ReelForecast;
   content_analysis: ContentAnalysis;
   audience_quality: AudienceQuality;
+  caption_analysis?: CaptionAnalysis;
   posts_per_week: number | null;
   saves_shares_pct: number | null; // 0..100
 }
@@ -114,7 +116,27 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
     });
   }
 
-  // 7) Winning hashtag ----------------------------------------------------
+  // 7) Caption / CTA habit ------------------------------------------------
+  const cap = input.caption_analysis;
+  if (cap?.available) {
+    const cta = cap.cta_split;
+    // A real, positive CTA lift the creator is under-using is the best nudge.
+    if (cta?.lift_pct != null && cta.lift_pct >= 12 && cap.cta_usage_pct != null && cap.cta_usage_pct < 50) {
+      recs.push({
+        id: 'caption-cta', kind: 'content', priority: 6,
+        title: 'Ask your audience to act',
+        body: `Captions with a question or call-to-action earn you ${cta.lift_pct}% more engagement, yet only ${cap.cta_usage_pct}% of your posts have one. Add a simple prompt — a question, "save this", or "tag a friend".`,
+      });
+    } else if (cap.emoji_split?.lift_pct != null && cap.emoji_split.lift_pct >= 12) {
+      recs.push({
+        id: 'caption-emoji', kind: 'content', priority: 3,
+        title: 'Emojis are working for you',
+        body: `Your posts with emojis pull ${cap.emoji_split.lift_pct}% more engagement. Keep adding personality — but don't overdo it on branded posts.`,
+      });
+    }
+  }
+
+  // 8) Winning hashtag ----------------------------------------------------
   const topTag = ca.hashtags[0];
   if (topTag && topTag.avg_er != null) {
     recs.push({

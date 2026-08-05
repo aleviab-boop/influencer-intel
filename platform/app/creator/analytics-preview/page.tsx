@@ -52,6 +52,23 @@ interface ContentAnalysis {
   organic: GroupStat;
   sponsored_er_delta_pct: number | null;
 }
+interface CaptionSplit {
+  with_count: number; without_count: number;
+  with_er: number | null; without_er: number | null; lift_pct: number | null;
+}
+interface CaptionAnalysis {
+  available: boolean;
+  sample_size: number;
+  avg_caption_chars: number | null;
+  emoji_usage_pct: number | null;
+  question_usage_pct: number | null;
+  cta_usage_pct: number | null;
+  length_buckets: { key: 'short' | 'medium' | 'long'; label: string; count: number; avg_er: number | null }[];
+  best_length: 'short' | 'medium' | 'long' | null;
+  emoji_split: CaptionSplit | null;
+  cta_split: CaptionSplit | null;
+  headline: string | null;
+}
 interface Analytics {
   connected: boolean;
   reason?: string;
@@ -75,6 +92,7 @@ interface Analytics {
   content_breakdown?: ContentBreakdown;
   audience_quality?: AudienceQuality;
   content_analysis?: ContentAnalysis;
+  caption_analysis?: CaptionAnalysis;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -325,13 +343,20 @@ function AnalyticsPreview() {
         <PostingHeatmap posts={allPosts} />
       </div>
 
-      {data.content_analysis && (data.content_analysis.hashtags.length > 0 || data.content_analysis.sponsored.count > 0) && (
+      {((data.content_analysis && (data.content_analysis.hashtags.length > 0 || data.content_analysis.sponsored.count > 0)) || data.caption_analysis?.available) && (
         <>
           <SectionLabel>Content strategy</SectionLabel>
-          <div className="mt-3 grid lg:grid-cols-2 gap-3">
-            <HashtagCard c={data.content_analysis} />
-            <SponsoredCard c={data.content_analysis} />
-          </div>
+          {data.content_analysis && (data.content_analysis.hashtags.length > 0 || data.content_analysis.sponsored.count > 0) && (
+            <div className="mt-3 grid lg:grid-cols-2 gap-3">
+              <HashtagCard c={data.content_analysis} />
+              <SponsoredCard c={data.content_analysis} />
+            </div>
+          )}
+          {data.caption_analysis?.available && (
+            <div className="mt-3">
+              <CaptionCard c={data.caption_analysis} />
+            </div>
+          )}
         </>
       )}
 
@@ -1052,6 +1077,99 @@ function SponsoredCard({ c }: { c: ContentAnalysis }) {
         </>
       )}
       <p className="mt-3 text-[10.5px] text-ink-400">Detected from caption markers (#ad, paid partnership, etc.).</p>
+    </div>
+  );
+}
+
+function CaptionCard({ c }: { c: CaptionAnalysis }) {
+  const buckets = c.length_buckets.filter((b) => b.count > 0);
+  const maxEr = Math.max(...buckets.map((b) => b.avg_er ?? 0), 0.0001);
+
+  const Split = ({ label, s }: { label: string; s: CaptionSplit | null }) => {
+    if (!s || s.lift_pct == null) return null;
+    const up = s.lift_pct > 0;
+    const flat = Math.abs(s.lift_pct) < 5;
+    const color = flat ? '#6b7280' : up ? '#16a34a' : '#d97706';
+    return (
+      <div className="flex items-center justify-between gap-2 py-1.5">
+        <span className="text-[12.5px] text-ink-700">{label}</span>
+        <span className="text-[12.5px] font-semibold tabular-nums" style={{ color }}>
+          {flat ? 'about the same' : `${up ? '+' : ''}${s.lift_pct}%`}
+        </span>
+      </div>
+    );
+  };
+
+  const usage: { label: string; v: number | null }[] = [
+    { label: 'Use emojis', v: c.emoji_usage_pct },
+    { label: 'Ask a question', v: c.question_usage_pct },
+    { label: 'Have a call-to-action', v: c.cta_usage_pct },
+  ];
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Caption & hook analysis</div>
+        <span className="text-[11px] text-ink-400">
+          {c.avg_caption_chars != null ? `~${c.avg_caption_chars} chars/caption` : ''} · {c.sample_size} posts
+        </span>
+      </div>
+
+      {c.headline && (
+        <div className="mb-3 rounded-lg px-3 py-2 text-[12.5px] text-ink-800" style={{ background: ACCENT_SOFT }}>
+          {c.headline}
+        </div>
+      )}
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        {/* Length → ER */}
+        <div>
+          <div className="text-[11.5px] font-semibold text-ink-500 uppercase tracking-wide mb-2">Engagement by length</div>
+          {buckets.length === 0 ? (
+            <p className="text-[12px] text-ink-400">Not enough captions to compare.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {buckets.map((b) => (
+                <div key={b.key}>
+                  <div className="flex justify-between text-[12px] mb-0.5">
+                    <span className="text-ink-700 font-medium">
+                      {b.key === 'short' ? 'Short' : b.key === 'medium' ? 'Medium' : 'Long'}
+                      <span className="text-ink-400 font-normal"> · {b.count}</span>
+                      {c.best_length === b.key && <span className="ml-1 text-[10px] font-semibold" style={{ color: ACCENT }}>BEST</span>}
+                    </span>
+                    <span className="text-ink-500 tabular-nums">{pct(b.avg_er)}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${((b.avg_er ?? 0) / maxEr) * 100}%`, background: c.best_length === b.key ? ACCENT : '#c9c2f0' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Habits + lift */}
+        <div>
+          <div className="text-[11.5px] font-semibold text-ink-500 uppercase tracking-wide mb-2">Your habits</div>
+          <div className="space-y-1 mb-2">
+            {usage.map((u) => (
+              <div key={u.label} className="flex items-center justify-between text-[12.5px]">
+                <span className="text-ink-600">{u.label}</span>
+                <span className="text-ink-800 font-medium tabular-nums">{u.v != null ? `${u.v}%` : '—'}</span>
+              </div>
+            ))}
+          </div>
+          {(c.cta_split?.lift_pct != null || c.emoji_split?.lift_pct != null) && (
+            <div className="pt-2 border-t border-[#f0eefb]">
+              <div className="text-[11px] text-ink-400 mb-0.5">Engagement lift when you…</div>
+              <Split label="Add a question / CTA" s={c.cta_split} />
+              <Split label="Add emojis" s={c.emoji_split} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-3 text-[10.5px] text-ink-400">Correlations from your recent captions — directional, not causal. Test and see what sticks.</p>
     </div>
   );
 }

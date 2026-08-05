@@ -7,6 +7,7 @@ import type { IGMedia } from '@influencer-intel/shared/ig-graph/types';
 import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
 import { audienceQuality } from '@/lib/audience-quality';
 import { analyzeContent } from '@/lib/content-analysis';
+import { analyzeCaptions } from '@/lib/caption-analysis';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -225,6 +226,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const contentBreak = contentBreakdown(enriched);
     const audQuality = audienceQuality(followers, enriched);
     const contentAnalysis = analyzeContent(enriched);
+    const captionAnalysis = analyzeCaptions(enriched);
 
     // Saves + shares share of interactions — feeds a recommendation.
     const interTotals = enriched.reduce(
@@ -242,6 +244,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       reel_forecast: reelForecast,
       content_analysis: contentAnalysis,
       audience_quality: audQuality,
+      caption_analysis: captionAnalysis,
       posts_per_week,
       saves_shares_pct: savesSharesPct,
     });
@@ -273,6 +276,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_breakdown: contentBreak,
       audience_quality: audQuality,
       content_analysis: contentAnalysis,
+      caption_analysis: captionAnalysis,
       posts,
       demographics,
     });
