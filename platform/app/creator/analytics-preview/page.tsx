@@ -16,6 +16,22 @@ interface Post {
   er: number | null; reach: number | null; plays: number | null;
   saved: number | null; shares: number | null;
 }
+interface ReelForecast {
+  sample_size: number;
+  median_plays: number | null;
+  median_er: number | null;
+  trend: 'rising' | 'steady' | 'cooling' | null;
+  momentum_pct: number | null;
+  consistency: number | null;
+  next_reel: { plays_expected: number | null; plays_low: number | null; plays_high: number | null; er_expected: number | null } | null;
+  scorecard: { breakout: number; strong: number; average: number; soft: number };
+  last_reel_band: 'breakout' | 'strong' | 'average' | 'soft' | null;
+  top_reel: { plays: number; er: number | null; permalink: string; thumbnail: string | null } | null;
+}
+interface ContentBreakdown {
+  by_type: { type: 'reels' | 'photos' | 'carousels'; count: number; avg_er: number | null; avg_reach: number | null; avg_plays: number | null }[];
+  best_type: 'reels' | 'photos' | 'carousels' | null;
+}
 interface Analytics {
   connected: boolean;
   reason?: string;
@@ -34,6 +50,8 @@ interface Analytics {
   };
   cadence?: { posts_per_week: number | null; avg_days_between_posts: number | null };
   growth?: { date: string; followers: number }[];
+  reel_forecast?: ReelForecast;
+  content_breakdown?: ContentBreakdown;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -164,6 +182,12 @@ function AnalyticsPreview() {
       {/* Follower growth */}
       <div className="mt-4">
         <GrowthChart data={growth} current={profile?.followers_count ?? null} />
+      </div>
+
+      {/* Reel forecast (prediction) + content-format depth */}
+      <div className="mt-4 grid lg:grid-cols-2 gap-3">
+        <ReelForecastCard f={data.reel_forecast} />
+        <ContentBreakdownCard b={data.content_breakdown} />
       </div>
 
       {/* Audience demographics */}
@@ -373,6 +397,117 @@ function GrowthChart({ data, current }: { data: { date: string; followers: numbe
         <span>{fmtDay(points[0]!.date)} · {fmt(first)}</span>
         <span>{fmtDay(points[points.length - 1]!.date)} · {fmt(last)}</span>
       </div>
+    </div>
+  );
+}
+
+function ReelForecastCard({ f }: { f?: ReelForecast }) {
+  if (!f || f.sample_size < 3 || !f.next_reel) {
+    return (
+      <div className="rounded-xl bg-white border border-border shadow-card p-4">
+        <div className="text-[13px] font-semibold text-ink-900 mb-1">Reel forecast</div>
+        <p className="text-[12.5px] text-ink-400">
+          Post a few more reels{f ? ` (${f.sample_size} so far` : ''}{f ? ', need 3+)' : ''} and we’ll predict how your next one is likely to perform.
+        </p>
+      </div>
+    );
+  }
+  const trendColor = f.trend === 'rising' ? '#16a34a' : f.trend === 'cooling' ? '#dc2626' : '#6b7280';
+  const trendLabel = f.trend === 'rising' ? 'Trending up' : f.trend === 'cooling' ? 'Cooling off' : 'Steady';
+  const trendIcon = f.trend === 'rising' ? '▲' : f.trend === 'cooling' ? '▼' : '▬';
+  const bandColor: Record<string, string> = { breakout: '#8134AF', strong: '#16a34a', average: '#6b7280', soft: '#d97706' };
+  const sc = f.scorecard;
+  const scTotal = sc.breakout + sc.strong + sc.average + sc.soft || 1;
+  const bands: [keyof typeof sc, string][] = [['breakout', 'Breakout'], ['strong', 'Strong'], ['average', 'Average'], ['soft', 'Soft']];
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-[13px] font-semibold text-ink-900">Reel forecast</div>
+        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold px-2 py-0.5 rounded-full"
+          style={{ color: trendColor, background: `${trendColor}14` }}>
+          {trendIcon} {trendLabel}{f.momentum_pct != null ? ` ${f.momentum_pct > 0 ? '+' : ''}${f.momentum_pct}%` : ''}
+        </span>
+      </div>
+
+      {/* Prediction — next reel */}
+      <div className="rounded-lg p-3 mb-3" style={{ background: ACCENT_SOFT }}>
+        <div className="text-[11px] uppercase tracking-wide text-ink-400">Your next reel is projected to get</div>
+        <div className="mt-0.5 flex items-baseline gap-2">
+          <span className="text-[26px] font-bold tabular-nums" style={{ color: ACCENT }}>{fmt(f.next_reel.plays_expected)}</span>
+          <span className="text-[12.5px] text-ink-500">plays</span>
+        </div>
+        <div className="text-[11.5px] text-ink-400">
+          likely range {fmt(f.next_reel.plays_low)}–{fmt(f.next_reel.plays_high)}
+          {f.next_reel.er_expected != null ? ` · ~${pct(f.next_reel.er_expected)} engagement` : ''}
+        </div>
+      </div>
+
+      {/* Recent reel scorecard */}
+      <div className="text-[11px] uppercase tracking-wide text-ink-400 mb-1.5">Recent reels vs your median ({fmt(f.median_plays)} plays)</div>
+      <div className="flex h-2 rounded-full overflow-hidden mb-1.5">
+        {bands.map(([k]) => sc[k] > 0 && (
+          <div key={k} style={{ width: `${(sc[k] / scTotal) * 100}%`, background: bandColor[k] }} />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+        {bands.map(([k, label]) => (
+          <span key={k} className="inline-flex items-center gap-1 text-ink-500">
+            <span className="h-2 w-2 rounded-full" style={{ background: bandColor[k] }} />
+            {label} <span className="tabular-nums text-ink-700 font-medium">{sc[k]}</span>
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between text-[11.5px] text-ink-500">
+        <span>Consistency <span className="font-semibold text-ink-800">{f.consistency != null ? Math.round(f.consistency * 100) + '%' : '—'}</span></span>
+        {f.last_reel_band && (
+          <span>Last reel: <span className="font-semibold capitalize" style={{ color: bandColor[f.last_reel_band] }}>{f.last_reel_band}</span></span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ContentBreakdownCard({ b }: { b?: ContentBreakdown }) {
+  const rows = (b?.by_type ?? []).filter((r) => r.count > 0);
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-xl bg-white border border-border shadow-card p-4">
+        <div className="text-[13px] font-semibold text-ink-900 mb-1">Performance by format</div>
+        <p className="text-[12.5px] text-ink-400">Not enough posts yet to compare formats.</p>
+      </div>
+    );
+  }
+  const maxEr = Math.max(...rows.map((r) => r.avg_er ?? 0), 0.0001);
+  const nice: Record<string, string> = { reels: 'Reels', photos: 'Photos', carousels: 'Carousels' };
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[13px] font-semibold text-ink-900">Performance by format</div>
+        {b?.best_type && (
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ color: ACCENT, background: ACCENT_SOFT }}>
+            {nice[b.best_type]} win for engagement
+          </span>
+        )}
+      </div>
+      <div className="space-y-3">
+        {rows.map((r) => (
+          <div key={r.type}>
+            <div className="flex justify-between text-[12px] mb-1">
+              <span className="text-ink-700 font-medium">{nice[r.type]} <span className="text-ink-400 font-normal">· {r.count}</span></span>
+              <span className="text-ink-500 tabular-nums">
+                {pct(r.avg_er)}
+                {r.type === 'reels' && r.avg_plays ? ` · ${fmt(r.avg_plays)} plays` : r.avg_reach ? ` · ${fmt(r.avg_reach)} reach` : ''}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${((r.avg_er ?? 0) / maxEr) * 100}%`, background: r.type === b?.best_type ? ACCENT : '#c4b5fd' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[10.5px] text-ink-400">Bars compare average engagement rate across your recent posts by format.</p>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { IGGraphClient } from '@influencer-intel/shared/ig-graph';
 import { getAccessToken } from '@/lib/oauth-service';
 import type { ConnectedAccount } from '@influencer-intel/shared/types';
 import type { IGMedia } from '@influencer-intel/shared/ig-graph/types';
+import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -237,6 +238,10 @@ export async function GET(request: Request): Promise<NextResponse> {
       stats,
       cadence: { posts_per_week, avg_days_between_posts },
       growth,
+      // Predictive reel forecast + content-format depth, computed from the
+      // posts we already enriched with insights (no extra Graph calls).
+      reel_forecast: forecastReels(enriched),
+      content_breakdown: contentBreakdown(enriched),
       posts,
       demographics,
     });
