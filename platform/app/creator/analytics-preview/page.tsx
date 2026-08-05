@@ -39,6 +39,10 @@ interface AudienceQuality {
   sample: number;
   signals: { key: string; label: string; score: number; status: 'healthy' | 'watch' | 'concern'; detail: string }[];
 }
+interface Recommendation {
+  id: string; kind: 'content' | 'timing' | 'growth' | 'money' | 'quality';
+  title: string; body: string; priority: number;
+}
 interface GroupStat { count: number; avg_er: number | null; avg_reach: number | null }
 interface ContentAnalysis {
   hashtags: { tag: string; count: number; avg_er: number | null }[];
@@ -66,6 +70,7 @@ interface Analytics {
   };
   cadence?: { posts_per_week: number | null; avg_days_between_posts: number | null };
   growth?: { date: string; followers: number }[];
+  recommendations?: Recommendation[];
   reel_forecast?: ReelForecast;
   content_breakdown?: ContentBreakdown;
   audience_quality?: AudienceQuality;
@@ -243,6 +248,13 @@ function AnalyticsPreview() {
           </a>
         </div>
       </div>
+
+      {/* Recommended focus — synthesised from all the signals below */}
+      {(data.recommendations?.length ?? 0) > 0 && (
+        <div className="mt-4">
+          <RecommendationsCard recs={data.recommendations!} />
+        </div>
+      )}
 
       <SectionLabel>Performance</SectionLabel>
 
@@ -850,6 +862,46 @@ function MoneyTile({ label, value, sub, color, accent }: { label: string; value:
       <div className="text-[10.5px] uppercase tracking-wide text-ink-400">{label}</div>
       <div className="mt-0.5 text-[19px] font-bold tabular-nums" style={{ color: color ?? '#1a1a2e' }}>{value}</div>
       {sub && <div className="text-[10.5px] text-ink-400">{sub}</div>}
+    </div>
+  );
+}
+
+function RecommendationsCard({ recs }: { recs: Recommendation[] }) {
+  const KIND: Record<Recommendation['kind'], { label: string; color: string }> = {
+    content: { label: 'Content', color: ACCENT },
+    timing: { label: 'Timing', color: '#0ea5e9' },
+    growth: { label: 'Growth', color: '#16a34a' },
+    money: { label: 'Deals', color: '#d97706' },
+    quality: { label: 'Quality', color: '#dc2626' },
+  };
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-5 py-3.5 flex items-center gap-2.5" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z" />
+        </svg>
+        <div className="text-[15px] font-bold text-ink-900">Recommended focus</div>
+        <span className="ml-auto text-[11px] text-ink-400">auto-generated from your data</span>
+      </div>
+      <ol className="divide-y divide-border">
+        {recs.map((r, i) => {
+          const k = KIND[r.kind];
+          return (
+            <li key={r.id} className="flex gap-3 px-5 py-3.5">
+              <div className="h-6 w-6 rounded-full grid place-items-center text-[12px] font-bold shrink-0 tabular-nums"
+                style={{ background: ACCENT_SOFT, color: ACCENT }}>{i + 1}</div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[13.5px] font-semibold text-ink-900">{r.title}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                    style={{ color: k.color, background: `${k.color}14` }}>{k.label}</span>
+                </div>
+                <p className="mt-0.5 text-[12.5px] text-ink-500 leading-relaxed">{r.body}</p>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

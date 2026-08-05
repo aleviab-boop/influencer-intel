@@ -7,6 +7,7 @@ import type { IGMedia } from '@influencer-intel/shared/ig-graph/types';
 import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
 import { audienceQuality } from '@/lib/audience-quality';
 import { analyzeContent } from '@/lib/content-analysis';
+import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -218,6 +219,33 @@ export async function GET(request: Request): Promise<NextResponse> {
       demographics = null;
     }
 
+    // Predictive + depth analyses, computed from the posts we already enriched
+    // with insights (no extra Graph calls).
+    const reelForecast = forecastReels(enriched);
+    const contentBreak = contentBreakdown(enriched);
+    const audQuality = audienceQuality(followers, enriched);
+    const contentAnalysis = analyzeContent(enriched);
+
+    // Saves + shares share of interactions — feeds a recommendation.
+    const interTotals = enriched.reduce(
+      (a, p) => {
+        a.total += (p.like_count || 0) + (p.comments_count || 0) + (p.saved ?? 0) + (p.shares ?? 0);
+        a.sv += (p.saved ?? 0) + (p.shares ?? 0);
+        return a;
+      },
+      { total: 0, sv: 0 },
+    );
+    const savesSharesPct = interTotals.total > 0 ? Math.round((interTotals.sv / interTotals.total) * 100) : null;
+
+    const recommendations = generateRecommendations({
+      content_breakdown: contentBreak,
+      reel_forecast: reelForecast,
+      content_analysis: contentAnalysis,
+      audience_quality: audQuality,
+      posts_per_week,
+      saves_shares_pct: savesSharesPct,
+    });
+
     return NextResponse.json({
       connected: true,
       account: {
@@ -240,12 +268,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       stats,
       cadence: { posts_per_week, avg_days_between_posts },
       growth,
-      // Predictive reel forecast + content-format depth, computed from the
-      // posts we already enriched with insights (no extra Graph calls).
-      reel_forecast: forecastReels(enriched),
-      content_breakdown: contentBreakdown(enriched),
-      audience_quality: audienceQuality(followers, enriched),
-      content_analysis: analyzeContent(enriched),
+      recommendations,
+      reel_forecast: reelForecast,
+      content_breakdown: contentBreak,
+      audience_quality: audQuality,
+      content_analysis: contentAnalysis,
       posts,
       demographics,
     });
