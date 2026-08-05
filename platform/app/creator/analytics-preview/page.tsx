@@ -107,6 +107,7 @@ interface Analytics {
   caption_analysis?: CaptionAnalysis;
   benchmark?: PeerBenchmark | null;
   media_value?: MediaValue | null;
+  pitch_coach?: PitchCoach | null;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -165,6 +166,13 @@ interface BrandMatches {
   reason?: string;
   niche?: string | null;
   matches: BrandMatch[];
+}
+interface PitchCoach {
+  available: boolean;
+  headline: string;
+  suggested_ask: { low: number; high: number; deliverable: string } | null;
+  talking_points: string[];
+  readiness: { score: number; label: 'strong' | 'solid' | 'building'; gaps: string[] };
 }
 interface MediaValue {
   available: boolean;
@@ -360,6 +368,13 @@ function AnalyticsPreview() {
       {data.media_value?.available && (
         <div className="mt-3">
           <MediaValueCard v={data.media_value} />
+        </div>
+      )}
+
+      {/* Pitch coach */}
+      {data.pitch_coach?.available && (
+        <div className="mt-3">
+          <PitchCoachCard c={data.pitch_coach} kitHref={kitHref} />
         </div>
       )}
 
@@ -998,6 +1013,82 @@ function MediaValueCard({ v }: { v: MediaValue }) {
         </div>
 
         <p className="mt-3 text-[10.5px] text-ink-400">{v.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function PitchCoachCard({ c, kitHref }: { c: PitchCoach; kitHref: string }) {
+  const R: Record<PitchCoach['readiness']['label'], { label: string; color: string }> = {
+    strong: { label: 'Pitch-ready', color: '#16a34a' },
+    solid: { label: 'Solid', color: ACCENT },
+    building: { label: 'Building', color: '#d97706' },
+  };
+  const r = R[c.readiness.label];
+  const score = c.readiness.score;
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Pitch coach</div>
+          <div className="text-[11.5px] text-ink-500 leading-snug max-w-lg">{c.headline}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <div className="text-[18px] font-bold leading-none tabular-nums" style={{ color: r.color }}>{score}</div>
+            <div className="text-[9.5px] text-ink-400 uppercase tracking-wide">readiness</div>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+            style={{ color: r.color, background: `${r.color}14` }}>{r.label}</span>
+        </div>
+      </div>
+
+      <div className="p-4">
+        {c.suggested_ask && (
+          <div className="mb-3 rounded-xl p-3 flex items-center justify-between gap-2" style={{ background: ACCENT_SOFT }}>
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: ACCENT }}>Suggested ask</div>
+              <div className="text-[11px] text-ink-500">Lead deliverable · {c.suggested_ask.deliverable}</div>
+            </div>
+            <div className="text-[16px] font-bold tabular-nums text-right shrink-0" style={{ color: ACCENT }}>
+              {money(c.suggested_ask.low)} – {money(c.suggested_ask.high)}
+            </div>
+          </div>
+        )}
+
+        <div className="text-[11.5px] font-semibold text-ink-500 uppercase tracking-wide mb-2">Your talking points</div>
+        <ul className="space-y-2">
+          {c.talking_points.map((p, i) => (
+            <li key={i} className="flex gap-2.5">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="none">
+                <path d="M5 10.5l3.5 3.5L15 6.5" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="text-[12.5px] text-ink-700 leading-relaxed">{p}</span>
+            </li>
+          ))}
+        </ul>
+
+        {c.readiness.gaps.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-[#f0eefb]">
+            <div className="text-[11.5px] font-semibold text-ink-500 uppercase tracking-wide mb-1.5">Shore up first</div>
+            <ul className="space-y-1.5">
+              {c.readiness.gaps.map((g, i) => (
+                <li key={i} className="flex gap-2.5">
+                  <span className="text-[#d97706] text-[13px] leading-relaxed shrink-0">•</span>
+                  <span className="text-[12px] text-ink-500 leading-relaxed">{g}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[10.5px] text-ink-400">Talking points cite your own numbers — bring the receipts.</p>
+          <a href={kitHref} className="text-[12px] font-semibold whitespace-nowrap" style={{ color: ACCENT }}>
+            Open your media kit →
+          </a>
+        </div>
       </div>
     </div>
   );

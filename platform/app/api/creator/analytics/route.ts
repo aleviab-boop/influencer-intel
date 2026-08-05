@@ -11,6 +11,8 @@ import { analyzeCaptions } from '@/lib/caption-analysis';
 import { computeBenchmark, tierLabel, tierWindow } from '@/lib/peer-benchmark';
 import type { PeerBenchmark } from '@/lib/peer-benchmark';
 import { estimateMediaValue } from '@/lib/media-value';
+import { suggestRateCard } from '@/lib/media-kit';
+import { generatePitchCoach } from '@/lib/pitch-coach';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -298,6 +300,21 @@ export async function GET(request: Request): Promise<NextResponse> {
       posts_per_week,
     });
 
+    // Pitch coach — synthesises the money + performance signals into a
+    // negotiation cheat-sheet. Rate card is computed here to anchor the ask.
+    const rateCard = suggestRateCard(followers, stats.avg_er);
+    const pitchCoach = generatePitchCoach({
+      followers,
+      tier_label: tierLabel(followers),
+      avg_er: stats.avg_er,
+      media_value: mediaValue,
+      benchmark,
+      audience_quality: audQuality,
+      content_breakdown: contentBreak,
+      rate_card: rateCard,
+      posts_per_week,
+    });
+
     // Saves + shares share of interactions — feeds a recommendation.
     const interTotals = enriched.reduce(
       (a, p) => {
@@ -350,6 +367,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       caption_analysis: captionAnalysis,
       benchmark,
       media_value: mediaValue,
+      pitch_coach: pitchCoach,
       posts,
       demographics,
     });
