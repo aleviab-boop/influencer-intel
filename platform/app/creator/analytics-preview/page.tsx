@@ -108,6 +108,7 @@ interface Analytics {
   benchmark?: PeerBenchmark | null;
   media_value?: MediaValue | null;
   pitch_coach?: PitchCoach | null;
+  posting_time?: PostingTimeAnalysis | null;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -166,6 +167,18 @@ interface BrandMatches {
   reason?: string;
   niche?: string | null;
   matches: BrandMatch[];
+}
+interface DayStat { day: number; label: string; count: number; avg_er: number | null }
+interface PartStat { key: string; label: string; range: string; count: number; avg_er: number | null }
+interface PostingTimeAnalysis {
+  available: boolean;
+  sample_size: number;
+  timezone: string;
+  by_day: DayStat[];
+  by_part: PartStat[];
+  best_day: DayStat | null;
+  best_part: PartStat | null;
+  headline: string | null;
 }
 interface PitchCoach {
   available: boolean;
@@ -420,8 +433,9 @@ function AnalyticsPreview() {
       )}
 
       {/* Best time to post */}
-      <div className="mt-4">
+      <div className="mt-4 grid lg:grid-cols-2 gap-3">
         <PostingHeatmap posts={allPosts} />
+        {data.posting_time?.available && <PostingWindowCard t={data.posting_time} />}
       </div>
 
       {((data.content_analysis && (data.content_analysis.hashtags.length > 0 || data.content_analysis.sponsored.count > 0)) || data.caption_analysis?.available) && (
@@ -780,6 +794,65 @@ function ContentBreakdownCard({ b }: { b?: ContentBreakdown }) {
         ))}
       </div>
       <p className="mt-3 text-[10.5px] text-ink-400">Bars compare average engagement rate across your recent posts by format.</p>
+    </div>
+  );
+}
+
+function PostingWindowCard({ t }: { t: PostingTimeAnalysis }) {
+  const parts = t.by_part.filter((p) => p.count > 0);
+  const days = t.by_day.filter((d) => d.count > 0);
+  const maxPartEr = Math.max(...parts.map((p) => p.avg_er ?? 0), 0.0001);
+  const maxDayEr = Math.max(...days.map((d) => d.avg_er ?? 0), 0.0001);
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Your best windows</div>
+        <span className="text-[11px] text-ink-400">{t.sample_size} posts · {t.timezone}</span>
+      </div>
+      {t.headline && (
+        <div className="mb-3 rounded-lg px-3 py-2 text-[12.5px] text-ink-800" style={{ background: ACCENT_SOFT }}>
+          {t.headline}
+        </div>
+      )}
+
+      <div className="text-[11.5px] font-semibold text-ink-500 uppercase tracking-wide mb-2">Time of day</div>
+      <div className="space-y-2 mb-4">
+        {parts.map((p) => (
+          <div key={p.key}>
+            <div className="flex justify-between text-[12px] mb-0.5">
+              <span className="text-ink-700 font-medium">
+                {p.label} <span className="text-ink-400 font-normal">· {p.range}</span>
+                {t.best_part?.key === p.key && <span className="ml-1 text-[10px] font-semibold" style={{ color: ACCENT }}>BEST</span>}
+              </span>
+              <span className="text-ink-500 tabular-nums">{pct(p.avg_er)}</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${((p.avg_er ?? 0) / maxPartEr) * 100}%`, background: t.best_part?.key === p.key ? ACCENT : '#c9c2f0' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-[11.5px] font-semibold text-ink-500 uppercase tracking-wide mb-2">Day of week</div>
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((d) => {
+          const h = d.avg_er != null ? Math.max(0.15, (d.avg_er / maxDayEr)) : 0.1;
+          const isBest = t.best_day?.day === d.day;
+          return (
+            <div key={d.day} className="flex flex-col items-center gap-1">
+              <div className="w-full h-14 rounded-md bg-[#f0eefb] flex items-end overflow-hidden" title={`${d.label}: ${pct(d.avg_er)} (${d.count})`}>
+                <div className="w-full rounded-md" style={{ height: `${h * 100}%`, background: isBest ? ACCENT : '#c9c2f0' }} />
+              </div>
+              <span className="text-[9.5px]" style={{ color: isBest ? ACCENT : '#9ca3af', fontWeight: isBest ? 700 : 400 }}>
+                {d.label.slice(0, 1)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-3 text-[10.5px] text-ink-400">Aggregated from your posts&apos; engagement by IST day &amp; time. Directional — test and confirm.</p>
     </div>
   );
 }

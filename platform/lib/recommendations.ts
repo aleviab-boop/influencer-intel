@@ -10,6 +10,7 @@ import type { AudienceQuality } from './audience-quality';
 import type { ContentAnalysis } from './content-analysis';
 import type { CaptionAnalysis } from './caption-analysis';
 import type { PeerBenchmark } from './peer-benchmark';
+import type { PostingTimeAnalysis } from './posting-time';
 
 export interface Recommendation {
   id: string;
@@ -26,6 +27,7 @@ export interface RecommendationInput {
   audience_quality: AudienceQuality;
   caption_analysis?: CaptionAnalysis;
   benchmark?: PeerBenchmark | null;
+  posting_time?: PostingTimeAnalysis | null;
   posts_per_week: number | null;
   saves_shares_pct: number | null; // 0..100
 }
@@ -151,6 +153,17 @@ export function generateRecommendations(input: RecommendationInput): Recommendat
       id: 'benchmark-top', kind: 'money', priority: 4,
       title: 'Use your standout engagement in pitches',
       body: `You're in the top ${100 - bm.percentile}% of ${bm.cohort_label} for engagement. Lead brand pitches with this — it justifies higher rates than followers alone suggest.`,
+    });
+  }
+
+  // 7c) Best posting window -----------------------------------------------
+  const pt = input.posting_time;
+  if (pt?.available && pt.best_part) {
+    const dayBit = pt.best_day ? `${pt.best_day.label} ` : '';
+    recs.push({
+      id: 'best-time', kind: 'timing', priority: 5,
+      title: 'Post in your peak window',
+      body: `Your engagement is highest ${dayBit}in the ${pt.best_part.label.toLowerCase()} (${pt.best_part.range} IST). Schedule your most important posts then to catch your audience when they're most active.`,
     });
   }
 

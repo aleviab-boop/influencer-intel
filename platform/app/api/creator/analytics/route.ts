@@ -13,6 +13,7 @@ import type { PeerBenchmark } from '@/lib/peer-benchmark';
 import { estimateMediaValue } from '@/lib/media-value';
 import { suggestRateCard } from '@/lib/media-kit';
 import { generatePitchCoach } from '@/lib/pitch-coach';
+import { analyzePostingTime } from '@/lib/posting-time';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -284,6 +285,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const audQuality = audienceQuality(followers, enriched);
     const contentAnalysis = analyzeContent(enriched);
     const captionAnalysis = analyzeCaptions(enriched);
+    // Best-time analysis uses ALL fetched posts (more timestamps = better).
+    const postingTime = analyzePostingTime(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -333,6 +336,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       audience_quality: audQuality,
       caption_analysis: captionAnalysis,
       benchmark,
+      posting_time: postingTime,
       posts_per_week,
       saves_shares_pct: savesSharesPct,
     });
@@ -368,6 +372,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       benchmark,
       media_value: mediaValue,
       pitch_coach: pitchCoach,
+      posting_time: postingTime,
       posts,
       demographics,
     });
