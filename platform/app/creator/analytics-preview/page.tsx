@@ -106,6 +106,7 @@ function AnalyticsPreview() {
   const [data, setData] = useState<Analytics | null>(null);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
   const [loading, setLoading] = useState(true);
+  const [kitHref, setKitHref] = useState('/creator/media-kit');
   const [tab, setTab] = useState<'all' | 'reels' | 'posts'>('all');
   const [sort, setSort] = useState<'recent' | 'top'>('recent');
 
@@ -117,6 +118,7 @@ function AnalyticsPreview() {
     if (account) q.set('account', account);
     else if (handle) q.set('handle', handle);
     const qs = q.toString() ? `?${q}` : '';
+    setKitHref(`/creator/media-kit${qs}`);
 
     fetch(`/api/creator/analytics${qs}`)
       .then((r) => r.json())
@@ -191,10 +193,18 @@ function AnalyticsPreview() {
             {profile?.biography && <p className="mt-1 text-[12.5px] text-ink-500 line-clamp-2 max-w-md">{profile.biography}</p>}
           </div>
         </div>
-        <div className="sm:ml-auto grid grid-cols-3 gap-6 text-center shrink-0">
-          <HeaderStat label="followers" value={fmt(profile?.followers_count)} />
-          <HeaderStat label="following" value={fmt(profile?.follows_count)} />
-          <HeaderStat label="posts" value={fmt(profile?.media_count)} />
+        <div className="sm:ml-auto flex flex-col items-stretch sm:items-end gap-3 shrink-0">
+          <div className="grid grid-cols-3 gap-6 text-center">
+            <HeaderStat label="followers" value={fmt(profile?.followers_count)} />
+            <HeaderStat label="following" value={fmt(profile?.follows_count)} />
+            <HeaderStat label="posts" value={fmt(profile?.media_count)} />
+          </div>
+          <a href={kitHref}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-[12.5px] font-semibold text-white hover:brightness-105 hover:-translate-y-0.5 transition-all"
+            style={{ background: ACCENT }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v12H4z" /><path d="M8 20h8M12 16v4" /></svg>
+            Media kit
+          </a>
         </div>
       </div>
 
