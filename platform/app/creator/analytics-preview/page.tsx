@@ -315,6 +315,9 @@ function EmptyState({ reason, error }: { reason?: string; error?: string }) {
     network: { t: 'Network error', d: 'Couldn’t reach the analytics service. Check your connection and retry.' },
   };
   const c = copy[reason ?? ''] ?? { t: 'No data available', d: 'Connect an Instagram account to see analytics here.' };
+  // db_error is a server issue, not an auth one — a connect button wouldn't help there.
+  const showConnect = reason !== 'db_error';
+  const btnLabel = reason === 'fetch_error' ? 'Reconnect Instagram' : 'Connect Instagram';
   return (
     <div className="rounded-2xl bg-white border border-border shadow-card p-10 text-center">
       <div className="mx-auto h-14 w-14 rounded-2xl grid place-items-center mb-4" style={{ background: ACCENT_SOFT, color: ACCENT }}>
@@ -322,7 +325,20 @@ function EmptyState({ reason, error }: { reason?: string; error?: string }) {
       </div>
       <div className="text-[17px] font-bold text-ink-900">{c.t}</div>
       <p className="mt-2 text-[13.5px] text-ink-500 max-w-md mx-auto">{c.d}</p>
-      {error && <p className="mt-3 text-[11px] text-ink-300 font-mono break-all max-w-lg mx-auto">{error}</p>}
+      {showConnect && (
+        <a href="/api/oauth/instagram?flow=creator"
+          className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-[14px] font-semibold hover:brightness-105 hover:-translate-y-0.5 transition-all"
+          style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none" /></svg>
+          {btnLabel}
+        </a>
+      )}
+      {reason === 'fetch_error' && (
+        <p className="mt-3 text-[11.5px] text-ink-400 max-w-md mx-auto">
+          Make sure your Instagram is a Business/Creator account and added as a tester in the Meta app.
+        </p>
+      )}
+      {error && <p className="mt-4 text-[11px] text-ink-300 font-mono break-all max-w-lg mx-auto">{error}</p>}
     </div>
   );
 }
