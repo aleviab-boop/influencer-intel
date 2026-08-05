@@ -152,6 +152,20 @@ const medianOf = (nums: number[]): number | null => {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
 
+interface BrandMatch {
+  program_id: string;
+  brand_name: string;
+  program_name: string;
+  score: number;
+  fit: 'strong' | 'good' | 'possible';
+  reason: string;
+}
+interface BrandMatches {
+  available: boolean;
+  reason?: string;
+  niche?: string | null;
+  matches: BrandMatch[];
+}
 interface MediaValue {
   available: boolean;
   currency: 'INR';
@@ -187,6 +201,7 @@ export default function AnalyticsPreviewPage() {
 function AnalyticsPreview() {
   const [data, setData] = useState<Analytics | null>(null);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
+  const [brandMatches, setBrandMatches] = useState<BrandMatches | null>(null);
   const [loading, setLoading] = useState(true);
   const [kitHref, setKitHref] = useState('/creator/media-kit');
   const [tab, setTab] = useState<'all' | 'reels' | 'posts'>('all');
@@ -214,6 +229,12 @@ function AnalyticsPreview() {
       .then((r) => r.json())
       .then((e: Earnings) => setEarnings(e))
       .catch(() => setEarnings({ available: false, reason: 'network' }));
+
+    // Brand matches — also DB-only, fetched in parallel.
+    fetch(`/api/creator/brand-matches${qs}`)
+      .then((r) => r.json())
+      .then((m: BrandMatches) => setBrandMatches(m))
+      .catch(() => setBrandMatches({ available: false, matches: [] }));
   }, []);
 
   if (loading) {
@@ -339,6 +360,13 @@ function AnalyticsPreview() {
       {data.media_value?.available && (
         <div className="mt-3">
           <MediaValueCard v={data.media_value} />
+        </div>
+      )}
+
+      {/* Brands to pitch */}
+      {brandMatches?.available && brandMatches.matches.length > 0 && (
+        <div className="mt-3">
+          <BrandMatchCard m={brandMatches} kitHref={kitHref} />
         </div>
       )}
 
@@ -970,6 +998,62 @@ function MediaValueCard({ v }: { v: MediaValue }) {
         </div>
 
         <p className="mt-3 text-[10.5px] text-ink-400">{v.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function BrandMatchCard({ m, kitHref }: { m: BrandMatches; kitHref: string }) {
+  const FIT: Record<BrandMatch['fit'], { label: string; color: string }> = {
+    strong: { label: 'Strong fit', color: '#16a34a' },
+    good: { label: 'Good fit', color: ACCENT },
+    possible: { label: 'Possible', color: '#6b7280' },
+  };
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div>
+          <div className="text-[13px] font-semibold text-ink-900">Brands to pitch</div>
+          <div className="text-[11.5px] text-ink-400">
+            Active campaigns that fit{m.niche ? ` your ${m.niche} niche` : ' your profile'}
+          </div>
+        </div>
+        <span className="text-[11px] text-ink-400">{m.matches.length} match{m.matches.length === 1 ? '' : 'es'}</span>
+      </div>
+
+      <div className="divide-y divide-border">
+        {m.matches.map((b) => {
+          const f = FIT[b.fit];
+          return (
+            <div key={b.program_id} className="px-4 py-3 flex items-start gap-3">
+              <div className="h-9 w-9 rounded-lg grid place-items-center text-[13px] font-bold text-white shrink-0"
+                style={{ background: ACCENT }}>
+                {b.brand_name?.[0]?.toUpperCase() ?? '?'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[13.5px] font-semibold text-ink-900 truncate">{b.brand_name}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                    style={{ color: f.color, background: `${f.color}14` }}>{f.label}</span>
+                </div>
+                <div className="text-[11.5px] text-ink-400 truncate">{b.program_name}</div>
+                <p className="mt-0.5 text-[12px] text-ink-500 leading-relaxed">{b.reason}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="text-[15px] font-bold tabular-nums" style={{ color: f.color }}>{b.score}</div>
+                <div className="text-[9.5px] text-ink-400 uppercase tracking-wide">fit</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-[10.5px] text-ink-400">Matched by niche &amp; content topics against active campaigns in our network.</p>
+        <a href={kitHref} className="text-[12px] font-semibold whitespace-nowrap" style={{ color: ACCENT }}>
+          Pitch with your media kit →
+        </a>
       </div>
     </div>
   );
