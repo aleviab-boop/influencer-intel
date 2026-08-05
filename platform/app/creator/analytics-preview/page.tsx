@@ -32,6 +32,13 @@ interface ContentBreakdown {
   by_type: { type: 'reels' | 'photos' | 'carousels'; count: number; avg_er: number | null; avg_reach: number | null; avg_plays: number | null }[];
   best_type: 'reels' | 'photos' | 'carousels' | null;
 }
+interface AudienceQuality {
+  available: boolean;
+  score: number | null;
+  grade: string | null;
+  sample: number;
+  signals: { key: string; label: string; score: number; status: 'healthy' | 'watch' | 'concern'; detail: string }[];
+}
 interface Analytics {
   connected: boolean;
   reason?: string;
@@ -52,6 +59,7 @@ interface Analytics {
   growth?: { date: string; followers: number }[];
   reel_forecast?: ReelForecast;
   content_breakdown?: ContentBreakdown;
+  audience_quality?: AudienceQuality;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -265,6 +273,13 @@ function AnalyticsPreview() {
       </div>
 
       <SectionLabel>Audience &amp; timing</SectionLabel>
+
+      {/* Audience quality / authenticity */}
+      {data.audience_quality?.available && (
+        <div className="mt-3">
+          <AudienceQualityCard q={data.audience_quality} />
+        </div>
+      )}
 
       {/* Audience demographics */}
       {demographics && (Object.keys(demographics.gender_age).length > 0 || Object.keys(demographics.cities).length > 0) && (
@@ -810,6 +825,68 @@ function MoneyTile({ label, value, sub, color, accent }: { label: string; value:
       <div className="text-[10.5px] uppercase tracking-wide text-ink-400">{label}</div>
       <div className="mt-0.5 text-[19px] font-bold tabular-nums" style={{ color: color ?? '#1a1a2e' }}>{value}</div>
       {sub && <div className="text-[10.5px] text-ink-400">{sub}</div>}
+    </div>
+  );
+}
+
+function AudienceQualityCard({ q }: { q: AudienceQuality }) {
+  const score = q.score ?? 0;
+  const scoreColor = score >= 70 ? '#16a34a' : score >= 55 ? '#d97706' : '#dc2626';
+  const statusColor: Record<string, string> = { healthy: '#16a34a', watch: '#d97706', concern: '#dc2626' };
+
+  // Score ring geometry.
+  const R = 34, C = 2 * Math.PI * R;
+  const off = C * (1 - score / 100);
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Audience quality</div>
+        <span className="text-[11px] text-ink-400">estimated from engagement patterns · {q.sample} posts</span>
+      </div>
+
+      <div className="flex items-center gap-5 flex-col sm:flex-row">
+        {/* Score ring */}
+        <div className="relative shrink-0" style={{ width: 88, height: 88 }}>
+          <svg width="88" height="88" viewBox="0 0 88 88">
+            <circle cx="44" cy="44" r={R} fill="none" stroke="#f0eefb" strokeWidth="8" />
+            <circle cx="44" cy="44" r={R} fill="none" stroke={scoreColor} strokeWidth="8" strokeLinecap="round"
+              strokeDasharray={C} strokeDashoffset={off} transform="rotate(-90 44 44)" />
+          </svg>
+          <div className="absolute inset-0 grid place-items-center text-center">
+            <div>
+              <div className="text-[22px] font-bold tabular-nums leading-none" style={{ color: scoreColor }}>{score}</div>
+              <div className="text-[9px] uppercase tracking-wide text-ink-400 mt-0.5">/ 100</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Signals */}
+        <div className="flex-1 w-full space-y-2.5">
+          {q.signals.map((s) => (
+            <div key={s.key}>
+              <div className="flex items-center justify-between text-[12px] mb-0.5">
+                <span className="inline-flex items-center gap-1.5 text-ink-700 font-medium">
+                  <span className="h-2 w-2 rounded-full" style={{ background: statusColor[s.status] }} />
+                  {s.label}
+                </span>
+                <span className="text-ink-400 tabular-nums">{s.score}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${s.score}%`, background: statusColor[s.status] }} />
+              </div>
+              <div className="mt-0.5 text-[10.5px] text-ink-400">{s.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-[12px] text-ink-500">
+          Overall: <span className="font-semibold" style={{ color: scoreColor }}>{q.grade}</span>
+        </span>
+        <span className="text-[10px] text-ink-300">Signal-based estimate, not a verification.</span>
+      </div>
     </div>
   );
 }

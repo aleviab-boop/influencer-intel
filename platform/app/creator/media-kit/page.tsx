@@ -27,6 +27,7 @@ interface MK {
   cadence?: { posts_per_week: number | null };
   posts?: MKPost[];
   demographics?: { gender_age: Record<string, number>; cities: Record<string, number> } | null;
+  audience_quality?: { available: boolean; score: number | null; grade: string | null };
 }
 
 const fmt = (v: number | null | undefined): string => {
@@ -162,6 +163,18 @@ function MediaKit() {
           {/* Audience */}
           <div>
             <KitHeading>Audience</KitHeading>
+            {data.audience_quality?.available && data.audience_quality.score != null && (
+              <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-border p-2.5">
+                <div className="h-9 w-9 rounded-lg grid place-items-center text-[13px] font-bold tabular-nums text-white shrink-0"
+                  style={{ background: data.audience_quality.score >= 70 ? '#16a34a' : data.audience_quality.score >= 55 ? '#d97706' : '#dc2626' }}>
+                  {data.audience_quality.score}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-semibold text-ink-800">Audience quality · {data.audience_quality.grade}</div>
+                  <div className="text-[10.5px] text-ink-400">Estimated from engagement patterns (0–100).</div>
+                </div>
+              </div>
+            )}
             {cities.length > 0 ? (
               <>
                 <SubLabel>Top locations</SubLabel>

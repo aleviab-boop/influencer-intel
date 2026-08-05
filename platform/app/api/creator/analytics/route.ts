@@ -5,6 +5,7 @@ import { getAccessToken } from '@/lib/oauth-service';
 import type { ConnectedAccount } from '@influencer-intel/shared/types';
 import type { IGMedia } from '@influencer-intel/shared/ig-graph/types';
 import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
+import { audienceQuality } from '@/lib/audience-quality';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -242,6 +243,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       // posts we already enriched with insights (no extra Graph calls).
       reel_forecast: forecastReels(enriched),
       content_breakdown: contentBreakdown(enriched),
+      audience_quality: audienceQuality(followers, enriched),
       posts,
       demographics,
     });
