@@ -93,6 +93,38 @@ export async function GET(request: Request): Promise<NextResponse> {
     const profile = await client.getProfile();
     const followers = profile.followers_count ?? 0;
 
+    // Record today's follower snapshot (one row per account per day) so the
+    // dashboard can chart growth over time. Best-effort — never blocks the
+    // response. IG only gives us the current count, so history accrues here.
+    let growth: { date: string; followers: number }[] = [];
+    try {
+      await db.query(
+        `INSERT INTO follower_snapshots
+           (connected_account_id, creator_id, followers_count, follows_count, media_count)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (connected_account_id, captured_on) DO UPDATE SET
+           followers_count = EXCLUDED.followers_count,
+           follows_count   = EXCLUDED.follows_count,
+           media_count     = EXCLUDED.media_count,
+           captured_at     = NOW()`,
+        [account.id, account.creator_id, profile.followers_count ?? null,
+          profile.follows_count ?? null, profile.media_count ?? null],
+      );
+      const snaps = await db.query<{ captured_on: string; followers_count: number | string }>(
+        `SELECT captured_on, followers_count FROM follower_snapshots
+         WHERE connected_account_id = $1 AND followers_count IS NOT NULL
+         ORDER BY captured_on ASC LIMIT 90`,
+        [account.id],
+      );
+      growth = snaps.map((s) => ({
+        date: typeof s.captured_on === 'string' ? s.captured_on.slice(0, 10)
+          : new Date(s.captured_on).toISOString().slice(0, 10),
+        followers: Number(s.followers_count),
+      }));
+    } catch {
+      growth = [];
+    }
+
     const media: IGMedia[] = await client.getAllMedia(MEDIA_CAP);
 
     // Enrich the most recent posts with per-media insights (reach/plays/etc).
@@ -204,6 +236,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       },
       stats,
       cadence: { posts_per_week, avg_days_between_posts },
+      growth,
       posts,
       demographics,
     });

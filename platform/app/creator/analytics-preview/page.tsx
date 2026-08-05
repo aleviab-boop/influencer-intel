@@ -33,6 +33,7 @@ interface Analytics {
     avg_reel_plays: number | null; avg_reach: number | null;
   };
   cadence?: { posts_per_week: number | null; avg_days_between_posts: number | null };
+  growth?: { date: string; followers: number }[];
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -104,6 +105,7 @@ function AnalyticsPreview() {
   }
 
   const { profile, stats, cadence, demographics } = data;
+  const growth = data.growth ?? [];
   const allPosts = data.posts ?? [];
   const filtered = allPosts.filter((p) =>
     tab === 'all' ? true : tab === 'reels' ? isReel(p.media_type) : !isReel(p.media_type),
@@ -157,6 +159,11 @@ function AnalyticsPreview() {
         <StatCard label="Posts / week" value={cadence?.posts_per_week != null ? String(cadence.posts_per_week) : '—'} sub="posting cadence" />
         <StatCard label="Avg gap" value={cadence?.avg_days_between_posts != null ? `${cadence.avg_days_between_posts}d` : '—'} sub="between posts" />
         <StatCard label="Content mix" value={`${stats?.reels_count ?? 0}/${stats?.images_count ?? 0}`} sub="reels / photos" />
+      </div>
+
+      {/* Follower growth */}
+      <div className="mt-4">
+        <GrowthChart data={growth} current={profile?.followers_count ?? null} />
       </div>
 
       {/* Audience demographics */}
@@ -297,6 +304,75 @@ function BreakdownList({ data }: { data: Record<string, number> }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function GrowthChart({ data, current }: { data: { date: string; followers: number }[]; current: number | null }) {
+  const points = data.filter((d) => Number.isFinite(d.followers));
+
+  // Nothing tracked yet, or only today's snapshot — show a "building" state
+  // rather than a misleading flat line.
+  if (points.length < 2) {
+    return (
+      <div className="rounded-xl bg-white border border-border shadow-card p-4">
+        <div className="text-[13px] font-semibold text-ink-900 mb-1">Follower growth</div>
+        <div className="flex items-end gap-2">
+          <div className="text-[24px] font-bold tabular-nums" style={{ color: ACCENT }}>{fmt(current)}</div>
+          <div className="text-[12px] text-ink-400 pb-1.5">followers today</div>
+        </div>
+        <p className="mt-2 text-[12px] text-ink-400">
+          We just started tracking this account. Your growth curve builds up as you check back over the coming days.
+        </p>
+      </div>
+    );
+  }
+
+  const W = 640, H = 160, padX = 8, padTop = 12, padBot = 22;
+  const ys = points.map((p) => p.followers);
+  const min = Math.min(...ys), max = Math.max(...ys);
+  const span = max - min || 1;
+  const x = (i: number) => padX + (i / (points.length - 1)) * (W - padX * 2);
+  const y = (v: number) => padTop + (1 - (v - min) / span) * (H - padTop - padBot);
+
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.followers).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(points.length - 1).toFixed(1)},${(H - padBot).toFixed(1)} L${x(0).toFixed(1)},${(H - padBot).toFixed(1)} Z`;
+
+  const first = points[0]!.followers;
+  const last = points[points.length - 1]!.followers;
+  const delta = last - first;
+  const deltaPct = first > 0 ? (delta / first) * 100 : 0;
+  const up = delta >= 0;
+  const fmtDay = (s: string): string => {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  };
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+        <div className="text-[13px] font-semibold text-ink-900">Follower growth</div>
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: up ? '#16a34a' : '#dc2626' }}>
+          <span>{up ? '▲' : '▼'}</span>
+          <span className="tabular-nums">{up ? '+' : ''}{delta.toLocaleString('en-IN')}</span>
+          <span className="text-ink-400 font-medium">({up ? '+' : ''}{deltaPct.toFixed(2)}% over {points.length} days)</span>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={ACCENT} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={ACCENT} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#growthFill)" />
+        <path d={line} fill="none" stroke={ACCENT} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(points.length - 1)} cy={y(last)} r="3.5" fill={ACCENT} />
+      </svg>
+      <div className="flex justify-between text-[11px] text-ink-400 mt-1">
+        <span>{fmtDay(points[0]!.date)} · {fmt(first)}</span>
+        <span>{fmtDay(points[points.length - 1]!.date)} · {fmt(last)}</span>
+      </div>
     </div>
   );
 }
