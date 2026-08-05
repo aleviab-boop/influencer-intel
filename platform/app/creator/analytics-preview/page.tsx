@@ -202,6 +202,11 @@ function AnalyticsPreview() {
         </div>
       )}
 
+      {/* Best time to post */}
+      <div className="mt-4">
+        <PostingHeatmap posts={allPosts} />
+      </div>
+
       {/* Posts / reels grid */}
       <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-1.5">
@@ -508,6 +513,106 @@ function ContentBreakdownCard({ b }: { b?: ContentBreakdown }) {
         ))}
       </div>
       <p className="mt-3 text-[10.5px] text-ink-400">Bars compare average engagement rate across your recent posts by format.</p>
+    </div>
+  );
+}
+
+function PostingHeatmap({ posts }: { posts: Post[] }) {
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const BINS = ['12–4a', '4–8a', '8a–12p', '12–4p', '4–8p', '8p–12a'];
+
+  // Bucket each post into day-of-week × 4-hour slot, in the VIEWER's local
+  // timezone (posts carry IG's UTC-offset timestamps; new Date() localizes).
+  const cells: { count: number; erSum: number; erN: number }[][] =
+    DAYS.map(() => BINS.map(() => ({ count: 0, erSum: 0, erN: 0 })));
+  let usable = 0;
+  for (const p of posts) {
+    const d = new Date(p.timestamp);
+    if (Number.isNaN(d.getTime())) continue;
+    usable++;
+    const cell = cells[d.getDay()]![Math.floor(d.getHours() / 4)]!;
+    cell.count++;
+    if (p.er != null) { cell.erSum += p.er; cell.erN++; }
+  }
+
+  if (usable < 4) {
+    return (
+      <div className="rounded-xl bg-white border border-border shadow-card p-4">
+        <div className="text-[13px] font-semibold text-ink-900 mb-1">Best time to post</div>
+        <p className="text-[12.5px] text-ink-400">Once you’ve posted a bit more, we’ll map out which days and times land best for you.</p>
+      </div>
+    );
+  }
+
+  // Score each populated cell by average ER (falls back to raw count when no
+  // ER anywhere). Track the max for colour scaling + the best slot.
+  const anyEr = cells.some((row) => row.some((c) => c.erN > 0));
+  const score = (c: { count: number; erSum: number; erN: number }): number =>
+    c.count === 0 ? -1 : anyEr ? (c.erN ? c.erSum / c.erN : 0) : c.count;
+  let maxScore = 0;
+  let best: { day: number; bin: number; s: number } | null = null;
+  cells.forEach((row, di) => row.forEach((c, bi) => {
+    const s = score(c);
+    if (c.count > 0 && s > maxScore) maxScore = s;
+    if (c.count > 0 && (!best || s > best.s)) best = { day: di, bin: bi, s };
+  }));
+
+  const bestCell = best as { day: number; bin: number; s: number } | null;
+  const bestLabel = bestCell ? `${DAYS[bestCell.day]} · ${BINS[bestCell.bin]}` : null;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Best time to post</div>
+        {bestLabel && (
+          <span className="text-[11.5px] font-semibold px-2 py-0.5 rounded-full" style={{ color: ACCENT, background: ACCENT_SOFT }}>
+            Sweet spot: {bestLabel}
+          </span>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[380px]">
+          {/* Column headers */}
+          <div className="grid" style={{ gridTemplateColumns: `34px repeat(${BINS.length}, 1fr)` }}>
+            <div />
+            {BINS.map((b) => (
+              <div key={b} className="text-[9.5px] text-ink-400 text-center pb-1">{b}</div>
+            ))}
+          </div>
+          {/* Rows */}
+          {cells.map((row, di) => (
+            <div key={di} className="grid items-center" style={{ gridTemplateColumns: `34px repeat(${BINS.length}, 1fr)` }}>
+              <div className="text-[10.5px] text-ink-500 font-medium pr-1">{DAYS[di]}</div>
+              {row.map((c, bi) => {
+                const s = score(c);
+                const intensity = c.count === 0 ? 0 : maxScore > 0 ? 0.12 + 0.88 * (s / maxScore) : 0.4;
+                const isBest = bestCell != null && bestCell.day === di && bestCell.bin === bi;
+                const title = c.count === 0
+                  ? `${DAYS[di]} ${BINS[bi]} · no posts`
+                  : `${DAYS[di]} ${BINS[bi]} · ${c.count} post${c.count > 1 ? 's' : ''}${c.erN ? ` · ${pct(c.erSum / c.erN)} avg ER` : ''}`;
+                return (
+                  <div key={bi} className="p-[3px]">
+                    <div title={title}
+                      className="aspect-square rounded-[5px] grid place-items-center text-[9px] font-bold tabular-nums transition-transform hover:scale-105"
+                      style={{
+                        background: c.count === 0 ? '#f4f3f9' : ACCENT,
+                        opacity: c.count === 0 ? 1 : intensity,
+                        color: intensity > 0.55 ? '#fff' : ACCENT,
+                        boxShadow: isBest ? `0 0 0 2px ${ACCENT}` : undefined,
+                      }}>
+                      {c.count > 0 ? c.count : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="mt-2 text-[10.5px] text-ink-400">
+        Darker = higher average engagement. Numbers show how many posts landed in each slot · your local time.
+      </p>
     </div>
   );
 }
