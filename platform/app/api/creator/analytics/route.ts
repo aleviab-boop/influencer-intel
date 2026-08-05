@@ -10,6 +10,7 @@ import { analyzeContent } from '@/lib/content-analysis';
 import { analyzeCaptions } from '@/lib/caption-analysis';
 import { computeBenchmark, tierLabel, tierWindow } from '@/lib/peer-benchmark';
 import type { PeerBenchmark } from '@/lib/peer-benchmark';
+import { estimateMediaValue } from '@/lib/media-value';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -282,6 +283,21 @@ export async function GET(request: Request): Promise<NextResponse> {
     const contentAnalysis = analyzeContent(enriched);
     const captionAnalysis = analyzeCaptions(enriched);
 
+    // Earned media value — from the same enriched posts + cadence.
+    const avgOf = (nums: number[]): number | null =>
+      nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
+    const savesVals = enriched.map((p) => p.saved ?? 0).filter((v) => v > 0);
+    const sharesVals = enriched.map((p) => p.shares ?? 0).filter((v) => v > 0);
+    const mediaValue = estimateMediaValue({
+      followers,
+      avg_reach: stats.avg_reach,
+      avg_likes: stats.avg_likes,
+      avg_comments: stats.avg_comments,
+      avg_saves: avgOf(savesVals),
+      avg_shares: avgOf(sharesVals),
+      posts_per_week,
+    });
+
     // Saves + shares share of interactions — feeds a recommendation.
     const interTotals = enriched.reduce(
       (a, p) => {
@@ -333,6 +349,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_analysis: contentAnalysis,
       caption_analysis: captionAnalysis,
       benchmark,
+      media_value: mediaValue,
       posts,
       demographics,
     });

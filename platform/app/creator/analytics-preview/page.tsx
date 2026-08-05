@@ -106,6 +106,7 @@ interface Analytics {
   content_analysis?: ContentAnalysis;
   caption_analysis?: CaptionAnalysis;
   benchmark?: PeerBenchmark | null;
+  media_value?: MediaValue | null;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -151,6 +152,16 @@ const medianOf = (nums: number[]): number | null => {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 };
 
+interface MediaValue {
+  available: boolean;
+  currency: 'INR';
+  tier: string;
+  per_post_low: number; per_post_mid: number; per_post_high: number;
+  monthly_mid: number | null; posts_per_month: number | null;
+  reach_value: number; engagement_value: number;
+  avg_impressions: number; avg_engagements: number; cpm: number;
+  note: string;
+}
 interface Earnings {
   available: boolean;
   reason?: string;
@@ -323,6 +334,13 @@ function AnalyticsPreview() {
       <div className="mt-3">
         <EarningsSection e={earnings} />
       </div>
+
+      {/* Earned media value */}
+      {data.media_value?.available && (
+        <div className="mt-3">
+          <MediaValueCard v={data.media_value} />
+        </div>
+      )}
 
       <SectionLabel>Growth &amp; predictions</SectionLabel>
 
@@ -907,6 +925,52 @@ function MoneyTile({ label, value, sub, color, accent }: { label: string; value:
       <div className="text-[10.5px] uppercase tracking-wide text-ink-400">{label}</div>
       <div className="mt-0.5 text-[19px] font-bold tabular-nums" style={{ color: color ?? '#1a1a2e' }}>{value}</div>
       {sub && <div className="text-[10.5px] text-ink-400">{sub}</div>}
+    </div>
+  );
+}
+
+function MediaValueCard({ v }: { v: MediaValue }) {
+  const reachShare = v.reach_value + v.engagement_value > 0
+    ? Math.round((v.reach_value / (v.reach_value + v.engagement_value)) * 100) : 0;
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div>
+          <div className="text-[13px] font-semibold text-ink-900">Earned media value</div>
+          <div className="text-[11.5px] text-ink-400">What your organic output is worth as equivalent ad spend</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[22px] font-bold leading-none tabular-nums" style={{ color: ACCENT }}>
+            {money(v.per_post_mid)}
+          </div>
+          <div className="text-[10.5px] text-ink-400">per post · {money(v.per_post_low)}–{money(v.per_post_high)}</div>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <MoneyTile label="Per post" value={money(v.per_post_mid)} sub="mid estimate" accent />
+          <MoneyTile label="Monthly" value={v.monthly_mid != null ? money(v.monthly_mid) : '—'}
+            sub={v.posts_per_month != null ? `~${v.posts_per_month} posts/mo` : 'set a cadence'} />
+          <MoneyTile label="Reach value" value={money(v.reach_value)} sub={`${fmt(v.avg_impressions)} reach @ ₹${v.cpm} CPM`} />
+          <MoneyTile label="Engagement value" value={money(v.engagement_value)} sub={`${fmt(v.avg_engagements)} actions/post`} />
+        </div>
+
+        {/* Value composition bar */}
+        <div className="mt-3">
+          <div className="flex h-2 rounded-full overflow-hidden bg-[#f0eefb]">
+            <div className="h-full" style={{ width: `${reachShare}%`, background: ACCENT }} />
+            <div className="h-full" style={{ width: `${100 - reachShare}%`, background: '#d97706' }} />
+          </div>
+          <div className="mt-1.5 flex justify-between text-[11px] text-ink-500">
+            <span><span className="inline-block w-2 h-2 rounded-full align-middle mr-1" style={{ background: ACCENT }} />Reach {reachShare}%</span>
+            <span><span className="inline-block w-2 h-2 rounded-full align-middle mr-1" style={{ background: '#d97706' }} />Engagement {100 - reachShare}%</span>
+          </div>
+        </div>
+
+        <p className="mt-3 text-[10.5px] text-ink-400">{v.note}</p>
+      </div>
     </div>
   );
 }
