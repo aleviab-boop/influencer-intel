@@ -28,6 +28,10 @@ interface MK {
   posts?: MKPost[];
   demographics?: { gender_age: Record<string, number>; cities: Record<string, number> } | null;
   audience_quality?: { available: boolean; score: number | null; grade: string | null };
+  media_value?: {
+    available: boolean; per_post_low: number; per_post_mid: number; per_post_high: number;
+    monthly_mid: number | null;
+  } | null;
 }
 
 const fmt = (v: number | null | undefined): string => {
@@ -217,6 +221,20 @@ function MediaKit() {
                     </div>
                   ))}
                 </div>
+                {data.media_value?.available && (
+                  <div className="mt-3 rounded-xl p-3 flex items-center justify-between gap-2" style={{ background: ACCENT_SOFT }}>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: ACCENT }}>Earned media value</div>
+                      <div className="text-[10.5px] text-ink-500">Equivalent ad-spend value per post</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[16px] font-bold tabular-nums" style={{ color: ACCENT }}>{money(data.media_value.per_post_mid)}</div>
+                      {data.media_value.monthly_mid != null && (
+                        <div className="text-[10px] text-ink-400 tabular-nums">~{money(data.media_value.monthly_mid)}/mo</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <p className="mt-2 text-[10.5px] text-ink-400 leading-relaxed">{rateCard.note}</p>
               </>
             ) : (
