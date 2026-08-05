@@ -109,6 +109,7 @@ interface Analytics {
   media_value?: MediaValue | null;
   pitch_coach?: PitchCoach | null;
   posting_time?: PostingTimeAnalysis | null;
+  content_playbook?: ContentPlaybook | null;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -180,6 +181,11 @@ interface PostingTimeAnalysis {
   best_part: PartStat | null;
   headline: string | null;
 }
+interface PostBrief {
+  n: number; format: string; window: string | null;
+  hook: string; caption_tip: string; hashtag: string | null; why: string;
+}
+interface ContentPlaybook { available: boolean; briefs: PostBrief[] }
 interface PitchCoach {
   available: boolean;
   headline: string;
@@ -452,6 +458,15 @@ function AnalyticsPreview() {
               <CaptionCard c={data.caption_analysis} />
             </div>
           )}
+        </>
+      )}
+
+      {data.content_playbook?.available && (
+        <>
+          <SectionLabel>Your next posts</SectionLabel>
+          <div className="mt-3">
+            <ContentPlaybookCard p={data.content_playbook} />
+          </div>
         </>
       )}
 
@@ -1219,6 +1234,51 @@ function BrandMatchCard({ m, kitHref }: { m: BrandMatches; kitHref: string }) {
           Pitch with your media kit →
         </a>
       </div>
+    </div>
+  );
+}
+
+function ContentPlaybookCard({ p }: { p: ContentPlaybook }) {
+  const FMT_COLOR: Record<string, string> = { Reel: ACCENT, Carousel: '#0ea5e9', Photo: '#16a34a', Post: '#6b7280' };
+  return (
+    <div className="grid md:grid-cols-3 gap-3">
+      {p.briefs.map((b) => {
+        const color = FMT_COLOR[b.format] ?? ACCENT;
+        return (
+          <div key={b.n} className="rounded-xl bg-white border border-border shadow-card p-4 flex flex-col">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                style={{ color, background: `${color}14` }}>{b.format}</span>
+              <span className="text-[11px] text-ink-300 font-semibold tabular-nums">#{b.n}</span>
+            </div>
+
+            <p className="text-[13px] text-ink-800 leading-relaxed font-medium">{b.hook}</p>
+
+            <div className="mt-3 space-y-1.5 text-[12px]">
+              {b.window && (
+                <div className="flex gap-2">
+                  <span className="text-ink-400 shrink-0">When</span>
+                  <span className="text-ink-700">{b.window}</span>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <span className="text-ink-400 shrink-0">Caption</span>
+                <span className="text-ink-700">{b.caption_tip}</span>
+              </div>
+              {b.hashtag && (
+                <div className="flex gap-2">
+                  <span className="text-ink-400 shrink-0">Tag</span>
+                  <span className="font-medium" style={{ color: ACCENT }}>{b.hashtag}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-auto pt-3 text-[11px] text-ink-400 border-t border-[#f0eefb] leading-relaxed">
+              {b.why}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { estimateMediaValue } from '@/lib/media-value';
 import { suggestRateCard } from '@/lib/media-kit';
 import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
+import { generateContentPlaybook } from '@/lib/content-playbook';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -287,6 +288,14 @@ export async function GET(request: Request): Promise<NextResponse> {
     const captionAnalysis = analyzeCaptions(enriched);
     // Best-time analysis uses ALL fetched posts (more timestamps = better).
     const postingTime = analyzePostingTime(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
+    // Prescriptive "next 3 posts" plan, synthesised from the above signals.
+    const contentPlaybook = generateContentPlaybook({
+      content_breakdown: contentBreak,
+      reel_forecast: reelForecast,
+      content_analysis: contentAnalysis,
+      caption_analysis: captionAnalysis,
+      posting_time: postingTime,
+    });
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -373,6 +382,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       media_value: mediaValue,
       pitch_coach: pitchCoach,
       posting_time: postingTime,
+      content_playbook: contentPlaybook,
       posts,
       demographics,
     });
