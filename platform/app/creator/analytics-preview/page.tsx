@@ -124,6 +124,7 @@ interface Analytics {
   winning_formula?: WinningFormula | null;
   posting_consistency?: PostingConsistency | null;
   caption_hooks?: CaptionHooks | null;
+  caption_length?: CaptionLength | null;
   content_pillars?: ContentPillars | null;
   brand_safety?: BrandSafety | null;
   scorecard?: CreatorScorecard | null;
@@ -415,6 +416,28 @@ interface CaptionHooks {
   overall_avg_er: number | null;
   top_hook: HookArchetype | null;
   hooks: HookArchetype[];
+  headline: string | null;
+  tip: string | null;
+}
+interface LengthBucket {
+  key: string;
+  label: string;
+  range: string;
+  lo: number;
+  hi: number | null;
+  count: number;
+  avg_er: number | null;
+  lift_pct: number | null;
+  is_best: boolean;
+}
+interface CaptionLength {
+  available: boolean;
+  sample_size: number;
+  overall_avg_er: number | null;
+  median_length: number | null;
+  buckets: LengthBucket[];
+  best: LengthBucket | null;
+  matches_best: boolean | null;
   headline: string | null;
   tip: string | null;
 }
@@ -899,6 +922,12 @@ function AnalyticsPreview() {
       {data.caption_hooks?.available && (
         <div className="mt-3">
           <CaptionHooksCard c={data.caption_hooks} />
+        </div>
+      )}
+
+      {data.caption_length?.available && (
+        <div className="mt-3">
+          <CaptionLengthCard c={data.caption_length} />
         </div>
       )}
 
@@ -2573,6 +2602,74 @@ function CaptionHooksCard({ c }: { c: CaptionHooks }) {
 
         <p className="mt-3 text-[10.5px] text-ink-400">
           Hook styles found in the opening line of your last {c.sample_size} captions, ranked by how your posts engaged. Examples are your own top openers.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CaptionLengthCard({ c }: { c: CaptionLength }) {
+  // Scale bars to the strongest scoring band.
+  const maxEr = c.buckets.reduce((m, b) => Math.max(m, b.avg_er ?? 0), 0) || 1;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Caption length sweet spot</div>
+        {c.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{c.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        {/* Per-band engagement bars */}
+        <div className="space-y-2">
+          {c.buckets.map((b) => {
+            const w = b.avg_er != null ? Math.max(4, Math.round((b.avg_er / maxEr) * 100)) : 0;
+            const dim = b.avg_er == null;
+            return (
+              <div key={b.key} className="flex items-center gap-3">
+                <div className="w-28 shrink-0 text-right">
+                  <div className={`text-[11.5px] font-semibold ${b.is_best ? '' : 'text-ink-700'}`} style={b.is_best ? { color: ACCENT } : undefined}>
+                    {b.label}
+                  </div>
+                  <div className="text-[9.5px] text-ink-400 leading-tight">{b.range}</div>
+                </div>
+                <div className="flex-1 h-6 rounded-md bg-[#f5f4fb] overflow-hidden relative">
+                  {!dim && (
+                    <div className="h-full rounded-md" style={{ width: `${w}%`, background: b.is_best ? ACCENT : '#c9c2ef' }} />
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-between px-2">
+                    <span className="text-[10px] text-ink-400 tabular-nums">{b.count} post{b.count === 1 ? '' : 's'}</span>
+                    <span className="text-[10.5px] font-semibold text-ink-700 tabular-nums">
+                      {b.avg_er != null ? pct(b.avg_er) : 'too few'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Your typical length vs best */}
+        {c.median_length != null && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Tile label="You usually write" value={`~${c.median_length}`} sub="characters" />
+            <Tile
+              label="Sweet spot"
+              value={c.best?.range.replace(' chars', '') ?? '—'}
+              sub={c.matches_best === true ? 'you\u2019re on it' : 'characters'}
+            />
+          </div>
+        )}
+
+        {c.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{c.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Average engagement of your last {c.sample_size} captions grouped by character count. Bands with too few
+          posts are shown but not scored. Directional — it reflects your audience, not a universal rule.
         </p>
       </div>
     </div>
