@@ -27,6 +27,7 @@ import { analyzeBrandSafety } from '@/lib/brand-safety';
 import { buildScorecard } from '@/lib/creator-scorecard';
 import { analyzePostSpotlight } from '@/lib/post-spotlight';
 import { analyzeHashtagStrategy } from '@/lib/hashtag-strategy';
+import { analyzePostingSchedule } from '@/lib/posting-schedule';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -355,6 +356,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     })));
     // Hashtag keep/drop/test tiers + optimal tag-count read.
     const hashtagStrategy = analyzeHashtagStrategy(posts.map((p) => ({ caption: p.caption, er: p.er })));
+    // Day × time-of-day grid → 3 concrete recommended posting slots (IST).
+    const postingSchedule = analyzePostingSchedule(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
     // One-line rollup: blend the sub-scores into a media-kit-ready grade.
     const scorecard = buildScorecard({
       benchmark,
@@ -478,6 +481,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       scorecard,
       post_spotlight: postSpotlight,
       hashtag_strategy: hashtagStrategy,
+      posting_schedule: postingSchedule,
       engagement_trend: engagementTrend,
       posts,
       demographics,

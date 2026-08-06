@@ -126,6 +126,7 @@ interface Analytics {
   scorecard?: CreatorScorecard | null;
   post_spotlight?: PostSpotlight | null;
   hashtag_strategy?: HashtagStrategy | null;
+  posting_schedule?: PostingSchedule | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -262,6 +263,25 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface ScheduleSlot {
+  day: number | null;
+  day_label: string;
+  part_key: string;
+  part_label: string;
+  range: string;
+  avg_er: number | null;
+  count: number;
+  lift_pct: number | null;
+}
+interface PostingSchedule {
+  available: boolean;
+  sample_size: number;
+  timezone: 'IST';
+  basis: 'day_time' | 'time_only' | null;
+  slots: ScheduleSlot[];
+  headline: string | null;
+  tip: string | null;
 }
 interface HashtagVerdict {
   tag: string;
@@ -752,6 +772,13 @@ function AnalyticsPreview() {
         <PostingHeatmap posts={allPosts} />
         {data.posting_time?.available && <PostingWindowCard t={data.posting_time} />}
       </div>
+
+      {/* Recommended weekly posting slots */}
+      {data.posting_schedule?.available && (
+        <div className="mt-3">
+          <PostingScheduleCard s={data.posting_schedule} />
+        </div>
+      )}
 
       {/* Format × timing matrix */}
       {data.format_timing?.available && (
@@ -2324,6 +2351,48 @@ function WinningFormulaCard({ w }: { w: WinningFormula }) {
 
         <p className="mt-3 text-[10.5px] text-ink-400">
           Traits markedly more common in your top-performing posts than the rest. Directional — patterns in a small sample, not guarantees.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PostingScheduleCard({ s }: { s: PostingSchedule }) {
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Your weekly posting plan</div>
+        {s.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{s.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        <div className="grid sm:grid-cols-3 gap-2.5">
+          {s.slots.map((slot, i) => (
+            <div key={`${slot.day}-${slot.part_key}`} className="rounded-lg border border-border bg-[#faf9ff] px-3 py-3 text-center">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full mx-auto mb-1.5 text-[11px] font-bold text-white"
+                style={{ background: ACCENT }}>{i + 1}</div>
+              <div className="text-[13px] font-semibold text-ink-900">{slot.day_label}</div>
+              <div className="text-[12px] text-ink-700">{slot.part_label}</div>
+              <div className="text-[10.5px] text-ink-400 mt-0.5">{slot.range}</div>
+              {slot.lift_pct != null && slot.lift_pct > 0 && (
+                <div className="mt-1.5 inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                  style={{ color: '#16a34a', background: '#16a34a14' }}>+{slot.lift_pct}% ER</div>
+              )}
+              <div className="text-[10px] text-ink-400 mt-1 tabular-nums">{slot.count} posts · {pct(slot.avg_er)}</div>
+            </div>
+          ))}
+        </div>
+
+        {s.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{s.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          {s.basis === 'day_time'
+            ? 'Best day × time-of-day windows from your own posts (IST), one per day for a spread-out week.'
+            : 'Best times of day from your posts (IST). Post across more days to unlock day-specific slots.'}
         </p>
       </div>
     </div>
