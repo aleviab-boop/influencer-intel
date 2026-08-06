@@ -16,6 +16,7 @@ import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
 import { generateContentPlaybook } from '@/lib/content-playbook';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
+import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -232,6 +233,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Rank this creator's engagement against similar-tier (and, if the sample
     // is big enough, same-niche) creators already in our DB. Best-effort.
     let benchmark: PeerBenchmark | null = null;
+    let niche: string | null = null;   // creator's niche, hoisted for reuse below
     try {
       if (followers > 0 && stats.avg_er != null && stats.avg_er > 0) {
         const { lo, hi } = tierWindow(followers);
@@ -243,6 +245,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         );
         const nicheRaw = (nicheRows[0]?.primary_category ?? nicheRows[0]?.vision_niche ?? '').trim().toLowerCase();
         const nicheLabel = nicheRaw || null;
+        niche = nicheLabel;
 
         // Same-tier cohort (excluding self), ER as a fraction.
         const tierRows = await db.query<{ engagement_rate: number | string }>(
@@ -330,6 +333,21 @@ export async function GET(request: Request): Promise<NextResponse> {
       posts_per_week,
     });
 
+    // Copy-ready pitch message — turns the numbers above into an outreach
+    // email/DM the creator can paste, tweak a couple of {placeholders}, and send.
+    const pitchDraft = generatePitchDraft({
+      name: profile.name ?? null,
+      handle: profile.username ?? null,
+      tier_label: tierLabel(followers),
+      niche,
+      followers,
+      avg_er: stats.avg_er,
+      media_value: mediaValue,
+      benchmark,
+      content_breakdown: contentBreak,
+      posts_per_week,
+    });
+
     // Saves + shares share of interactions — feeds a recommendation.
     const interTotals = enriched.reduce(
       (a, p) => {
@@ -384,6 +402,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       benchmark,
       media_value: mediaValue,
       pitch_coach: pitchCoach,
+      pitch_draft: pitchDraft,
       posting_time: postingTime,
       content_playbook: contentPlaybook,
       engagement_trend: engagementTrend,

@@ -108,6 +108,7 @@ interface Analytics {
   benchmark?: PeerBenchmark | null;
   media_value?: MediaValue | null;
   pitch_coach?: PitchCoach | null;
+  pitch_draft?: PitchDraft | null;
   posting_time?: PostingTimeAnalysis | null;
   content_playbook?: ContentPlaybook | null;
   engagement_trend?: EngagementTrend | null;
@@ -204,6 +205,11 @@ interface PitchCoach {
   suggested_ask: { low: number; high: number; deliverable: string } | null;
   talking_points: string[];
   readiness: { score: number; label: 'strong' | 'solid' | 'building'; gaps: string[] };
+}
+interface PitchDraft {
+  available: boolean;
+  subject: string;
+  body: string;
 }
 interface MediaValue {
   available: boolean;
@@ -406,6 +412,13 @@ function AnalyticsPreview() {
       {data.pitch_coach?.available && (
         <div className="mt-3">
           <PitchCoachCard c={data.pitch_coach} kitHref={kitHref} />
+        </div>
+      )}
+
+      {/* Copy-ready pitch message */}
+      {data.pitch_draft?.available && (
+        <div className="mt-3">
+          <PitchDraftCard d={data.pitch_draft} />
         </div>
       )}
 
@@ -1244,6 +1257,71 @@ function PitchCoachCard({ c, kitHref }: { c: PitchCoach; kitHref: string }) {
             Open your media kit →
           </a>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PitchDraftCard({ d }: { d: PitchDraft }) {
+  const [copied, setCopied] = useState<null | 'body' | 'all'>(null);
+
+  const copy = async (which: 'body' | 'all') => {
+    const text = which === 'all' ? `Subject: ${d.subject}\n\n${d.body}` : d.body;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1800);
+    } catch {
+      /* clipboard blocked — the text is still selectable in the box below */
+    }
+  };
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Ready-to-send pitch</div>
+          <div className="text-[11.5px] text-ink-500 leading-snug max-w-lg">
+            Copy, swap the {'{placeholders}'}, and send. Every figure is one you can defend.
+          </div>
+        </div>
+        <button
+          onClick={() => copy('all')}
+          className="text-[11.5px] font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors"
+          style={{ color: '#fff', background: ACCENT }}
+        >
+          {copied === 'all' ? 'Copied ✓' : 'Copy email'}
+        </button>
+      </div>
+
+      <div className="p-4">
+        {/* Subject */}
+        <div className="mb-3">
+          <div className="text-[10.5px] font-semibold text-ink-400 uppercase tracking-wide mb-1">Subject</div>
+          <div className="text-[12.5px] text-ink-800 font-medium rounded-lg border border-border bg-[#faf9ff] px-3 py-2">
+            {d.subject}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="text-[10.5px] font-semibold text-ink-400 uppercase tracking-wide">Message</div>
+          <button
+            onClick={() => copy('body')}
+            className="text-[11px] font-semibold whitespace-nowrap"
+            style={{ color: ACCENT }}
+          >
+            {copied === 'body' ? 'Copied ✓' : 'Copy message'}
+          </button>
+        </div>
+        <pre className="text-[12px] text-ink-700 leading-relaxed rounded-lg border border-border bg-[#faf9ff] px-3 py-3 whitespace-pre-wrap font-sans overflow-x-auto">
+          {d.body}
+        </pre>
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Personalise the {'{Brand}'} and {'{product/campaign}'} tags before you hit send.
+        </p>
       </div>
     </div>
   );
