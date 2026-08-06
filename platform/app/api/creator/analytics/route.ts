@@ -22,6 +22,7 @@ import { projectGrowth } from '@/lib/growth-projection';
 import { analyzeWinningFormula } from '@/lib/winning-formula';
 import { analyzePostingConsistency } from '@/lib/posting-consistency';
 import { analyzeCaptionHooks } from '@/lib/caption-hooks';
+import { analyzeContentPillars } from '@/lib/content-pillars';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -336,6 +337,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const captionHooks = analyzeCaptionHooks(
       posts.map((p) => ({ caption: p.caption, er: p.er, permalink: p.permalink })),
     );
+    // Recurring content themes (pillars) and which ones over/under-perform their share.
+    const contentPillars = analyzeContentPillars(
+      posts.map((p) => ({ caption: p.caption, er: p.er })),
+    );
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -446,6 +451,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       winning_formula: winningFormula,
       posting_consistency: postingConsistency,
       caption_hooks: captionHooks,
+      content_pillars: contentPillars,
       engagement_trend: engagementTrend,
       posts,
       demographics,

@@ -121,6 +121,7 @@ interface Analytics {
   winning_formula?: WinningFormula | null;
   posting_consistency?: PostingConsistency | null;
   caption_hooks?: CaptionHooks | null;
+  content_pillars?: ContentPillars | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -257,6 +258,27 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface ContentPillar {
+  key: string;
+  label: string;
+  count: number;
+  share_pct: number;
+  avg_er: number | null;
+  er_index: number | null;
+  verdict: 'scale_up' | 'keep' | 'reduce' | 'testing';
+  note: string;
+}
+interface ContentPillars {
+  available: boolean;
+  sample_size: number;
+  categorised: number;
+  overall_avg_er: number | null;
+  pillars: ContentPillar[];
+  best_pillar: ContentPillar | null;
+  opportunity: ContentPillar | null;
+  headline: string | null;
+  tip: string | null;
 }
 interface HookArchetype {
   key: string;
@@ -658,6 +680,12 @@ function AnalyticsPreview() {
             </div>
           )}
         </>
+      )}
+
+      {data.content_pillars?.available && (
+        <div className="mt-3">
+          <ContentPillarsCard c={data.content_pillars} />
+        </div>
       )}
 
       {data.caption_hooks?.available && (
@@ -1875,6 +1903,68 @@ function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
         )}
 
         <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
+    </div>
+  );
+}
+
+function ContentPillarsCard({ c }: { c: ContentPillars }) {
+  const VERDICT: Record<ContentPillar['verdict'], { label: string; color: string }> = {
+    scale_up: { label: 'Scale up', color: '#16a34a' },
+    keep: { label: 'Keep', color: '#0ea5e9' },
+    reduce: { label: 'Reduce', color: '#d97706' },
+    testing: { label: 'Testing', color: '#6b7280' },
+  };
+  // Widest bar = the pillar with the largest share, for a readable scale.
+  const maxShare = Math.max(...c.pillars.map((p) => p.share_pct), 1);
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Your content pillars</div>
+        {c.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{c.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        <div className="space-y-2.5">
+          {c.pillars.map((p) => {
+            const v = VERDICT[p.verdict];
+            const idxPct = p.er_index != null ? Math.round((p.er_index - 1) * 100) : null;
+            return (
+              <div key={p.key} className="rounded-lg border border-border bg-[#faf9ff] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[12.5px] font-semibold text-ink-800 truncate">{p.label}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0"
+                      style={{ color: v.color, background: `${v.color}14` }}>{v.label}</span>
+                  </div>
+                  <span className="text-[10.5px] text-ink-400 shrink-0 tabular-nums">
+                    {p.count} posts · {pct(p.avg_er)}
+                    {idxPct != null && idxPct !== 0 ? ` (${idxPct > 0 ? '+' : ''}${idxPct}%)` : ''}
+                  </span>
+                </div>
+                {/* Share-of-posts bar */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full bg-[#eee]">
+                    <div className="h-2 rounded-full" style={{ width: `${(p.share_pct / maxShare) * 100}%`, background: v.color }} />
+                  </div>
+                  <span className="text-[10px] text-ink-400 tabular-nums w-14 text-right shrink-0">{p.share_pct}% of posts</span>
+                </div>
+                <div className="mt-1.5 text-[11px] text-ink-500 leading-snug">{p.note}</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {c.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{c.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Themes clustered from the hashtags &amp; keywords in {c.categorised} of your captions. Engagement index compares each pillar to your overall average — over 100% beats your norm.
+        </p>
       </div>
     </div>
   );
