@@ -120,6 +120,7 @@ interface Analytics {
   growth_projection?: GrowthProjection | null;
   winning_formula?: WinningFormula | null;
   posting_consistency?: PostingConsistency | null;
+  caption_hooks?: CaptionHooks | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -256,6 +257,24 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface HookArchetype {
+  key: string;
+  label: string;
+  count: number;
+  avg_er: number | null;
+  is_winner: boolean;
+  template: string;
+  example: string | null;
+}
+interface CaptionHooks {
+  available: boolean;
+  sample_size: number;
+  overall_avg_er: number | null;
+  top_hook: HookArchetype | null;
+  hooks: HookArchetype[];
+  headline: string | null;
+  tip: string | null;
 }
 interface PostingConsistency {
   available: boolean;
@@ -639,6 +658,12 @@ function AnalyticsPreview() {
             </div>
           )}
         </>
+      )}
+
+      {data.caption_hooks?.available && (
+        <div className="mt-3">
+          <CaptionHooksCard c={data.caption_hooks} />
+        </div>
       )}
 
       {data.winning_formula?.available && (
@@ -1850,6 +1875,59 @@ function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
         )}
 
         <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
+    </div>
+  );
+}
+
+function CaptionHooksCard({ c }: { c: CaptionHooks }) {
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Your caption hook library</div>
+        {c.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{c.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        <div className="space-y-2.5">
+          {c.hooks.map((h) => {
+            const lift = h.avg_er != null && c.overall_avg_er != null && c.overall_avg_er > 0
+              ? Math.round(((h.avg_er - c.overall_avg_er) / c.overall_avg_er) * 100)
+              : null;
+            return (
+              <div key={h.key} className="rounded-lg border border-border bg-[#faf9ff] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[12.5px] font-semibold text-ink-800">{h.label}</span>
+                    {h.is_winner && (
+                      <span className="text-[9.5px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0"
+                        style={{ color: '#16a34a', background: '#16a34a14' }}>Winner</span>
+                    )}
+                  </div>
+                  <span className="text-[10.5px] text-ink-400 shrink-0 tabular-nums">
+                    {h.count}× · {pct(h.avg_er)}{lift != null && lift > 0 ? ` (+${lift}%)` : ''}
+                  </span>
+                </div>
+                <div className="text-[11.5px] text-ink-600 leading-snug">{h.template}</div>
+                {h.example && (
+                  <div className="mt-1.5 text-[11.5px] text-ink-700 italic border-l-2 pl-2 leading-snug" style={{ borderColor: ACCENT }}>
+                    “{h.example}”
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {c.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{c.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Hook styles found in the opening line of your last {c.sample_size} captions, ranked by how your posts engaged. Examples are your own top openers.
+        </p>
       </div>
     </div>
   );

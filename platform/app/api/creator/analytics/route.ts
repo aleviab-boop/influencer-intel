@@ -21,6 +21,7 @@ import { analyzeAudience } from '@/lib/audience-insights';
 import { projectGrowth } from '@/lib/growth-projection';
 import { analyzeWinningFormula } from '@/lib/winning-formula';
 import { analyzePostingConsistency } from '@/lib/posting-consistency';
+import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -331,6 +332,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const postingConsistency = analyzePostingConsistency(
       posts.map((p) => ({ timestamp: p.timestamp, er: p.er })),
     );
+    // Reusable caption hooks mined from the openers of the creator's best posts.
+    const captionHooks = analyzeCaptionHooks(
+      posts.map((p) => ({ caption: p.caption, er: p.er, permalink: p.permalink })),
+    );
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -440,6 +445,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       growth_projection: growthProjection,
       winning_formula: winningFormula,
       posting_consistency: postingConsistency,
+      caption_hooks: captionHooks,
       engagement_trend: engagementTrend,
       posts,
       demographics,
