@@ -119,6 +119,7 @@ interface Analytics {
   audience_insights?: AudienceInsights | null;
   growth_projection?: GrowthProjection | null;
   winning_formula?: WinningFormula | null;
+  posting_consistency?: PostingConsistency | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -255,6 +256,22 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface PostingConsistency {
+  available: boolean;
+  sample_size: number;
+  span_days: number;
+  posts_per_week: number | null;
+  avg_gap_days: number | null;
+  regularity_pct: number | null;
+  current_streak_weeks: number;
+  longest_gap_days: number | null;
+  days_since_last: number | null;
+  momentum: 'accelerating' | 'steady' | 'slowing' | null;
+  score: number;
+  grade: 'excellent' | 'good' | 'fair' | 'inconsistent';
+  headline: string | null;
+  tip: string | null;
 }
 interface FormulaTrait {
   key: string;
@@ -597,6 +614,13 @@ function AnalyticsPreview() {
       {data.format_timing?.available && (
         <div className="mt-3">
           <FormatTimingCard m={data.format_timing} />
+        </div>
+      )}
+
+      {/* Posting consistency / cadence health */}
+      {data.posting_consistency?.available && (
+        <div className="mt-3">
+          <PostingConsistencyCard c={data.posting_consistency} />
         </div>
       )}
 
@@ -1894,6 +1918,83 @@ function WinningFormulaCard({ w }: { w: WinningFormula }) {
 
         <p className="mt-3 text-[10.5px] text-ink-400">
           Traits markedly more common in your top-performing posts than the rest. Directional — patterns in a small sample, not guarantees.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PostingConsistencyCard({ c }: { c: PostingConsistency }) {
+  const GRADE: Record<PostingConsistency['grade'], { label: string; color: string }> = {
+    excellent: { label: 'Excellent', color: '#16a34a' },
+    good: { label: 'Good', color: '#0ea5e9' },
+    fair: { label: 'Fair', color: '#d97706' },
+    inconsistent: { label: 'Inconsistent', color: '#dc2626' },
+  };
+  const MOMENTUM: Record<NonNullable<PostingConsistency['momentum']>, { label: string; color: string }> = {
+    accelerating: { label: '↑ Accelerating', color: '#16a34a' },
+    steady: { label: '→ Steady', color: '#6b7280' },
+    slowing: { label: '↓ Slowing', color: '#d97706' },
+  };
+  const g = GRADE[c.grade];
+  const m = c.momentum ? MOMENTUM[c.momentum] : null;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Posting consistency</div>
+          {c.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{c.headline}</div>}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+          style={{ color: g.color, background: `${g.color}14` }}>{g.label}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Score dial + streak */}
+        <div className="flex items-center gap-4 mb-3">
+          <div className="relative shrink-0" style={{ width: 68, height: 68 }}>
+            <svg width="68" height="68" viewBox="0 0 68 68">
+              <circle cx="34" cy="34" r="29" fill="none" stroke="#eee" strokeWidth="7" />
+              <circle cx="34" cy="34" r="29" fill="none" stroke={g.color} strokeWidth="7" strokeLinecap="round"
+                strokeDasharray={`${(c.score / 100) * 2 * Math.PI * 29} ${2 * Math.PI * 29}`}
+                transform="rotate(-90 34 34)" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[17px] font-bold text-ink-900 leading-none tabular-nums">{c.score}</span>
+              <span className="text-[8.5px] text-ink-400 uppercase tracking-wide">score</span>
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-2">
+            <Tile label="Streak" value={`${c.current_streak_weeks}w`} sub="weeks active" />
+            <Tile label="Per week" value={c.posts_per_week != null ? String(c.posts_per_week) : '—'} sub="posts" />
+          </div>
+        </div>
+
+        {/* Rhythm stats */}
+        <div className="grid grid-cols-3 gap-2">
+          <Tile label="Regularity" value={c.regularity_pct != null ? `${c.regularity_pct}%` : '—'} sub="even spacing" />
+          <Tile label="Avg gap" value={c.avg_gap_days != null ? `${c.avg_gap_days}d` : '—'} sub={c.longest_gap_days != null ? `max ${c.longest_gap_days}d` : 'between posts'} />
+          <Tile label="Last post" value={c.days_since_last != null ? `${c.days_since_last}d` : '—'} sub="days ago" />
+        </div>
+
+        {m && (
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[11px] text-ink-500">Momentum</span>
+            <span className="text-[11px] font-semibold" style={{ color: m.color }}>{m.label}</span>
+            <span className="text-[10.5px] text-ink-400">· recent pace vs earlier</span>
+          </div>
+        )}
+
+        {c.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{c.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Rhythm scored from the spacing of your last {c.sample_size} posts over {c.span_days} days. Consistency is the cadence lever you fully control.
         </p>
       </div>
     </div>

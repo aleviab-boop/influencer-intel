@@ -20,6 +20,7 @@ import { generateContentIdeas } from '@/lib/content-ideas';
 import { analyzeAudience } from '@/lib/audience-insights';
 import { projectGrowth } from '@/lib/growth-projection';
 import { analyzeWinningFormula } from '@/lib/winning-formula';
+import { analyzePostingConsistency } from '@/lib/posting-consistency';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -326,6 +327,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const winningFormula = analyzeWinningFormula(
       posts.map((p) => ({ media_type: p.media_type, caption: p.caption, timestamp: p.timestamp, er: p.er })),
     );
+    // How RELIABLY (not just how much) the creator posts — cadence rhythm/health.
+    const postingConsistency = analyzePostingConsistency(
+      posts.map((p) => ({ timestamp: p.timestamp, er: p.er })),
+    );
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -434,6 +439,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       audience_insights: audienceInsights,
       growth_projection: growthProjection,
       winning_formula: winningFormula,
+      posting_consistency: postingConsistency,
       engagement_trend: engagementTrend,
       posts,
       demographics,
