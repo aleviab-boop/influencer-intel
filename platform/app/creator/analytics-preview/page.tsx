@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { evaluateDeal, type DealVerdictKey } from '@/lib/deal-evaluator';
 import { scoreAudienceFit, type FitLabel } from '@/lib/audience-fit';
+import { buildWeeklyPlan, TAG_LABEL, type ActionTag, type WeeklyPlan } from '@/lib/weekly-plan';
 
 /* -------------------------------------------------------------------------
  * Creator "My Analytics" dashboard — PREVIEW (not wired into platform yet).
@@ -206,7 +207,7 @@ interface FormatRow {
 interface FormatTimingMatrix {
   available: boolean;
   sample_size: number;
-  timezone: string;
+  timezone: 'IST';
   parts: { key: string; label: string; range: string }[];
   rows: FormatRow[];
   best_bet: {
@@ -342,6 +343,21 @@ function AnalyticsPreview() {
       : new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   );
 
+  // This week's focus — synthesised from the analytics signals + the warmest
+  // brand lead (from the separate brand-matches fetch).
+  const topLead = brandMatches?.available && brandMatches.matches.length > 0
+    ? brandMatches.matches[0]! : null;
+  const weeklyPlan = buildWeeklyPlan({
+    recommendations: data.recommendations ?? [],
+    content_playbook: data.content_playbook ?? null,
+    format_timing: data.format_timing ?? null,
+    posting_time: data.posting_time ?? null,
+    engagement_trend: data.engagement_trend ?? null,
+    brand_lead: topLead
+      ? { brand_name: topLead.brand_name, program_name: topLead.program_name, reason: topLead.reason }
+      : null,
+  });
+
   return (
     <Shell>
       {/* Profile header */}
@@ -378,6 +394,13 @@ function AnalyticsPreview() {
           </a>
         </div>
       </div>
+
+      {/* This week's focus — the "do these 3 things" digest */}
+      {weeklyPlan.available && (
+        <div className="mt-4">
+          <WeeklyPlanCard plan={weeklyPlan} />
+        </div>
+      )}
 
       {/* Recommended focus — synthesised from all the signals below */}
       {(data.recommendations?.length ?? 0) > 0 && (
@@ -1669,6 +1692,50 @@ function ContentPlaybookCard({ p }: { p: ContentPlaybook }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function WeeklyPlanCard({ plan }: { plan: WeeklyPlan }) {
+  const TAG_COLOR: Record<ActionTag, string> = {
+    CREATE: ACCENT, TIME: '#0ea5e9', FIX: '#dc2626', PITCH: '#d97706', GROW: '#16a34a',
+  };
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-5 py-3.5 flex items-center gap-2.5"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+        </svg>
+        <div>
+          <div className="text-[15px] font-bold text-ink-900">This week&apos;s focus</div>
+          <div className="text-[11.5px] text-ink-400 leading-tight">{plan.headline}</div>
+        </div>
+        <span className="ml-auto text-[11px] text-ink-400 shrink-0">top 3 moves</span>
+      </div>
+      <ol className="divide-y divide-border">
+        {plan.actions.map((a) => {
+          const color = TAG_COLOR[a.tag];
+          return (
+            <li key={a.n} className="flex gap-3.5 px-5 py-4">
+              <div className="h-7 w-7 rounded-full grid place-items-center text-[13px] font-bold shrink-0 tabular-nums text-white"
+                style={{ background: color }}>{a.n}</div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                    style={{ color, background: `${color}14` }}>{TAG_LABEL[a.tag]}</span>
+                  <span className="text-[13.5px] font-semibold text-ink-900">{a.title}</span>
+                </div>
+                <p className="mt-1 text-[12.5px] text-ink-600 leading-relaxed">{a.detail}</p>
+                {a.why && <p className="mt-1 text-[10.5px] text-ink-400">{a.why}</p>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="px-5 py-2.5 border-t border-border">
+        <p className="text-[10.5px] text-ink-400">Prioritised from your strongest signals — a fresh shortlist as your numbers change.</p>
+      </div>
     </div>
   );
 }
