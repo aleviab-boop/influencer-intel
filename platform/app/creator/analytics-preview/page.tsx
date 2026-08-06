@@ -124,6 +124,7 @@ interface Analytics {
   content_pillars?: ContentPillars | null;
   brand_safety?: BrandSafety | null;
   scorecard?: CreatorScorecard | null;
+  post_spotlight?: PostSpotlight | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -260,6 +261,29 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface SpotlightCard {
+  id: string;
+  permalink: string;
+  thumbnail_url: string | null;
+  media_type: string;
+  format_label: string;
+  caption_excerpt: string | null;
+  timestamp: string;
+  er: number | null;
+  vs_median_pct: number | null;
+  likes: number;
+  comments: number;
+  reasons: string[];
+  takeaway: string;
+}
+interface PostSpotlight {
+  available: boolean;
+  sample_size: number;
+  median_er: number | null;
+  top: SpotlightCard | null;
+  under: SpotlightCard | null;
+  headline: string | null;
 }
 interface ScorePillar {
   key: string;
@@ -590,6 +614,13 @@ function AnalyticsPreview() {
       <div className="mt-3">
         <InteractionMix posts={allPosts} />
       </div>
+
+      {/* Best / under-performing post spotlight */}
+      {data.post_spotlight?.available && (
+        <div className="mt-3">
+          <PostSpotlightCard s={data.post_spotlight} />
+        </div>
+      )}
 
       <SectionLabel>Earnings</SectionLabel>
 
@@ -2449,6 +2480,81 @@ function ContentIdeasCard({ c }: { c: ContentIdeas }) {
 
       <div className="px-4 py-2.5 border-t border-border">
         <p className="text-[10.5px] text-ink-400">Angle templates filled with your topic — make them yours before posting.</p>
+      </div>
+    </div>
+  );
+}
+
+function SpotlightPanel({ card, tone }: { card: SpotlightCard; tone: 'top' | 'under' }) {
+  const accent = tone === 'top' ? '#16a34a' : '#d97706';
+  const vs = card.vs_median_pct;
+  return (
+    <div className="rounded-lg border border-border overflow-hidden bg-[#faf9ff]">
+      <div className="px-3 py-2 flex items-center justify-between gap-2" style={{ background: `${accent}12` }}>
+        <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: accent }}>
+          {tone === 'top' ? '★ Best post' : 'Under-performer'}
+        </span>
+        {vs != null && (
+          <span className="text-[11px] font-semibold tabular-nums" style={{ color: accent }}>
+            {vs > 0 ? '+' : ''}{vs}% vs median
+          </span>
+        )}
+      </div>
+      <div className="p-3">
+        <div className="flex gap-3">
+          {card.thumbnail_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={card.thumbnail_url} alt="" className="w-16 h-16 rounded-md object-cover shrink-0 border border-border" />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[11px] text-ink-500">
+              <span className="font-semibold text-ink-700">{card.format_label}</span>
+              <span>·</span>
+              <span>{dateStr(card.timestamp)}</span>
+            </div>
+            <div className="text-[12px] text-ink-800 mt-0.5 leading-snug">
+              {card.caption_excerpt ?? <span className="italic text-ink-400">No caption</span>}
+            </div>
+            <div className="mt-1 text-[11px] text-ink-500 tabular-nums">
+              {pct(card.er)} ER · {fmt(card.likes)} likes · {fmt(card.comments)} comments
+            </div>
+          </div>
+        </div>
+
+        <ul className="mt-2.5 space-y-1">
+          {card.reasons.map((r, i) => (
+            <li key={i} className="flex items-start gap-1.5 text-[11.5px] text-ink-600 leading-snug">
+              <span className="mt-1 w-1 h-1 rounded-full shrink-0" style={{ background: accent }} />
+              <span>{r}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-ink-500 italic">{card.takeaway}</span>
+          <a href={card.permalink} target="_blank" rel="noreferrer"
+            className="text-[11px] font-semibold shrink-0" style={{ color: ACCENT }}>Open ↗</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PostSpotlightCard({ s }: { s: PostSpotlight }) {
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Post spotlight</div>
+        {s.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{s.headline}</div>}
+      </div>
+      <div className="p-4">
+        <div className={`grid gap-3 ${s.under ? 'lg:grid-cols-2' : ''}`}>
+          {s.top && <SpotlightPanel card={s.top} tone="top" />}
+          {s.under && <SpotlightPanel card={s.under} tone="under" />}
+        </div>
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Your real posts, ranked by engagement. The reasons compare each post's traits (format, timing, caption, hashtags) against how they perform across your feed.
+        </p>
       </div>
     </div>
   );

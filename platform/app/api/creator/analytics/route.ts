@@ -25,6 +25,7 @@ import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeContentPillars } from '@/lib/content-pillars';
 import { analyzeBrandSafety } from '@/lib/brand-safety';
 import { buildScorecard } from '@/lib/creator-scorecard';
+import { analyzePostSpotlight } from '@/lib/post-spotlight';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -345,6 +346,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
     // Sponsorship-readiness: disclosure hygiene, promo balance, language safety.
     const brandSafety = analyzeBrandSafety(posts.map((p) => ({ caption: p.caption })));
+    // Real best/under-performing posts with plain-English "why" reasoning.
+    const postSpotlight = analyzePostSpotlight(posts.map((p) => ({
+      id: p.id, permalink: p.permalink, thumbnail_url: p.thumbnail_url, media_url: p.media_url,
+      media_type: p.media_type, caption: p.caption, timestamp: p.timestamp,
+      er: p.er, like_count: p.like_count, comments_count: p.comments_count,
+    })));
     // One-line rollup: blend the sub-scores into a media-kit-ready grade.
     const scorecard = buildScorecard({
       benchmark,
@@ -466,6 +473,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_pillars: contentPillars,
       brand_safety: brandSafety,
       scorecard,
+      post_spotlight: postSpotlight,
       engagement_trend: engagementTrend,
       posts,
       demographics,
