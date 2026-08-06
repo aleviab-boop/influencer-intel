@@ -112,6 +112,7 @@ interface Analytics {
   media_value?: MediaValue | null;
   pitch_coach?: PitchCoach | null;
   pitch_draft?: PitchDraft | null;
+  rate_menu?: RateMenu | null;
   posting_time?: PostingTimeAnalysis | null;
   format_timing?: FormatTimingMatrix | null;
   content_playbook?: ContentPlaybook | null;
@@ -444,6 +445,24 @@ interface PitchDraft {
   subject: string;
   body: string;
 }
+interface Deliverable {
+  key: string;
+  label: string;
+  low: number;
+  high: number;
+  is_pct: boolean;
+  rationale: string;
+  popular?: boolean;
+}
+interface RateMenu {
+  available: boolean;
+  currency: 'INR';
+  tier_label: string;
+  packages: Deliverable[];
+  addons: Deliverable[];
+  headline: string | null;
+  note: string;
+}
 interface MediaValue {
   available: boolean;
   currency: 'INR';
@@ -674,6 +693,13 @@ function AnalyticsPreview() {
       {data.media_value?.available && (
         <div className="mt-3">
           <MediaValueCard v={data.media_value} />
+        </div>
+      )}
+
+      {/* Deliverable rate menu */}
+      {data.rate_menu?.available && (
+        <div className="mt-3">
+          <RateMenuCard m={data.rate_menu} />
         </div>
       )}
 
@@ -1750,6 +1776,62 @@ function PitchDraftCard({ d }: { d: PitchDraft }) {
         <p className="mt-3 text-[10.5px] text-ink-400">
           Personalise the {'{Brand}'} and {'{product/campaign}'} tags before you hit send.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function RateMenuCard({ m }: { m: RateMenu }) {
+  const priceRange = (d: Deliverable): string =>
+    d.is_pct ? `+${d.low}–${d.high}%` : `${money(d.low)} – ${money(d.high)}`;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Your rate menu</div>
+        {m.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{m.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        {/* Packages */}
+        <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2">Packages</div>
+        <div className="space-y-1.5">
+          {m.packages.map((d) => (
+            <div key={d.key} className="flex items-start justify-between gap-3 rounded-lg border border-border bg-[#faf9ff] px-3 py-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12.5px] font-semibold text-ink-800">{d.label}</span>
+                  {d.popular && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0"
+                      style={{ color: ACCENT, background: `${ACCENT}14` }}>Popular</span>
+                  )}
+                </div>
+                <div className="text-[11px] text-ink-500 leading-snug mt-0.5">{d.rationale}</div>
+              </div>
+              <div className="text-[12.5px] font-bold text-ink-900 tabular-nums text-right shrink-0 whitespace-nowrap">
+                {priceRange(d)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add-ons */}
+        <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mt-4 mb-2">Add-ons (upcharge on base)</div>
+        <div className="space-y-1.5">
+          {m.addons.map((d) => (
+            <div key={d.key} className="flex items-start justify-between gap-3 rounded-lg border border-border px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-semibold text-ink-800">{d.label}</div>
+                <div className="text-[11px] text-ink-500 leading-snug mt-0.5">{d.rationale}</div>
+              </div>
+              <div className="text-[12.5px] font-bold tabular-nums text-right shrink-0" style={{ color: ACCENT }}>
+                {priceRange(d)}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-3 text-[10.5px] text-ink-400">{m.note}</p>
       </div>
     </div>
   );

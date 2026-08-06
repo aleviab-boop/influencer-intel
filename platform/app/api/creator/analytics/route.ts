@@ -12,6 +12,7 @@ import { computeBenchmark, tierLabel, tierWindow } from '@/lib/peer-benchmark';
 import type { PeerBenchmark } from '@/lib/peer-benchmark';
 import { estimateMediaValue } from '@/lib/media-value';
 import { suggestRateCard } from '@/lib/media-kit';
+import { buildRateMenu } from '@/lib/rate-menu';
 import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
 import { analyzeFormatTiming } from '@/lib/format-timing';
@@ -385,6 +386,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Pitch coach — synthesises the money + performance signals into a
     // negotiation cheat-sheet. Rate card is computed here to anchor the ask.
     const rateCard = suggestRateCard(followers, stats.avg_er);
+    // Expand the rate card into a copy-ready deliverable menu (packages + add-ons).
+    const rateMenu = buildRateMenu(rateCard);
     const pitchCoach = generatePitchCoach({
       followers,
       tier_label: tierLabel(followers),
@@ -466,6 +469,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       benchmark,
       media_value: mediaValue,
       pitch_coach: pitchCoach,
+      rate_menu: rateMenu,
       pitch_draft: pitchDraft,
       posting_time: postingTime,
       format_timing: formatTiming,
