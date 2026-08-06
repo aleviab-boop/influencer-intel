@@ -17,6 +17,7 @@ import { analyzePostingTime } from '@/lib/posting-time';
 import { analyzeFormatTiming } from '@/lib/format-timing';
 import { generateContentPlaybook } from '@/lib/content-playbook';
 import { generateContentIdeas } from '@/lib/content-ideas';
+import { analyzeAudience } from '@/lib/audience-insights';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -315,6 +316,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       top_hashtag: contentAnalysis.hashtags?.[0]?.tag ?? null,
       caption_best_length: captionAnalysis.available ? captionAnalysis.best_length : null,
     });
+    // Whole-audience profile narrative from the demographics blob.
+    const audienceInsights = analyzeAudience(demographics);
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -420,6 +423,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       format_timing: formatTiming,
       content_playbook: contentPlaybook,
       content_ideas: contentIdeas,
+      audience_insights: audienceInsights,
       engagement_trend: engagementTrend,
       posts,
       demographics,

@@ -116,6 +116,7 @@ interface Analytics {
   format_timing?: FormatTimingMatrix | null;
   content_playbook?: ContentPlaybook | null;
   content_ideas?: ContentIdeas | null;
+  audience_insights?: AudienceInsights | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -227,6 +228,21 @@ interface ContentIdea {
   n: number; format: string; angle: string; hook: string; outline: string; hashtag: string | null;
 }
 interface ContentIdeas { available: boolean; topic: string | null; ideas: ContentIdea[] }
+interface AudienceInsights {
+  available: boolean;
+  headline: string | null;
+  dominant: { label: string; share_pct: number } | null;
+  gender: { female_pct: number; male_pct: number; skew: 'female' | 'male' | 'balanced' } | null;
+  top_age: { band: string; share_pct: number } | null;
+  geo: {
+    top_cities: { name: string; share_pct: number }[];
+    metro_pct: number | null;
+    domestic: { country: string; share_pct: number } | null;
+    concentration: 'concentrated' | 'spread' | null;
+  } | null;
+  insights: string[];
+  brand_fit_note: string | null;
+}
 interface PitchCoach {
   available: boolean;
   headline: string;
@@ -512,6 +528,13 @@ function AnalyticsPreview() {
       {data.audience_quality?.available && (
         <div className="mt-3">
           <AudienceQualityCard q={data.audience_quality} />
+        </div>
+      )}
+
+      {/* Audience profile narrative */}
+      {data.audience_insights?.available && (
+        <div className="mt-3">
+          <AudienceInsightsCard a={data.audience_insights} />
         </div>
       )}
 
@@ -1703,6 +1726,102 @@ function ContentPlaybookCard({ p }: { p: ContentPlaybook }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function AudienceInsightsCard({ a }: { a: AudienceInsights }) {
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Who your audience is</div>
+        {a.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{a.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        {/* Headline stat tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+          {a.dominant && (
+            <Tile label="Core segment" value={a.dominant.label} sub={`${a.dominant.share_pct}% of followers`} />
+          )}
+          {a.gender && (
+            <Tile
+              label="Gender split"
+              value={`${a.gender.female_pct}% / ${a.gender.male_pct}%`}
+              sub={a.gender.skew === 'balanced' ? 'women / men · balanced' : `women / men · ${a.gender.skew} skew`}
+            />
+          )}
+          {a.top_age && (
+            <Tile label="Top age" value={a.top_age.band} sub={`${a.top_age.share_pct}% of audience`} />
+          )}
+          {a.geo?.metro_pct != null && (
+            <Tile label="Metro share" value={`${a.geo.metro_pct}%`} sub={a.geo.concentration === 'concentrated' ? 'concentrated' : 'spread out'} />
+          )}
+        </div>
+
+        {/* Gender bar */}
+        {a.gender && (a.gender.female_pct + a.gender.male_pct) > 0 && (
+          <div className="mb-3">
+            <div className="h-2 rounded-full overflow-hidden flex bg-[#f0eefb]">
+              <div style={{ width: `${a.gender.female_pct}%`, background: '#ec4899' }} />
+              <div style={{ width: `${a.gender.male_pct}%`, background: '#3b82f6' }} />
+            </div>
+            <div className="mt-1 flex justify-between text-[10px] text-ink-400">
+              <span><span style={{ color: '#ec4899' }}>●</span> Women {a.gender.female_pct}%</span>
+              <span><span style={{ color: '#3b82f6' }}>●</span> Men {a.gender.male_pct}%</span>
+            </div>
+          </div>
+        )}
+
+        {/* Top cities */}
+        {a.geo?.top_cities?.length ? (
+          <div className="mb-3">
+            <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-1.5">Where they are</div>
+            <div className="flex flex-wrap gap-1.5">
+              {a.geo.top_cities.map((c) => (
+                <span key={c.name} className="text-[11.5px] px-2 py-1 rounded-lg" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                  {c.name} · {c.share_pct}%
+                </span>
+              ))}
+              {a.geo.domestic && (
+                <span className="text-[11.5px] px-2 py-1 rounded-lg bg-[#f6f5fb] text-ink-500">
+                  {a.geo.domestic.country} {a.geo.domestic.share_pct}%
+                </span>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Narrative insights */}
+        {a.insights.length > 0 && (
+          <ul className="space-y-1.5">
+            {a.insights.map((t, i) => (
+              <li key={i} className="flex gap-2.5">
+                <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0" style={{ background: ACCENT }} />
+                <span className="text-[12.5px] text-ink-700 leading-relaxed">{t}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {a.brand_fit_note && (
+          <div className="mt-3 rounded-lg px-3 py-2 text-[12.5px] text-ink-800" style={{ background: ACCENT_SOFT }}>
+            {a.brand_fit_note}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">Derived from your Instagram audience demographics. Great for your media kit.</p>
+      </div>
+    </div>
+  );
+}
+
+function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-[#faf9ff] px-3 py-2">
+      <div className="text-[9.5px] font-semibold text-ink-400 uppercase tracking-wide">{label}</div>
+      <div className="text-[13px] font-bold text-ink-900 leading-tight truncate" title={value}>{value}</div>
+      {sub && <div className="text-[10px] text-ink-400 truncate">{sub}</div>}
     </div>
   );
 }
