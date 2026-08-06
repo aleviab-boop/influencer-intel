@@ -16,6 +16,7 @@ import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
 import { analyzeFormatTiming } from '@/lib/format-timing';
 import { generateContentPlaybook } from '@/lib/content-playbook';
+import { generateContentIdeas } from '@/lib/content-ideas';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -307,6 +308,13 @@ export async function GET(request: Request): Promise<NextResponse> {
       caption_analysis: captionAnalysis,
       posting_time: postingTime,
     });
+    // Ready-to-shoot idea variations off the winning format + topic.
+    const contentIdeas = generateContentIdeas({
+      best_type: contentBreak.best_type,
+      niche,
+      top_hashtag: contentAnalysis.hashtags?.[0]?.tag ?? null,
+      caption_best_length: captionAnalysis.available ? captionAnalysis.best_length : null,
+    });
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -411,6 +419,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       posting_time: postingTime,
       format_timing: formatTiming,
       content_playbook: contentPlaybook,
+      content_ideas: contentIdeas,
       engagement_trend: engagementTrend,
       posts,
       demographics,

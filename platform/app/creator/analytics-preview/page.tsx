@@ -115,6 +115,7 @@ interface Analytics {
   posting_time?: PostingTimeAnalysis | null;
   format_timing?: FormatTimingMatrix | null;
   content_playbook?: ContentPlaybook | null;
+  content_ideas?: ContentIdeas | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -222,6 +223,10 @@ interface PostBrief {
   hook: string; caption_tip: string; hashtag: string | null; why: string;
 }
 interface ContentPlaybook { available: boolean; briefs: PostBrief[] }
+interface ContentIdea {
+  n: number; format: string; angle: string; hook: string; outline: string; hashtag: string | null;
+}
+interface ContentIdeas { available: boolean; topic: string | null; ideas: ContentIdea[] }
 interface PitchCoach {
   available: boolean;
   headline: string;
@@ -559,6 +564,12 @@ function AnalyticsPreview() {
             <ContentPlaybookCard p={data.content_playbook} />
           </div>
         </>
+      )}
+
+      {data.content_ideas?.available && (
+        <div className="mt-3">
+          <ContentIdeasCard c={data.content_ideas} />
+        </div>
       )}
 
       <SectionLabel>Your posts</SectionLabel>
@@ -1692,6 +1703,68 @@ function ContentPlaybookCard({ p }: { p: ContentPlaybook }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ContentIdeasCard({ c }: { c: ContentIdeas }) {
+  const [copied, setCopied] = useState<number | null>(null);
+  const FMT_COLOR: Record<string, string> = { Reel: ACCENT, Carousel: '#0ea5e9', Photo: '#16a34a', Post: '#6b7280' };
+
+  const copyHook = async (idea: ContentIdea) => {
+    try {
+      await navigator.clipboard.writeText(idea.hook);
+      setCopied(idea.n);
+      setTimeout(() => setCopied(null), 1600);
+    } catch { /* clipboard blocked — hook is still visible */ }
+  };
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-2 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Idea starters</div>
+          <div className="text-[11.5px] text-ink-500 leading-snug">
+            Fresh angles{c.topic ? ` on ${c.topic}` : ''}, built around your winning format. Pick one and shoot.
+          </div>
+        </div>
+        <span className="text-[11px] text-ink-400 shrink-0">{c.ideas.length} ideas</span>
+      </div>
+
+      <ul className="divide-y divide-border">
+        {c.ideas.map((idea) => {
+          const color = FMT_COLOR[idea.format] ?? ACCENT;
+          return (
+            <li key={idea.n} className="px-4 py-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                  style={{ color, background: `${color}14` }}>{idea.format}</span>
+                <span className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">{idea.angle}</span>
+                <button
+                  onClick={() => copyHook(idea)}
+                  className="ml-auto text-[11px] font-semibold whitespace-nowrap"
+                  style={{ color: ACCENT }}
+                >
+                  {copied === idea.n ? 'Copied ✓' : 'Copy hook'}
+                </button>
+              </div>
+              <p className="mt-1 text-[13px] text-ink-800 leading-relaxed font-medium">{idea.hook}</p>
+              <p className="mt-1 text-[11.5px] text-ink-500 leading-relaxed">{idea.outline}</p>
+              {idea.hashtag && (
+                <p className="mt-1 text-[11.5px]">
+                  <span className="text-ink-400">Tag </span>
+                  <span className="font-medium" style={{ color: ACCENT }}>{idea.hashtag}</span>
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="px-4 py-2.5 border-t border-border">
+        <p className="text-[10.5px] text-ink-400">Angle templates filled with your topic — make them yours before posting.</p>
+      </div>
     </div>
   );
 }
