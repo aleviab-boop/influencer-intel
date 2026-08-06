@@ -23,6 +23,7 @@ import { analyzeWinningFormula } from '@/lib/winning-formula';
 import { analyzePostingConsistency } from '@/lib/posting-consistency';
 import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeContentPillars } from '@/lib/content-pillars';
+import { analyzeBrandSafety } from '@/lib/brand-safety';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -341,6 +342,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const contentPillars = analyzeContentPillars(
       posts.map((p) => ({ caption: p.caption, er: p.er })),
     );
+    // Sponsorship-readiness: disclosure hygiene, promo balance, language safety.
+    const brandSafety = analyzeBrandSafety(posts.map((p) => ({ caption: p.caption })));
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -452,6 +455,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       posting_consistency: postingConsistency,
       caption_hooks: captionHooks,
       content_pillars: contentPillars,
+      brand_safety: brandSafety,
       engagement_trend: engagementTrend,
       posts,
       demographics,

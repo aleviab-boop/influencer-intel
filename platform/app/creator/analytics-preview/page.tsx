@@ -122,6 +122,7 @@ interface Analytics {
   posting_consistency?: PostingConsistency | null;
   caption_hooks?: CaptionHooks | null;
   content_pillars?: ContentPillars | null;
+  brand_safety?: BrandSafety | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -258,6 +259,23 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface SafetyCheck {
+  key: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+}
+interface BrandSafety {
+  available: boolean;
+  sample_size: number;
+  score: number;
+  grade: 'brand-safe' | 'mostly-safe' | 'needs-review';
+  commercial_posts: number;
+  disclosed_posts: number;
+  checks: SafetyCheck[];
+  headline: string | null;
+  tip: string | null;
 }
 interface ContentPillar {
   key: string;
@@ -573,6 +591,13 @@ function AnalyticsPreview() {
       {data.pitch_draft?.available && (
         <div className="mt-3">
           <PitchDraftCard d={data.pitch_draft} />
+        </div>
+      )}
+
+      {/* Sponsorship readiness / brand safety */}
+      {data.brand_safety?.available && (
+        <div className="mt-3">
+          <BrandSafetyCard b={data.brand_safety} />
         </div>
       )}
 
@@ -1614,6 +1639,83 @@ function PitchDraftCard({ d }: { d: PitchDraft }) {
 
         <p className="mt-3 text-[10.5px] text-ink-400">
           Personalise the {'{Brand}'} and {'{product/campaign}'} tags before you hit send.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BrandSafetyCard({ b }: { b: BrandSafety }) {
+  const GRADE: Record<BrandSafety['grade'], { label: string; color: string }> = {
+    'brand-safe': { label: 'Brand-safe', color: '#16a34a' },
+    'mostly-safe': { label: 'Mostly safe', color: '#d97706' },
+    'needs-review': { label: 'Needs review', color: '#dc2626' },
+  };
+  const STATUS: Record<SafetyCheck['status'], { dot: string; sym: string }> = {
+    pass: { dot: '#16a34a', sym: '✓' },
+    warn: { dot: '#d97706', sym: '!' },
+    fail: { dot: '#dc2626', sym: '×' },
+  };
+  const g = GRADE[b.grade];
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Sponsorship readiness</div>
+          {b.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{b.headline}</div>}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+          style={{ color: g.color, background: `${g.color}14` }}>{g.label}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Score dial + commercial stats */}
+        <div className="flex items-center gap-4 mb-3">
+          <div className="relative shrink-0" style={{ width: 68, height: 68 }}>
+            <svg width="68" height="68" viewBox="0 0 68 68">
+              <circle cx="34" cy="34" r="29" fill="none" stroke="#eee" strokeWidth="7" />
+              <circle cx="34" cy="34" r="29" fill="none" stroke={g.color} strokeWidth="7" strokeLinecap="round"
+                strokeDasharray={`${(b.score / 100) * 2 * Math.PI * 29} ${2 * Math.PI * 29}`}
+                transform="rotate(-90 34 34)" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[17px] font-bold text-ink-900 leading-none tabular-nums">{b.score}</span>
+              <span className="text-[8.5px] text-ink-400 uppercase tracking-wide">safe</span>
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-2">
+            <Tile label="Promo posts" value={String(b.commercial_posts)} sub={`of ${b.sample_size} captions`} />
+            <Tile label="Disclosed" value={b.commercial_posts > 0 ? `${b.disclosed_posts}/${b.commercial_posts}` : '—'} sub="ad tags present" />
+          </div>
+        </div>
+
+        {/* Checklist */}
+        <div className="space-y-1.5">
+          {b.checks.map((c) => {
+            const s = STATUS[c.status];
+            return (
+              <div key={c.key} className="flex items-start gap-2.5 rounded-lg border border-border bg-[#faf9ff] px-3 py-2">
+                <span className="mt-0.5 flex items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                  style={{ width: 16, height: 16, background: s.dot }}>{s.sym}</span>
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold text-ink-800">{c.label}</div>
+                  <div className="text-[11px] text-ink-500 leading-snug">{c.detail}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {b.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{b.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          A conservative scan of your captions for the things brands vet before partnering — disclosure hygiene, promo balance and language. Flags to review, not a verdict.
         </p>
       </div>
     </div>
