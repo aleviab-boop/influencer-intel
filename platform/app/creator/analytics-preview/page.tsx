@@ -118,6 +118,7 @@ interface Analytics {
   content_ideas?: ContentIdeas | null;
   audience_insights?: AudienceInsights | null;
   growth_projection?: GrowthProjection | null;
+  winning_formula?: WinningFormula | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -254,6 +255,23 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface FormulaTrait {
+  key: string;
+  label: string;
+  top_pct: number;
+  rest_pct: number;
+  lift: number;
+  strength: 'strong' | 'moderate';
+}
+interface WinningFormula {
+  available: boolean;
+  sample_size: number;
+  top_count: number;
+  top_er_avg: number | null;
+  rest_er_avg: number | null;
+  traits: FormulaTrait[];
+  recipe: string | null;
 }
 interface PitchCoach {
   available: boolean;
@@ -597,6 +615,12 @@ function AnalyticsPreview() {
             </div>
           )}
         </>
+      )}
+
+      {data.winning_formula?.available && (
+        <div className="mt-3">
+          <WinningFormulaCard w={data.winning_formula} />
+        </div>
       )}
 
       {data.content_playbook?.available && (
@@ -1802,6 +1826,75 @@ function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
         )}
 
         <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
+    </div>
+  );
+}
+
+function WinningFormulaCard({ w }: { w: WinningFormula }) {
+  const upliftPct = w.top_er_avg != null && w.rest_er_avg != null && w.rest_er_avg > 0
+    ? Math.round(((w.top_er_avg - w.rest_er_avg) / w.rest_er_avg) * 100)
+    : null;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Your winning formula</div>
+        {w.recipe && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{w.recipe}</div>}
+      </div>
+
+      <div className="p-4">
+        {/* Top vs rest context */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <Tile label="Top posts" value={String(w.top_count)} sub={`of ${w.sample_size} analysed`} />
+          <Tile label="Top avg ER" value={pct(w.top_er_avg)} sub="your best group" />
+          <Tile
+            label="vs the rest"
+            value={upliftPct != null ? `${upliftPct >= 0 ? '+' : ''}${upliftPct}%` : '—'}
+            sub="engagement uplift"
+          />
+        </div>
+
+        {/* Shared traits */}
+        <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2">
+          What your best posts share
+        </div>
+        <div className="space-y-2.5">
+          {w.traits.map((t) => (
+            <div key={t.key} className="rounded-lg border border-border bg-[#faf9ff] px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="text-[12.5px] font-medium text-ink-800">{t.label}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+                  style={t.strength === 'strong'
+                    ? { color: '#16a34a', background: '#16a34a14' }
+                    : { color: ACCENT, background: `${ACCENT}14` }}>
+                  +{t.lift}pts
+                </span>
+              </div>
+              {/* Prevalence bars: top vs rest */}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-ink-400 w-8 shrink-0">Top</span>
+                  <div className="flex-1 h-2 rounded-full bg-[#eee]">
+                    <div className="h-2 rounded-full" style={{ width: `${t.top_pct}%`, background: ACCENT }} />
+                  </div>
+                  <span className="text-[10.5px] font-semibold text-ink-700 tabular-nums w-9 text-right shrink-0">{t.top_pct}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-ink-400 w-8 shrink-0">Rest</span>
+                  <div className="flex-1 h-2 rounded-full bg-[#eee]">
+                    <div className="h-2 rounded-full" style={{ width: `${t.rest_pct}%`, background: '#c9c4d6' }} />
+                  </div>
+                  <span className="text-[10.5px] font-semibold text-ink-500 tabular-nums w-9 text-right shrink-0">{t.rest_pct}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Traits markedly more common in your top-performing posts than the rest. Directional — patterns in a small sample, not guarantees.
+        </p>
       </div>
     </div>
   );

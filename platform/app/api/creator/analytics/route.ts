@@ -19,6 +19,7 @@ import { generateContentPlaybook } from '@/lib/content-playbook';
 import { generateContentIdeas } from '@/lib/content-ideas';
 import { analyzeAudience } from '@/lib/audience-insights';
 import { projectGrowth } from '@/lib/growth-projection';
+import { analyzeWinningFormula } from '@/lib/winning-formula';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -321,6 +322,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const audienceInsights = analyzeAudience(demographics);
     // Forward follower-growth projection from the snapshot history.
     const growthProjection = projectGrowth(growth, followers);
+    // Diagnostic: what do the creator's TOP posts have in common vs the rest?
+    const winningFormula = analyzeWinningFormula(
+      posts.map((p) => ({ media_type: p.media_type, caption: p.caption, timestamp: p.timestamp, er: p.er })),
+    );
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -428,6 +433,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_ideas: contentIdeas,
       audience_insights: audienceInsights,
       growth_projection: growthProjection,
+      winning_formula: winningFormula,
       engagement_trend: engagementTrend,
       posts,
       demographics,
