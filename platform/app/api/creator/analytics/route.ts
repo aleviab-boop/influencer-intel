@@ -26,6 +26,7 @@ import { analyzeWinningFormula } from '@/lib/winning-formula';
 import { analyzePostingConsistency } from '@/lib/posting-consistency';
 import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeCaptionLength } from '@/lib/caption-length';
+import { analyzeEngagementReliability } from '@/lib/engagement-reliability';
 import { analyzeContentPillars } from '@/lib/content-pillars';
 import { analyzeBrandSafety } from '@/lib/brand-safety';
 import { buildScorecard } from '@/lib/creator-scorecard';
@@ -352,6 +353,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const captionLength = analyzeCaptionLength(
       posts.map((p) => ({ caption: p.caption, er: p.er })),
     );
+    // How PREDICTABLE is engagement post-to-post, and what floor can they promise?
+    const engagementReliability = analyzeEngagementReliability(
+      posts.map((p) => ({ er: p.er })),
+    );
     // Recurring content themes (pillars) and which ones over/under-perform their share.
     const contentPillars = analyzeContentPillars(
       posts.map((p) => ({ caption: p.caption, er: p.er })),
@@ -501,6 +506,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       posting_consistency: postingConsistency,
       caption_hooks: captionHooks,
       caption_length: captionLength,
+      engagement_reliability: engagementReliability,
       content_pillars: contentPillars,
       brand_safety: brandSafety,
       scorecard,

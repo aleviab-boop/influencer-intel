@@ -125,6 +125,7 @@ interface Analytics {
   posting_consistency?: PostingConsistency | null;
   caption_hooks?: CaptionHooks | null;
   caption_length?: CaptionLength | null;
+  engagement_reliability?: EngagementReliability | null;
   content_pillars?: ContentPillars | null;
   brand_safety?: BrandSafety | null;
   scorecard?: CreatorScorecard | null;
@@ -441,6 +442,20 @@ interface CaptionLength {
   headline: string | null;
   tip: string | null;
 }
+interface EngagementReliability {
+  available: boolean;
+  sample_size: number;
+  avg_er: number | null;
+  median_er: number | null;
+  floor_er: number | null;
+  ceiling_er: number | null;
+  cv_pct: number | null;
+  within_band_pct: number | null;
+  score: number;
+  grade: 'rock-solid' | 'steady' | 'swingy' | 'volatile';
+  headline: string | null;
+  tip: string | null;
+}
 interface PostingConsistency {
   available: boolean;
   sample_size: number;
@@ -730,6 +745,13 @@ function AnalyticsPreview() {
       <div className="mt-3">
         <InteractionMix posts={allPosts} />
       </div>
+
+      {/* Engagement reliability (predictability + floor) */}
+      {data.engagement_reliability?.available && (
+        <div className="mt-3">
+          <EngagementReliabilityCard r={data.engagement_reliability} />
+        </div>
+      )}
 
       {/* Best / under-performing post spotlight */}
       {data.post_spotlight?.available && (
@@ -1908,6 +1930,86 @@ function RateMenuCard({ m }: { m: RateMenu }) {
         </div>
 
         <p className="mt-3 text-[10.5px] text-ink-400">{m.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function EngagementReliabilityCard({ r }: { r: EngagementReliability }) {
+  const GRADE: Record<EngagementReliability['grade'], { label: string; color: string }> = {
+    'rock-solid': { label: 'Rock-solid', color: '#16a34a' },
+    steady: { label: 'Steady', color: '#16a34a' },
+    swingy: { label: 'Swingy', color: '#d97706' },
+    volatile: { label: 'Volatile', color: '#dc2626' },
+  };
+  const g = GRADE[r.grade];
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Engagement reliability</div>
+          {r.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{r.headline}</div>}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+          style={{ color: g.color, background: `${g.color}14` }}>{g.label}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Score dial + range read */}
+        <div className="flex items-center gap-4 mb-3">
+          <div className="relative shrink-0" style={{ width: 68, height: 68 }}>
+            <svg width="68" height="68" viewBox="0 0 68 68">
+              <circle cx="34" cy="34" r="29" fill="none" stroke="#eee" strokeWidth="7" />
+              <circle cx="34" cy="34" r="29" fill="none" stroke={g.color} strokeWidth="7" strokeLinecap="round"
+                strokeDasharray={`${(r.score / 100) * 2 * Math.PI * 29} ${2 * Math.PI * 29}`}
+                transform="rotate(-90 34 34)" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[17px] font-bold text-ink-900 leading-none tabular-nums">{r.score}</span>
+              <span className="text-[8.5px] text-ink-400 uppercase tracking-wide">steady</span>
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-3 gap-2">
+            <Tile label="Floor" value={pct(r.floor_er)} sub="quieter posts" />
+            <Tile label="Typical" value={pct(r.median_er)} sub="median post" />
+            <Tile label="Strong" value={pct(r.ceiling_er)} sub="top posts" />
+          </div>
+        </div>
+
+        {/* Floor → ceiling band visual */}
+        <div className="rounded-lg border border-border bg-[#faf9ff] px-3 py-2.5">
+          <div className="flex items-center justify-between text-[10px] text-ink-400 uppercase tracking-wide mb-1">
+            <span>Where your posts land</span>
+            <span className="tabular-nums">{r.within_band_pct != null ? `${r.within_band_pct}% on-form` : ''}</span>
+          </div>
+          <div className="relative h-2.5 rounded-full bg-[#eceaf8]">
+            {r.floor_er != null && r.ceiling_er != null && r.ceiling_er > 0 && (
+              <div className="absolute top-0 bottom-0 rounded-full" style={{
+                left: `${Math.min(95, (r.floor_er / r.ceiling_er) * 100)}%`,
+                right: '0%',
+                background: g.color,
+                opacity: 0.55,
+              }} />
+            )}
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-ink-500 tabular-nums mt-1">
+            <span>{pct(r.floor_er)}</span>
+            <span>{pct(r.ceiling_er)}</span>
+          </div>
+        </div>
+
+        {r.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Pitch tip · </span>{r.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Dispersion of engagement across your last {r.sample_size} posts (coefficient of variation {r.cv_pct}%).
+          The floor is your 25th-percentile ER — the rate even your quieter posts clear. Directional on a small sample.
+        </p>
       </div>
     </div>
   );
