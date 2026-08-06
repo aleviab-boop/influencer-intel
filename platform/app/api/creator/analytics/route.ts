@@ -15,6 +15,7 @@ import { suggestRateCard } from '@/lib/media-kit';
 import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
 import { generateContentPlaybook } from '@/lib/content-playbook';
+import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generateRecommendations } from '@/lib/recommendations';
 
 export const runtime = 'nodejs';
@@ -288,6 +289,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const captionAnalysis = analyzeCaptions(enriched);
     // Best-time analysis uses ALL fetched posts (more timestamps = better).
     const postingTime = analyzePostingTime(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
+    // Overall engagement momentum across every format (not just reels).
+    const engagementTrend = analyzeEngagementTrend(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
     // Prescriptive "next 3 posts" plan, synthesised from the above signals.
     const contentPlaybook = generateContentPlaybook({
       content_breakdown: contentBreak,
@@ -383,6 +386,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       pitch_coach: pitchCoach,
       posting_time: postingTime,
       content_playbook: contentPlaybook,
+      engagement_trend: engagementTrend,
       posts,
       demographics,
     });

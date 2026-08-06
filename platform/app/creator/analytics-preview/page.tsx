@@ -110,6 +110,7 @@ interface Analytics {
   pitch_coach?: PitchCoach | null;
   posting_time?: PostingTimeAnalysis | null;
   content_playbook?: ContentPlaybook | null;
+  engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
     gender_age: Record<string, number>;
@@ -168,6 +169,17 @@ interface BrandMatches {
   reason?: string;
   niche?: string | null;
   matches: BrandMatch[];
+}
+interface EngagementTrend {
+  available: boolean;
+  sample_size: number;
+  series: { t: string; er: number }[];
+  recent_avg: number | null;
+  older_avg: number | null;
+  momentum_pct: number | null;
+  trend: 'rising' | 'steady' | 'cooling' | null;
+  best: { t: string; er: number } | null;
+  headline: string | null;
 }
 interface DayStat { day: number; label: string; count: number; avg_er: number | null }
 interface PartStat { key: string; label: string; range: string; count: number; avg_er: number | null }
@@ -405,6 +417,13 @@ function AnalyticsPreview() {
       )}
 
       <SectionLabel>Growth &amp; predictions</SectionLabel>
+
+      {/* Engagement trend over time */}
+      {data.engagement_trend?.available && (
+        <div className="mt-3">
+          <EngagementTrendCard t={data.engagement_trend} />
+        </div>
+      )}
 
       {/* Follower growth */}
       <div className="mt-3">
@@ -698,6 +717,54 @@ function GrowthChart({ data, current }: { data: { date: string; followers: numbe
         <span>{fmtDay(points[0]!.date)} · {fmt(first)}</span>
         <span>{fmtDay(points[points.length - 1]!.date)} · {fmt(last)}</span>
       </div>
+    </div>
+  );
+}
+
+function EngagementTrendCard({ t }: { t: EngagementTrend }) {
+  const pts = t.series;
+  const color = t.trend === 'rising' ? '#16a34a' : t.trend === 'cooling' ? '#dc2626' : ACCENT;
+  const trendLabel = t.trend === 'rising' ? 'Trending up' : t.trend === 'cooling' ? 'Cooling off' : 'Holding steady';
+  const arrow = t.trend === 'rising' ? '▲' : t.trend === 'cooling' ? '▼' : '▬';
+
+  const W = 640, H = 120, padX = 8, padTop = 12, padBot = 12;
+  const ys = pts.map((p) => p.er);
+  const min = Math.min(...ys), max = Math.max(...ys);
+  const span = max - min || 1;
+  const x = (i: number) => padX + (i / Math.max(1, pts.length - 1)) * (W - padX * 2);
+  const y = (v: number) => padTop + (1 - (v - min) / span) * (H - padTop - padBot);
+  const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.er).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(pts.length - 1).toFixed(1)},${(H - padBot).toFixed(1)} L${x(0).toFixed(1)},${(H - padBot).toFixed(1)} Z`;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+        <div className="text-[13px] font-semibold text-ink-900">Engagement trend</div>
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color }}>
+          <span>{arrow}</span>
+          <span>{trendLabel}</span>
+          {t.momentum_pct != null && (
+            <span className="text-ink-400 font-medium tabular-nums">({t.momentum_pct > 0 ? '+' : ''}{t.momentum_pct}%)</span>
+          )}
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="erTrendFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.20" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#erTrendFill)" />
+        <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(pts.length - 1)} cy={y(pts[pts.length - 1]!.er)} r="3.5" fill={color} />
+      </svg>
+      <div className="flex justify-between text-[11px] text-ink-400 mt-1">
+        <span>Older avg {pct(t.older_avg)}</span>
+        <span>{t.sample_size} posts</span>
+        <span>Recent avg {pct(t.recent_avg)}</span>
+      </div>
+      {t.headline && <p className="mt-2 text-[12px] text-ink-500 leading-relaxed">{t.headline}</p>}
     </div>
   );
 }
