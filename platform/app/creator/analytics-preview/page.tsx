@@ -110,6 +110,7 @@ interface Analytics {
   pitch_coach?: PitchCoach | null;
   pitch_draft?: PitchDraft | null;
   posting_time?: PostingTimeAnalysis | null;
+  format_timing?: FormatTimingMatrix | null;
   content_playbook?: ContentPlaybook | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
@@ -192,6 +193,24 @@ interface PostingTimeAnalysis {
   by_part: PartStat[];
   best_day: DayStat | null;
   best_part: PartStat | null;
+  headline: string | null;
+}
+interface MatrixCell { format: string; part_key: string; count: number; avg_er: number | null }
+interface FormatRow {
+  format: string; label: string; count: number; cells: MatrixCell[];
+  best: { part_key: string; part_label: string; range: string; avg_er: number; count: number } | null;
+}
+interface FormatTimingMatrix {
+  available: boolean;
+  sample_size: number;
+  timezone: string;
+  parts: { key: string; label: string; range: string }[];
+  rows: FormatRow[];
+  best_bet: {
+    format: string; format_label: string;
+    part_key: string; part_label: string; range: string;
+    avg_er: number; count: number;
+  } | null;
   headline: string | null;
 }
 interface PostBrief {
@@ -475,6 +494,13 @@ function AnalyticsPreview() {
         <PostingHeatmap posts={allPosts} />
         {data.posting_time?.available && <PostingWindowCard t={data.posting_time} />}
       </div>
+
+      {/* Format × timing matrix */}
+      {data.format_timing?.available && (
+        <div className="mt-3">
+          <FormatTimingCard m={data.format_timing} />
+        </div>
+      )}
 
       {((data.content_analysis && (data.content_analysis.hashtags.length > 0 || data.content_analysis.sponsored.count > 0)) || data.caption_analysis?.available) && (
         <>
@@ -948,6 +974,86 @@ function PostingWindowCard({ t }: { t: PostingTimeAnalysis }) {
       </div>
 
       <p className="mt-3 text-[10.5px] text-ink-400">Aggregated from your posts&apos; engagement by IST day &amp; time. Directional — test and confirm.</p>
+    </div>
+  );
+}
+
+function FormatTimingCard({ m }: { m: FormatTimingMatrix }) {
+  // Global max ER across every populated cell, for shading intensity.
+  let maxEr = 0.0001;
+  for (const row of m.rows) for (const c of row.cells) if (c.avg_er && c.avg_er > maxEr) maxEr = c.avg_er;
+
+  const shade = (er: number | null): string => {
+    if (er == null) return '#f6f5fb';
+    const a = Math.max(0.12, Math.min(1, er / maxEr));
+    return `rgba(124, 92, 246, ${a})`; // ACCENT-ish, opacity by strength
+  };
+  const isBest = (fmt: string, key: string): boolean =>
+    !!m.best_bet && m.best_bet.format === fmt && m.best_bet.part_key === key;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card p-4 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+        <div className="text-[13px] font-semibold text-ink-900">Format × timing</div>
+        <span className="text-[11px] text-ink-400">{m.sample_size} posts · {m.timezone}</span>
+      </div>
+      {m.headline && (
+        <div className="mb-3 rounded-lg px-3 py-2 text-[12.5px] text-ink-800" style={{ background: ACCENT_SOFT }}>
+          {m.headline}
+        </div>
+      )}
+
+      <div className="overflow-x-auto -mx-1 px-1">
+        <table className="w-full border-separate" style={{ borderSpacing: '3px' }}>
+          <thead>
+            <tr>
+              <th className="text-left text-[10px] font-semibold text-ink-400 uppercase tracking-wide pr-2"></th>
+              {m.parts.map((p) => (
+                <th key={p.key} className="text-center text-[9.5px] font-semibold text-ink-500 leading-tight px-0.5 min-w-[46px]">
+                  <div>{p.label.replace('Early morning', 'Early').replace('Late night', 'Night')}</div>
+                  <div className="text-ink-300 font-normal">{p.range}</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {m.rows.map((row) => (
+              <tr key={row.format}>
+                <td className="text-[11.5px] font-semibold text-ink-700 whitespace-nowrap pr-2">
+                  {row.label} <span className="text-ink-400 font-normal">({row.count})</span>
+                </td>
+                {m.parts.map((p) => {
+                  const c = row.cells.find((x) => x.part_key === p.key);
+                  const er = c?.avg_er ?? null;
+                  const best = isBest(row.format, p.key);
+                  return (
+                    <td key={p.key} className="text-center">
+                      <div
+                        className="h-9 rounded-md flex items-center justify-center relative"
+                        style={{
+                          background: shade(er),
+                          outline: best ? `2px solid ${ACCENT}` : 'none',
+                          outlineOffset: best ? '1px' : undefined,
+                        }}
+                        title={c && c.count > 0 ? `${row.label} · ${p.label}: ${pct(er)} (${c.count} post${c.count === 1 ? '' : 's'})` : 'No posts here yet'}
+                      >
+                        <span className="text-[10px] font-semibold tabular-nums"
+                          style={{ color: er != null && er / maxEr > 0.55 ? '#fff' : '#6b7280' }}>
+                          {er != null ? pct(er) : '·'}
+                        </span>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-3 text-[10.5px] text-ink-400">
+        Average engagement by format &amp; IST window. Darker = stronger; outlined = your best combo. Directional — test and confirm.
+      </p>
     </div>
   );
 }

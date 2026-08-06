@@ -14,6 +14,7 @@ import { estimateMediaValue } from '@/lib/media-value';
 import { suggestRateCard } from '@/lib/media-kit';
 import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
+import { analyzeFormatTiming } from '@/lib/format-timing';
 import { generateContentPlaybook } from '@/lib/content-playbook';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
@@ -292,6 +293,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const captionAnalysis = analyzeCaptions(enriched);
     // Best-time analysis uses ALL fetched posts (more timestamps = better).
     const postingTime = analyzePostingTime(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
+    // Format × timing grid — which format wins in which posting window.
+    const formatTiming = analyzeFormatTiming(
+      posts.map((p) => ({ media_type: p.media_type, timestamp: p.timestamp, er: p.er })),
+    );
     // Overall engagement momentum across every format (not just reels).
     const engagementTrend = analyzeEngagementTrend(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
     // Prescriptive "next 3 posts" plan, synthesised from the above signals.
@@ -404,6 +409,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       pitch_coach: pitchCoach,
       pitch_draft: pitchDraft,
       posting_time: postingTime,
+      format_timing: formatTiming,
       content_playbook: contentPlaybook,
       engagement_trend: engagementTrend,
       posts,
