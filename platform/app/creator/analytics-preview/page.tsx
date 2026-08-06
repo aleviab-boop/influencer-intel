@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { evaluateDeal, type DealVerdictKey } from '@/lib/deal-evaluator';
 
 /* -------------------------------------------------------------------------
  * Creator "My Analytics" dashboard — PREVIEW (not wired into platform yet).
@@ -438,6 +439,13 @@ function AnalyticsPreview() {
       {data.pitch_draft?.available && (
         <div className="mt-3">
           <PitchDraftCard d={data.pitch_draft} />
+        </div>
+      )}
+
+      {/* Is this deal fair? */}
+      {data.media_value?.available && (
+        <div className="mt-3">
+          <DealCheckCard v={data.media_value} ask={data.pitch_coach?.suggested_ask ?? null} />
         </div>
       )}
 
@@ -1427,6 +1435,112 @@ function PitchDraftCard({ d }: { d: PitchDraft }) {
 
         <p className="mt-3 text-[10.5px] text-ink-400">
           Personalise the {'{Brand}'} and {'{product/campaign}'} tags before you hit send.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DealCheckCard(
+  { v, ask }: { v: MediaValue; ask: { low: number; high: number; deliverable: string } | null },
+) {
+  const [raw, setRaw] = useState('');
+  const offer = Number(raw.replace(/[^0-9.]/g, ''));
+
+  const result = evaluateDeal(offer, {
+    per_post_low: v.per_post_low ?? null,
+    per_post_mid: v.per_post_mid ?? null,
+    per_post_high: v.per_post_high ?? null,
+    ask_low: ask?.low ?? null,
+    ask_high: ask?.high ?? null,
+  });
+
+  const STYLE: Record<DealVerdictKey, { color: string; bg: string }> = {
+    lowball: { color: '#dc2626', bg: '#fef2f2' },
+    below: { color: '#d97706', bg: '#fffbeb' },
+    fair: { color: ACCENT, bg: ACCENT_SOFT },
+    strong: { color: '#16a34a', bg: '#f0fdf4' },
+    premium: { color: '#15803d', bg: '#f0fdf4' },
+  };
+  const s = STYLE[result.verdict];
+
+  // Position of the offer on the fair-range track (for the marker).
+  const lo = result.fair_low ?? v.per_post_low;
+  const hi = result.fair_high ?? v.per_post_high;
+  const span = hi > lo ? hi - lo : 1;
+  const markerPct = result.available
+    ? Math.max(0, Math.min(100, ((offer - lo) / span) * 100))
+    : 0;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Is this deal fair?</div>
+        <div className="text-[11.5px] text-ink-500 leading-snug max-w-lg">
+          Paste a brand&apos;s per-post offer to see where it sits against your worth — and what to counter with.
+        </div>
+      </div>
+
+      <div className="p-4">
+        <label className="block">
+          <span className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">Their offer (per post)</span>
+          <div className="mt-1.5 flex items-center rounded-lg border border-border bg-white px-3 focus-within:border-[color:var(--accent,#7c5cf6)]"
+            style={{ boxShadow: 'none' }}>
+            <span className="text-ink-400 text-[15px] mr-1">₹</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={raw}
+              onChange={(e) => setRaw(e.target.value)}
+              placeholder="e.g. 15,000"
+              className="w-full py-2 text-[15px] text-ink-900 outline-none bg-transparent tabular-nums"
+            />
+          </div>
+        </label>
+
+        {/* Anchor context */}
+        <div className="mt-3 flex items-center justify-between text-[11.5px] text-ink-500">
+          <span>Your fair range</span>
+          <span className="font-semibold text-ink-700 tabular-nums">
+            {money(result.fair_low ?? v.per_post_low)} – {money(result.fair_high ?? v.per_post_high)}
+          </span>
+        </div>
+
+        {result.available ? (
+          <>
+            {/* Range track with the offer marker */}
+            <div className="mt-2 relative h-2 rounded-full" style={{ background: 'linear-gradient(90deg,#fecaca,#fde68a,#bbf7d0)' }}>
+              <div className="absolute -top-1 h-4 w-1 rounded-full" style={{ left: `calc(${markerPct}% - 2px)`, background: '#111827' }} title={`Offer: ${money(offer)}`} />
+            </div>
+            <div className="mt-1 flex justify-between text-[9.5px] text-ink-400">
+              <span>Below</span><span>Fair</span><span>Strong</span>
+            </div>
+
+            {/* Verdict */}
+            <div className="mt-3 rounded-lg p-3" style={{ background: s.bg }}>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[12px] font-bold uppercase tracking-wide" style={{ color: s.color }}>{result.label}</span>
+                <span className="text-[11px] text-ink-500 tabular-nums">
+                  {result.ratio != null ? `${Math.round(result.ratio * 100)}% of your worth` : ''}
+                </span>
+              </div>
+              <p className="mt-1 text-[12.5px] text-ink-700 leading-relaxed">{result.message}</p>
+              {result.counter != null && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-[11px] text-ink-500">Suggested counter</span>
+                  <span className="text-[14px] font-bold tabular-nums" style={{ color: s.color }}>{money(result.counter)}</span>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="mt-3 text-[11.5px] text-ink-400">
+            Enter an amount above to check it against your ~{money(v.per_post_mid)}/post value.
+          </p>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Compared to your earned media value{ask ? ' and suggested rate' : ''}. Directional — factor in usage rights, exclusivity &amp; scope.
         </p>
       </div>
     </div>
