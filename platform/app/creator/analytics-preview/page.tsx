@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { evaluateDeal, type DealVerdictKey } from '@/lib/deal-evaluator';
+import { scoreAudienceFit, type FitLabel } from '@/lib/audience-fit';
 
 /* -------------------------------------------------------------------------
  * Creator "My Analytics" dashboard — PREVIEW (not wired into platform yet).
@@ -163,6 +164,7 @@ interface BrandMatch {
   program_id: string;
   brand_name: string;
   program_name: string;
+  category: string | null;
   score: number;
   fit: 'strong' | 'good' | 'possible';
   reason: string;
@@ -452,7 +454,7 @@ function AnalyticsPreview() {
       {/* Brands to pitch */}
       {brandMatches?.available && brandMatches.matches.length > 0 && (
         <div className="mt-3">
-          <BrandMatchCard m={brandMatches} kitHref={kitHref} />
+          <BrandMatchCard m={brandMatches} kitHref={kitHref} demographics={demographics ?? null} />
         </div>
       )}
 
@@ -1547,12 +1549,22 @@ function DealCheckCard(
   );
 }
 
-function BrandMatchCard({ m, kitHref }: { m: BrandMatches; kitHref: string }) {
+function BrandMatchCard(
+  { m, kitHref, demographics }: {
+    m: BrandMatches;
+    kitHref: string;
+    demographics: { gender_age: Record<string, number>; cities: Record<string, number>; countries: Record<string, number> } | null;
+  },
+) {
   const FIT: Record<BrandMatch['fit'], { label: string; color: string }> = {
     strong: { label: 'Strong fit', color: '#16a34a' },
     good: { label: 'Good fit', color: ACCENT },
     possible: { label: 'Possible', color: '#6b7280' },
   };
+  const AUD_COLOR: Record<FitLabel, string> = {
+    excellent: '#16a34a', strong: ACCENT, moderate: '#d97706', broad: '#6b7280',
+  };
+  const hasDemo = !!demographics && Object.keys(demographics.gender_age).length > 0;
   return (
     <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
       <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
@@ -1569,6 +1581,7 @@ function BrandMatchCard({ m, kitHref }: { m: BrandMatches; kitHref: string }) {
       <div className="divide-y divide-border">
         {m.matches.map((b) => {
           const f = FIT[b.fit];
+          const audFit = hasDemo ? scoreAudienceFit(b.category, demographics) : null;
           return (
             <div key={b.program_id} className="px-4 py-3 flex items-start gap-3">
               <div className="h-9 w-9 rounded-lg grid place-items-center text-[13px] font-bold text-white shrink-0"
@@ -1580,9 +1593,21 @@ function BrandMatchCard({ m, kitHref }: { m: BrandMatches; kitHref: string }) {
                   <span className="text-[13.5px] font-semibold text-ink-900 truncate">{b.brand_name}</span>
                   <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
                     style={{ color: f.color, background: `${f.color}14` }}>{f.label}</span>
+                  {audFit?.available && (
+                    <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                      style={{ color: AUD_COLOR[audFit.label], background: `${AUD_COLOR[audFit.label]}14` }}
+                      title={audFit.signals.join(' ')}>
+                      {audFit.label} audience
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11.5px] text-ink-400 truncate">{b.program_name}</div>
                 <p className="mt-0.5 text-[12px] text-ink-500 leading-relaxed">{b.reason}</p>
+                {audFit?.available && (
+                  <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: AUD_COLOR[audFit.label] }}>
+                    {audFit.rationale}
+                  </p>
+                )}
               </div>
               <div className="shrink-0 text-right">
                 <div className="text-[15px] font-bold tabular-nums" style={{ color: f.color }}>{b.score}</div>
@@ -1594,7 +1619,7 @@ function BrandMatchCard({ m, kitHref }: { m: BrandMatches; kitHref: string }) {
       </div>
 
       <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-[10.5px] text-ink-400">Matched by niche &amp; content topics against active campaigns in our network.</p>
+        <p className="text-[10.5px] text-ink-400">Matched by niche &amp; content topics{hasDemo ? ', then scored on how well your audience fits each brand\u2019s buyer' : ''}, against active campaigns in our network.</p>
         <a href={kitHref} className="text-[12px] font-semibold whitespace-nowrap" style={{ color: ACCENT }}>
           Pitch with your media kit →
         </a>

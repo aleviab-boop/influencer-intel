@@ -21,6 +21,7 @@ export interface BrandMatch {
   program_id: string;
   brand_name: string;
   program_name: string;
+  category: string | null;   // brand category — powers audience-fit scoring
   score: number;         // 0..100
   fit: 'strong' | 'good' | 'possible';
   reason: string;
@@ -100,6 +101,7 @@ export function matchBrands(
       program_id: c.program_id,
       brand_name: c.brand_name ?? 'Brand',
       program_name: c.program_name,
+      category: c.brand_category ?? null,
       score: Math.round(score),
       fit: fitFor(score),
       reason,
