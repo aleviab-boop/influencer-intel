@@ -13,6 +13,7 @@ import type { PeerBenchmark } from '@/lib/peer-benchmark';
 import { estimateMediaValue } from '@/lib/media-value';
 import { suggestRateCard } from '@/lib/media-kit';
 import { analyzeProfile } from '@/lib/profile-optimizer';
+import { planTierClimb } from '@/lib/tier-climb';
 import { buildRateMenu } from '@/lib/rate-menu';
 import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
@@ -332,6 +333,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const audienceInsights = analyzeAudience(demographics);
     // Forward follower-growth projection from the snapshot history.
     const growthProjection = projectGrowth(growth, followers);
+    // Reframe that pace around named creator tiers + the rate uplift a climb unlocks.
+    const tierClimb = planTierClimb({ followers, daily_rate: growthProjection.daily_rate, avg_er: stats.avg_er });
     // Diagnostic: what do the creator's TOP posts have in common vs the rest?
     const winningFormula = analyzeWinningFormula(
       posts.map((p) => ({ media_type: p.media_type, caption: p.caption, timestamp: p.timestamp, er: p.er })),
@@ -488,6 +491,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_ideas: contentIdeas,
       audience_insights: audienceInsights,
       growth_projection: growthProjection,
+      tier_climb: tierClimb,
       winning_formula: winningFormula,
       posting_consistency: postingConsistency,
       caption_hooks: captionHooks,

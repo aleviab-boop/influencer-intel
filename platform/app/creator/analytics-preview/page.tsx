@@ -120,6 +120,7 @@ interface Analytics {
   content_ideas?: ContentIdeas | null;
   audience_insights?: AudienceInsights | null;
   growth_projection?: GrowthProjection | null;
+  tier_climb?: TierClimb | null;
   winning_formula?: WinningFormula | null;
   posting_consistency?: PostingConsistency | null;
   caption_hooks?: CaptionHooks | null;
@@ -250,6 +251,22 @@ interface GrowthProjection {
   projections: { in_days: number; date: string; followers: number }[];
   next_milestone: { target: number; in_days: number | null; date: string | null } | null;
   headline: string | null;
+}
+interface TierClimb {
+  available: boolean;
+  current_tier: string;
+  current_followers: number;
+  progress_pct: number | null;
+  next_tier: string | null;
+  next_threshold: number | null;
+  followers_to_go: number | null;
+  daily_rate: number | null;
+  eta_days: number | null;
+  eta_date: string | null;
+  eta_label: string | null;
+  rate_uplift_pct: number | null;
+  headline: string | null;
+  tip: string | null;
 }
 interface AudienceInsights {
   available: boolean;
@@ -779,6 +796,13 @@ function AnalyticsPreview() {
       {data.growth_projection?.available && (
         <div className="mt-3">
           <GrowthProjectionCard g={data.growth_projection} />
+        </div>
+      )}
+
+      {/* Named-tier climb + rate unlock */}
+      {data.tier_climb?.available && (
+        <div className="mt-3">
+          <TierClimbCard t={data.tier_climb} />
         </div>
       )}
 
@@ -2317,6 +2341,71 @@ function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
         )}
 
         <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
+    </div>
+  );
+}
+
+function TierClimbCard({ t }: { t: TierClimb }) {
+  const atTop = !t.next_tier;
+  const pct = t.progress_pct ?? 0;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Tier climb</div>
+          {t.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{t.headline}</div>}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+          style={{ color: ACCENT, background: `${ACCENT}14` }}>{t.current_tier}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Progress bar from current tier → next */}
+        {!atTop && (
+          <>
+            <div className="flex items-center justify-between text-[11px] font-semibold text-ink-500 mb-1.5">
+              <span>{t.current_tier}</span>
+              <span>{t.next_tier}</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-[#f0eefb] overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${Math.max(3, pct)}%`, background: ACCENT }} />
+            </div>
+            <div className="mt-1 text-[10.5px] text-ink-400 text-right tabular-nums">{pct}% through the {t.current_tier.toLowerCase()} band</div>
+          </>
+        )}
+
+        {/* Key numbers */}
+        <div className={`grid grid-cols-3 gap-2 ${atTop ? '' : 'mt-3'}`}>
+          <Tile
+            label="To go"
+            value={t.followers_to_go != null ? fmt(t.followers_to_go) : '—'}
+            sub={t.next_threshold != null ? `to ${fmt(t.next_threshold)}` : 'top tier'}
+          />
+          <Tile
+            label="ETA"
+            value={t.eta_label ?? '—'}
+            sub={t.eta_date ?? 'grow to unlock'}
+          />
+          <Tile
+            label="Rate unlock"
+            value={t.rate_uplift_pct != null && t.rate_uplift_pct > 0 ? `+${t.rate_uplift_pct}%` : '—'}
+            sub="per-post lift"
+          />
+        </div>
+
+        {t.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{t.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Named tiers are the brackets brands buy by. The ETA reuses your growth pace and the rate unlock is a
+          transparent per-post proxy — both directional, not a promise.
+        </p>
       </div>
     </div>
   );
