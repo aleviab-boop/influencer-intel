@@ -117,6 +117,7 @@ interface Analytics {
   content_playbook?: ContentPlaybook | null;
   content_ideas?: ContentIdeas | null;
   audience_insights?: AudienceInsights | null;
+  growth_projection?: GrowthProjection | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -228,6 +229,17 @@ interface ContentIdea {
   n: number; format: string; angle: string; hook: string; outline: string; hashtag: string | null;
 }
 interface ContentIdeas { available: boolean; topic: string | null; ideas: ContentIdea[] }
+interface GrowthProjection {
+  available: boolean;
+  sample_days: number;
+  current: number | null;
+  daily_rate: number | null;
+  weekly_pct: number | null;
+  trend: 'growing' | 'flat' | 'declining' | null;
+  projections: { in_days: number; date: string; followers: number }[];
+  next_milestone: { target: number; in_days: number | null; date: string | null } | null;
+  headline: string | null;
+}
 interface AudienceInsights {
   available: boolean;
   headline: string | null;
@@ -515,6 +527,13 @@ function AnalyticsPreview() {
       <div className="mt-3">
         <GrowthChart data={growth} current={profile?.followers_count ?? null} />
       </div>
+
+      {/* Forward follower-growth projection */}
+      {data.growth_projection?.available && (
+        <div className="mt-3">
+          <GrowthProjectionCard g={data.growth_projection} />
+        </div>
+      )}
 
       {/* Reel forecast (prediction) + content-format depth */}
       <div className="mt-3 grid lg:grid-cols-2 gap-3">
@@ -1726,6 +1745,64 @@ function ContentPlaybookCard({ p }: { p: ContentPlaybook }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
+  const TREND: Record<NonNullable<GrowthProjection['trend']>, { label: string; color: string }> = {
+    growing: { label: 'Growing', color: '#16a34a' },
+    flat: { label: 'Flat', color: '#d97706' },
+    declining: { label: 'Declining', color: '#dc2626' },
+  };
+  const t = g.trend ? TREND[g.trend] : TREND.flat;
+  const sign = (g.daily_rate ?? 0) >= 0 ? '+' : '';
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Growth projection</div>
+          {g.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{g.headline}</div>}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+          style={{ color: t.color, background: `${t.color}14` }}>{t.label}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Pace stats */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <Tile label="Per week" value={`${sign}${g.weekly_pct != null ? g.weekly_pct : 0}%`} sub="growth rate" />
+          <Tile label="Per day" value={`${sign}${Math.round(g.daily_rate ?? 0).toLocaleString('en-IN')}`} sub="followers" />
+          <Tile label="Based on" value={`${g.sample_days}d`} sub="of history" />
+        </div>
+
+        {/* Projections */}
+        <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-2">If this pace holds</div>
+        <div className="grid grid-cols-3 gap-2">
+          {g.projections.map((p) => (
+            <div key={p.in_days} className="rounded-lg border border-border bg-[#faf9ff] px-3 py-2 text-center">
+              <div className="text-[10px] text-ink-400 uppercase tracking-wide">in {p.in_days}d</div>
+              <div className="text-[15px] font-bold text-ink-900 tabular-nums">{fmt(p.followers)}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Milestone ETA */}
+        {g.next_milestone && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 flex items-center justify-between gap-2" style={{ background: ACCENT_SOFT }}>
+            <div className="text-[12px] text-ink-700">
+              Next milestone · <span className="font-semibold">{fmt(g.next_milestone.target)}</span> followers
+            </div>
+            <div className="text-[12.5px] font-bold text-right shrink-0" style={{ color: ACCENT }}>
+              {g.next_milestone.in_days != null ? `~${g.next_milestone.in_days} days` : 'grow to reach'}
+            </div>
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
     </div>
   );
 }

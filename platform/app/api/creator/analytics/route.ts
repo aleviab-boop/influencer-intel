@@ -18,6 +18,7 @@ import { analyzeFormatTiming } from '@/lib/format-timing';
 import { generateContentPlaybook } from '@/lib/content-playbook';
 import { generateContentIdeas } from '@/lib/content-ideas';
 import { analyzeAudience } from '@/lib/audience-insights';
+import { projectGrowth } from '@/lib/growth-projection';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -318,6 +319,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
     // Whole-audience profile narrative from the demographics blob.
     const audienceInsights = analyzeAudience(demographics);
+    // Forward follower-growth projection from the snapshot history.
+    const growthProjection = projectGrowth(growth, followers);
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -424,6 +427,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       content_playbook: contentPlaybook,
       content_ideas: contentIdeas,
       audience_insights: audienceInsights,
+      growth_projection: growthProjection,
       engagement_trend: engagementTrend,
       posts,
       demographics,
