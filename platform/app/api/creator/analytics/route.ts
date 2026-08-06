@@ -12,6 +12,7 @@ import { computeBenchmark, tierLabel, tierWindow } from '@/lib/peer-benchmark';
 import type { PeerBenchmark } from '@/lib/peer-benchmark';
 import { estimateMediaValue } from '@/lib/media-value';
 import { suggestRateCard } from '@/lib/media-kit';
+import { analyzeProfile } from '@/lib/profile-optimizer';
 import { buildRateMenu } from '@/lib/rate-menu';
 import { generatePitchCoach } from '@/lib/pitch-coach';
 import { analyzePostingTime } from '@/lib/posting-time';
@@ -388,6 +389,15 @@ export async function GET(request: Request): Promise<NextResponse> {
     const rateCard = suggestRateCard(followers, stats.avg_er);
     // Expand the rate card into a copy-ready deliverable menu (packages + add-ons).
     const rateMenu = buildRateMenu(rateCard);
+    // Grade the bio/profile against what converts profile-visitors into follows.
+    const profileOptimizer = analyzeProfile({
+      name: profile.name ?? null,
+      username: profile.username ?? null,
+      biography: profile.biography ?? null,
+      website: profile.website ?? null,
+      niche,
+      followers,
+    });
     const pitchCoach = generatePitchCoach({
       followers,
       tier_label: tierLabel(followers),
@@ -470,6 +480,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       media_value: mediaValue,
       pitch_coach: pitchCoach,
       rate_menu: rateMenu,
+      profile_optimizer: profileOptimizer,
       pitch_draft: pitchDraft,
       posting_time: postingTime,
       format_timing: formatTiming,

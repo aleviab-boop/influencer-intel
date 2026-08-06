@@ -113,6 +113,7 @@ interface Analytics {
   pitch_coach?: PitchCoach | null;
   pitch_draft?: PitchDraft | null;
   rate_menu?: RateMenu | null;
+  profile_optimizer?: ProfileOptimizer | null;
   posting_time?: PostingTimeAnalysis | null;
   format_timing?: FormatTimingMatrix | null;
   content_playbook?: ContentPlaybook | null;
@@ -463,6 +464,21 @@ interface RateMenu {
   headline: string | null;
   note: string;
 }
+interface ProfileCheck {
+  key: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+  fix: string | null;
+}
+interface ProfileOptimizer {
+  available: boolean;
+  score: number;
+  grade: 'sharp' | 'solid' | 'needs-work';
+  checks: ProfileCheck[];
+  suggested_bio: string | null;
+  headline: string | null;
+}
 interface MediaValue {
   available: boolean;
   currency: 'INR';
@@ -679,6 +695,13 @@ function AnalyticsPreview() {
       {data.post_spotlight?.available && (
         <div className="mt-3">
           <PostSpotlightCard s={data.post_spotlight} />
+        </div>
+      )}
+
+      {/* Profile / bio optimizer */}
+      {data.profile_optimizer?.available && (
+        <div className="mt-3">
+          <ProfileOptimizerCard p={data.profile_optimizer} />
         </div>
       )}
 
@@ -1832,6 +1855,103 @@ function RateMenuCard({ m }: { m: RateMenu }) {
         </div>
 
         <p className="mt-3 text-[10.5px] text-ink-400">{m.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function ProfileOptimizerCard({ p }: { p: ProfileOptimizer }) {
+  const [copied, setCopied] = useState(false);
+  const GRADE: Record<ProfileOptimizer['grade'], { label: string; color: string }> = {
+    sharp: { label: 'Sharp', color: '#16a34a' },
+    solid: { label: 'Solid', color: '#d97706' },
+    'needs-work': { label: 'Needs work', color: '#dc2626' },
+  };
+  const STATUS: Record<ProfileCheck['status'], { dot: string; sym: string }> = {
+    pass: { dot: '#16a34a', sym: '✓' },
+    warn: { dot: '#d97706', sym: '!' },
+    fail: { dot: '#dc2626', sym: '×' },
+  };
+  const g = GRADE[p.grade];
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="min-w-0">
+          <div className="text-[13px] font-semibold text-ink-900">Bio &amp; profile optimizer</div>
+          {p.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{p.headline}</div>}
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shrink-0"
+          style={{ color: g.color, background: `${g.color}14` }}>{g.label}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Score dial */}
+        <div className="flex items-center gap-4 mb-3">
+          <div className="relative shrink-0" style={{ width: 68, height: 68 }}>
+            <svg width="68" height="68" viewBox="0 0 68 68">
+              <circle cx="34" cy="34" r="29" fill="none" stroke="#eee" strokeWidth="7" />
+              <circle cx="34" cy="34" r="29" fill="none" stroke={g.color} strokeWidth="7" strokeLinecap="round"
+                strokeDasharray={`${(p.score / 100) * 2 * Math.PI * 29} ${2 * Math.PI * 29}`}
+                transform="rotate(-90 34 34)" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[17px] font-bold text-ink-900 leading-none tabular-nums">{p.score}</span>
+              <span className="text-[8.5px] text-ink-400 uppercase tracking-wide">/ 100</span>
+            </div>
+          </div>
+          <div className="flex-1 text-[11.5px] text-ink-500 leading-snug">
+            Your bio is the landing page every new visitor hits before they decide to follow or reach out.
+            These are the things that actually turn a visit into a follow or a collab enquiry.
+          </div>
+        </div>
+
+        {/* Checklist with fixes */}
+        <div className="space-y-1.5">
+          {p.checks.map((c) => {
+            const s = STATUS[c.status];
+            return (
+              <div key={c.key} className="flex items-start gap-2.5 rounded-lg border border-border bg-[#faf9ff] px-3 py-2">
+                <span className="mt-0.5 flex items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
+                  style={{ width: 16, height: 16, background: s.dot }}>{s.sym}</span>
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold text-ink-800">{c.label}</div>
+                  <div className="text-[11px] text-ink-500 leading-snug">{c.detail}</div>
+                  {c.fix && (
+                    <div className="text-[11px] leading-snug mt-0.5">
+                      <span className="font-semibold" style={{ color: ACCENT }}>Fix · </span>
+                      <span className="text-ink-600">{c.fix}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Ready-to-paste rewrite */}
+        {p.suggested_bio && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide">Suggested bio rewrite</div>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(p.suggested_bio ?? ''); setCopied(true); setTimeout(() => setCopied(false), 1600); }}
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-border hover:bg-[#faf9ff] transition-colors shrink-0"
+                style={{ color: ACCENT }}>
+                {copied ? 'Copied ✓' : 'Copy bio'}
+              </button>
+            </div>
+            <pre className="text-[12px] text-ink-700 leading-relaxed rounded-lg border border-border bg-[#faf9ff] px-3 py-3 whitespace-pre-wrap font-sans overflow-x-auto">
+              {p.suggested_bio}
+            </pre>
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          A rules-based grade of the handful of things that convert profile visits into follows — a clear
+          &ldquo;what I do&rdquo;, a searchable name, a call-to-action and a working link. Suggestions are starting points.
+        </p>
       </div>
     </div>
   );
