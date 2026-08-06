@@ -125,6 +125,7 @@ interface Analytics {
   brand_safety?: BrandSafety | null;
   scorecard?: CreatorScorecard | null;
   post_spotlight?: PostSpotlight | null;
+  hashtag_strategy?: HashtagStrategy | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -261,6 +262,26 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface HashtagVerdict {
+  tag: string;
+  count: number;
+  avg_er: number | null;
+  lift_pct: number | null;
+  tier: 'keep' | 'drop' | 'test';
+}
+interface HashtagStrategy {
+  available: boolean;
+  sample_size: number;
+  tagged_posts: number;
+  overall_avg_er: number | null;
+  avg_per_post: number | null;
+  count_advice: string | null;
+  tags: HashtagVerdict[];
+  keep: string[];
+  drop: string[];
+  headline: string | null;
+  tip: string | null;
 }
 interface SpotlightCard {
   id: string;
@@ -761,6 +782,12 @@ function AnalyticsPreview() {
             </div>
           )}
         </>
+      )}
+
+      {data.hashtag_strategy?.available && (
+        <div className="mt-3">
+          <HashtagStrategyCard h={data.hashtag_strategy} />
+        </div>
       )}
 
       {data.content_pillars?.available && (
@@ -2061,6 +2088,59 @@ function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
         )}
 
         <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
+    </div>
+  );
+}
+
+function HashtagStrategyCard({ h }: { h: HashtagStrategy }) {
+  const TIER: Record<HashtagVerdict['tier'], { label: string; color: string }> = {
+    keep: { label: 'Keep', color: '#16a34a' },
+    drop: { label: 'Drop', color: '#dc2626' },
+    test: { label: 'Testing', color: '#6b7280' },
+  };
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Hashtag strategy</div>
+        {h.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{h.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        {/* Count read */}
+        {h.count_advice && (
+          <div className="mb-3 rounded-lg border border-border bg-[#faf9ff] px-3 py-2 text-[11.5px] text-ink-600 leading-snug">
+            {h.count_advice}
+          </div>
+        )}
+
+        {/* Tag verdicts */}
+        <div className="space-y-1.5">
+          {h.tags.map((t) => {
+            const v = TIER[t.tier];
+            return (
+              <div key={t.tag} className="flex items-center gap-2 rounded-lg border border-border bg-[#faf9ff] px-3 py-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 w-14 text-center"
+                  style={{ color: v.color, background: `${v.color}14` }}>{v.label}</span>
+                <span className="text-[12px] font-medium text-ink-800 truncate flex-1">{t.tag}</span>
+                <span className="text-[10.5px] text-ink-400 tabular-nums shrink-0">
+                  {t.count}× · {pct(t.avg_er)}
+                  {t.lift_pct != null && t.lift_pct !== 0 ? ` (${t.lift_pct > 0 ? '+' : ''}${t.lift_pct}%)` : ''}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {h.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{h.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Each tag graded by how posts using it engage vs your average, across {h.tagged_posts} tagged posts. A tag needs a couple of uses before its signal counts.
+        </p>
       </div>
     </div>
   );
