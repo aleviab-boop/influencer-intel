@@ -24,6 +24,7 @@ import { analyzePostingConsistency } from '@/lib/posting-consistency';
 import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeContentPillars } from '@/lib/content-pillars';
 import { analyzeBrandSafety } from '@/lib/brand-safety';
+import { buildScorecard } from '@/lib/creator-scorecard';
 import { analyzeEngagementTrend } from '@/lib/engagement-trend';
 import { generatePitchDraft } from '@/lib/pitch-draft';
 import { generateRecommendations } from '@/lib/recommendations';
@@ -344,6 +345,14 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
     // Sponsorship-readiness: disclosure hygiene, promo balance, language safety.
     const brandSafety = analyzeBrandSafety(posts.map((p) => ({ caption: p.caption })));
+    // One-line rollup: blend the sub-scores into a media-kit-ready grade.
+    const scorecard = buildScorecard({
+      benchmark,
+      audience_quality: audQuality,
+      posting_consistency: postingConsistency,
+      brand_safety: brandSafety,
+      growth_projection: growthProjection,
+    });
 
     // Earned media value — from the same enriched posts + cadence.
     const avgOf = (nums: number[]): number | null =>
@@ -456,6 +465,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       caption_hooks: captionHooks,
       content_pillars: contentPillars,
       brand_safety: brandSafety,
+      scorecard,
       engagement_trend: engagementTrend,
       posts,
       demographics,

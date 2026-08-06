@@ -123,6 +123,7 @@ interface Analytics {
   caption_hooks?: CaptionHooks | null;
   content_pillars?: ContentPillars | null;
   brand_safety?: BrandSafety | null;
+  scorecard?: CreatorScorecard | null;
   engagement_trend?: EngagementTrend | null;
   posts?: Post[];
   demographics?: {
@@ -259,6 +260,23 @@ interface AudienceInsights {
   } | null;
   insights: string[];
   brand_fit_note: string | null;
+}
+interface ScorePillar {
+  key: string;
+  label: string;
+  score: number;
+  weight: number;
+  blurb: string;
+}
+interface CreatorScorecard {
+  available: boolean;
+  score: number;
+  grade: 'A+' | 'A' | 'B' | 'C' | 'D';
+  tier_label: string;
+  pillars: ScorePillar[];
+  strengths: string[];
+  watch_out: string | null;
+  headline: string | null;
 }
 interface SafetyCheck {
   key: string;
@@ -521,6 +539,13 @@ function AnalyticsPreview() {
           </a>
         </div>
       </div>
+
+      {/* Overall scorecard — the media-kit headline rolling up every sub-score */}
+      {data.scorecard?.available && (
+        <div className="mt-4">
+          <ScorecardCard s={data.scorecard} />
+        </div>
+      )}
 
       {/* This week's focus — the "do these 3 things" digest */}
       {weeklyPlan.available && (
@@ -2424,6 +2449,81 @@ function ContentIdeasCard({ c }: { c: ContentIdeas }) {
 
       <div className="px-4 py-2.5 border-t border-border">
         <p className="text-[10.5px] text-ink-400">Angle templates filled with your topic — make them yours before posting.</p>
+      </div>
+    </div>
+  );
+}
+
+function ScorecardCard({ s }: { s: CreatorScorecard }) {
+  const GRADE_COLOR: Record<CreatorScorecard['grade'], string> = {
+    'A+': '#16a34a', 'A': '#16a34a', 'B': '#0ea5e9', 'C': '#d97706', 'D': '#dc2626',
+  };
+  const gc = GRADE_COLOR[s.grade];
+  const barColor = (v: number): string => (v >= 70 ? '#16a34a' : v >= 45 ? '#0ea5e9' : '#d97706');
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-4 sm:px-5 flex items-center gap-4 sm:gap-5"
+        style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        {/* Grade dial */}
+        <div className="relative shrink-0" style={{ width: 84, height: 84 }}>
+          <svg width="84" height="84" viewBox="0 0 84 84">
+            <circle cx="42" cy="42" r="36" fill="none" stroke="#ececec" strokeWidth="8" />
+            <circle cx="42" cy="42" r="36" fill="none" stroke={gc} strokeWidth="8" strokeLinecap="round"
+              strokeDasharray={`${(s.score / 100) * 2 * Math.PI * 36} ${2 * Math.PI * 36}`}
+              transform="rotate(-90 42 42)" />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-[22px] font-extrabold leading-none" style={{ color: gc }}>{s.grade}</span>
+            <span className="text-[10px] text-ink-400 tabular-nums">{s.score}/100</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: ACCENT }}>
+            Creator scorecard · {s.tier_label}
+          </div>
+          {s.headline && <div className="text-[14px] font-semibold text-ink-900 leading-snug mt-0.5">{s.headline}</div>}
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        {/* Pillar bars */}
+        <div className="grid sm:grid-cols-2 gap-x-5 gap-y-2.5">
+          {s.pillars.map((p) => (
+            <div key={p.key}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[12px] font-medium text-ink-700 truncate">{p.label}</span>
+                <span className="text-[11px] font-semibold text-ink-500 tabular-nums shrink-0">{p.score}</span>
+              </div>
+              <div className="h-2 rounded-full bg-[#eee]">
+                <div className="h-2 rounded-full" style={{ width: `${p.score}%`, background: barColor(p.score) }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Strengths to lead the pitch with */}
+        {s.strengths.length > 0 && (
+          <div className="mt-4">
+            <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wide mb-1.5">Lead your pitch with</div>
+            <div className="flex flex-wrap gap-1.5">
+              {s.strengths.map((str, i) => (
+                <span key={i} className="text-[11.5px] px-2.5 py-1 rounded-full font-medium"
+                  style={{ color: '#166534', background: '#16a34a14' }}>{str}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {s.watch_out && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Watch-out · </span>{s.watch_out.replace(/^To level up: /, '')}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          A weighted blend of the sub-scores below — engagement vs peers, audience quality, consistency, brand safety and growth. Only the dimensions we could measure are counted.
+        </p>
       </div>
     </div>
   );
