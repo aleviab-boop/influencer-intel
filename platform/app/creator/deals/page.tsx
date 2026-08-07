@@ -113,7 +113,7 @@ function Deals() {
               <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
                 <SummaryTile label="In progress" value={String(s.active_count)} sub={s.overdue_count > 0 ? `${s.overdue_count} overdue` : 'on track'} accent={s.overdue_count > 0} />
                 <SummaryTile label="Awaiting payment" value={String(s.awaiting_payment_count)} sub={money(s.pending) + ' pending'} />
-                <SummaryTile label="Earned" value={money(s.total_earned)} sub={`${s.paid_count} paid`} />
+                <SummaryTile label="Earned" value={money(s.total_earned)} sub={`${s.paid_count} paid`} href={handle ? `/creator/goal?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator/goal'} />
                 <SummaryTile label="Next deadline" value={s.next_due ? dateStr(s.next_due) : '—'} sub={s.next_due ? 'upcoming' : 'nothing due'} />
               </div>
             )}
@@ -140,14 +140,21 @@ function Deals() {
   );
 }
 
-function SummaryTile({ label, value, sub, accent }: { label: string; value: string; sub: string; accent?: boolean }) {
-  return (
-    <div className="rounded-2xl border border-border bg-white shadow-card px-4 py-3.5">
-      <div className="text-[10.5px] uppercase tracking-wider text-ink-400">{label}</div>
+function SummaryTile({ label, value, sub, accent, href }: { label: string; value: string; sub: string; accent?: boolean; href?: string }) {
+  const inner = (
+    <>
+      <div className="text-[10.5px] uppercase tracking-wider text-ink-400 flex items-center gap-1">
+        {label}
+        {href && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-ink-300"><path d="M9 18l6-6-6-6" /></svg>}
+      </div>
       <div className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={accent ? { color: '#dc2626' } : undefined}>{value}</div>
       <div className="mt-1 text-[11.5px] text-ink-500">{sub}</div>
-    </div>
+    </>
   );
+  const cls = 'rounded-2xl border border-border bg-white shadow-card px-4 py-3.5';
+  return href
+    ? <Link href={href} className={`${cls} block hover:border-[#d9d4f5] transition-colors`}>{inner}</Link>
+    : <div className={cls}>{inner}</div>;
 }
 
 function DealCard({ d, handle }: { d: DealView; handle: string | null }) {

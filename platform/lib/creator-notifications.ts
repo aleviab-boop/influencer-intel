@@ -83,7 +83,7 @@ function dateLabel(iso: string): string {
 export function buildNotifications(items: NotificationInput[], todayISO: string): NotificationFeed {
   const today = todayISO.slice(0, 10);
   const dealsHref = '/creator/deals';
-  const earningsHref = '/creator/earnings';
+  const earningsHref = '/creator/goal';   // earnings context lives on the goal tracker
 
   const out: NotificationView[] = [];
 
@@ -159,7 +159,7 @@ export function buildNotifications(items: NotificationInput[], todayISO: string)
             brand: d.brand,
             when: d.due_date,
             when_label: relLabel(daysToDue),
-            href: earningsHref,
+            href: `${dealsHref}/${d.id}`,
           });
         } else {
           out.push({
