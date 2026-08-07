@@ -127,7 +127,7 @@ function Deals() {
                   </h2>
                   <div className="space-y-3">
                     {g.deals.map((d) => (
-                      <DealCard key={d.id} d={d} />
+                      <DealCard key={d.id} d={d} handle={handle} />
                     ))}
                   </div>
                 </section>
@@ -150,11 +150,12 @@ function SummaryTile({ label, value, sub, accent }: { label: string; value: stri
   );
 }
 
-function DealCard({ d }: { d: DealView }) {
+function DealCard({ d, handle }: { d: DealView; handle: string | null }) {
   const u = URGENCY[d.urgency];
   const stageC = STAGE_C[d.stage];
+  const href = `/creator/deals/${encodeURIComponent(d.id)}${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`;
   return (
-    <div className="rounded-2xl bg-white border border-border shadow-card p-5">
+    <Link href={href} className="block rounded-2xl bg-white border border-border shadow-card p-5 hover:border-[#d9d4f5] transition-colors">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-[15px] font-semibold text-ink-900 truncate">{d.program}</div>
@@ -206,6 +207,6 @@ function DealCard({ d }: { d: DealView }) {
         <span className="font-semibold" style={{ color: d.urgency === 'overdue' ? '#dc2626' : ACCENT }}>Next · </span>
         {d.next_action}
       </div>
-    </div>
+    </Link>
   );
 }
