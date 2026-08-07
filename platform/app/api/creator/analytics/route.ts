@@ -27,6 +27,7 @@ import { analyzePostingConsistency } from '@/lib/posting-consistency';
 import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeCaptionLength } from '@/lib/caption-length';
 import { analyzeEngagementReliability } from '@/lib/engagement-reliability';
+import { analyzeFormatRoi } from '@/lib/format-roi';
 import { analyzeContentPillars } from '@/lib/content-pillars';
 import { analyzeBrandSafety } from '@/lib/brand-safety';
 import { buildScorecard } from '@/lib/creator-scorecard';
@@ -357,6 +358,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const engagementReliability = analyzeEngagementReliability(
       posts.map((p) => ({ er: p.er })),
     );
+    // Which FORMAT pays off best per slot, and does the current mix match it?
+    const formatRoi = analyzeFormatRoi(
+      posts.map((p) => ({ media_type: p.media_type, er: p.er, reach: p.reach })),
+    );
     // Recurring content themes (pillars) and which ones over/under-perform their share.
     const contentPillars = analyzeContentPillars(
       posts.map((p) => ({ caption: p.caption, er: p.er })),
@@ -507,6 +512,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       caption_hooks: captionHooks,
       caption_length: captionLength,
       engagement_reliability: engagementReliability,
+      format_roi: formatRoi,
       content_pillars: contentPillars,
       brand_safety: brandSafety,
       scorecard,

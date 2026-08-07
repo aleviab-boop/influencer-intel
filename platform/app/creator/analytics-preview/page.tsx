@@ -126,6 +126,7 @@ interface Analytics {
   caption_hooks?: CaptionHooks | null;
   caption_length?: CaptionLength | null;
   engagement_reliability?: EngagementReliability | null;
+  format_roi?: FormatRoi | null;
   content_pillars?: ContentPillars | null;
   brand_safety?: BrandSafety | null;
   scorecard?: CreatorScorecard | null;
@@ -453,6 +454,25 @@ interface EngagementReliability {
   within_band_pct: number | null;
   score: number;
   grade: 'rock-solid' | 'steady' | 'swingy' | 'volatile';
+  headline: string | null;
+  tip: string | null;
+}
+interface FormatStat {
+  key: string;
+  label: string;
+  count: number;
+  share_pct: number;
+  avg_er: number | null;
+  avg_reach: number | null;
+  lift_pct: number | null;
+  is_best: boolean;
+}
+interface FormatRoi {
+  available: boolean;
+  sample_size: number;
+  overall_avg_er: number | null;
+  formats: FormatStat[];
+  best: FormatStat | null;
   headline: string | null;
   tip: string | null;
 }
@@ -856,6 +876,13 @@ function AnalyticsPreview() {
         <ReelForecastCard f={data.reel_forecast} />
         <ContentBreakdownCard b={data.content_breakdown} />
       </div>
+
+      {/* Format ROI — engagement per format vs how often you post it */}
+      {data.format_roi?.available && (
+        <div className="mt-3">
+          <FormatRoiCard f={data.format_roi} />
+        </div>
+      )}
 
       <SectionLabel>Audience &amp; timing</SectionLabel>
 
@@ -2472,6 +2499,65 @@ function GrowthProjectionCard({ g }: { g: GrowthProjection }) {
         )}
 
         <p className="mt-3 text-[10.5px] text-ink-400">A straight-line fit through your daily snapshots. Directional — it assumes your recent pace holds.</p>
+      </div>
+    </div>
+  );
+}
+
+function FormatRoiCard({ f }: { f: FormatRoi }) {
+  const maxEr = f.formats.reduce((m, s) => Math.max(m, s.avg_er ?? 0), 0) || 1;
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Format ROI</div>
+        {f.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{f.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        <div className="space-y-2.5">
+          {f.formats.map((s) => {
+            const w = s.avg_er != null ? Math.max(4, Math.round((s.avg_er / maxEr) * 100)) : 0;
+            return (
+              <div key={s.key}>
+                <div className="flex items-center justify-between text-[11.5px] mb-1">
+                  <span className={`font-semibold ${s.is_best ? '' : 'text-ink-700'}`} style={s.is_best ? { color: ACCENT } : undefined}>
+                    {s.label}
+                    {s.is_best && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide">Best ROI</span>}
+                  </span>
+                  <span className="text-ink-500 tabular-nums">
+                    {s.avg_er != null ? pct(s.avg_er) : 'too few'}
+                    {s.lift_pct != null && s.lift_pct !== 0 && (
+                      <span style={{ color: s.lift_pct > 0 ? '#16a34a' : '#dc2626' }}> ({s.lift_pct > 0 ? '+' : ''}{s.lift_pct}%)</span>
+                    )}
+                  </span>
+                </div>
+                <div className="h-5 rounded-md bg-[#f5f4fb] overflow-hidden relative">
+                  {s.avg_er != null && (
+                    <div className="h-full rounded-md" style={{ width: `${w}%`, background: s.is_best ? ACCENT : '#c9c2ef' }} />
+                  )}
+                  <div className="absolute inset-0 flex items-center px-2">
+                    <span className="text-[10px] text-ink-500 tabular-nums">
+                      {s.share_pct}% of posts · {s.count} post{s.count === 1 ? '' : 's'}
+                      {s.avg_reach != null ? ` · ${fmt(s.avg_reach)} reach` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {f.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{f.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Average engagement by format across your last {f.sample_size} posts, next to how often you post each.
+          The lift is vs your overall average. Formats with too few posts aren&rsquo;t scored. Directional.
+        </p>
       </div>
     </div>
   );
