@@ -132,6 +132,25 @@ function Brief({ id }: { id: string }) {
               </Link>
             )}
 
+            {/* Submit deliverables */}
+            {data.stage !== 'invited' && (
+              <Link
+                href={`/creator/deals/${encodeURIComponent(data.id)}/submit${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`}
+                className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 hover:border-[#d9d4f5] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" /></svg>
+                  </div>
+                  <div>
+                    <div className="text-[14px] font-semibold text-ink-900">Submit deliverables</div>
+                    <div className="text-[12px] text-ink-400">Attach your live post links to close out the deal</div>
+                  </div>
+                </div>
+                <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+              </Link>
+            )}
+
             {/* Brief */}
             {(data.description || data.note) && (
               <section className="mt-6 rounded-2xl bg-white border border-border shadow-card p-5">
