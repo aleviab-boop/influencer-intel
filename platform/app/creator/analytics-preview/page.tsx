@@ -127,6 +127,7 @@ interface Analytics {
   caption_length?: CaptionLength | null;
   engagement_reliability?: EngagementReliability | null;
   format_roi?: FormatRoi | null;
+  distribution_signals?: DistributionSignals | null;
   content_pillars?: ContentPillars | null;
   brand_safety?: BrandSafety | null;
   scorecard?: CreatorScorecard | null;
@@ -476,6 +477,24 @@ interface FormatRoi {
   headline: string | null;
   tip: string | null;
 }
+interface SignalMetric {
+  key: 'saves' | 'shares';
+  label: string;
+  avg_per_post: number | null;
+  rate_per_1k_reach: number | null;
+  per_100_interactions: number | null;
+  tier: 'strong' | 'solid' | 'low' | null;
+  sample: number;
+}
+interface DistributionSignals {
+  available: boolean;
+  sample_size: number;
+  saves: SignalMetric | null;
+  shares: SignalMetric | null;
+  strongest: 'saves' | 'shares' | null;
+  headline: string | null;
+  tip: string | null;
+}
 interface PostingConsistency {
   available: boolean;
   sample_size: number;
@@ -770,6 +789,13 @@ function AnalyticsPreview() {
       {data.engagement_reliability?.available && (
         <div className="mt-3">
           <EngagementReliabilityCard r={data.engagement_reliability} />
+        </div>
+      )}
+
+      {/* Distribution signals (saves + shares) */}
+      {data.distribution_signals?.available && (
+        <div className="mt-3">
+          <DistributionSignalsCard d={data.distribution_signals} />
         </div>
       )}
 
@@ -1957,6 +1983,71 @@ function RateMenuCard({ m }: { m: RateMenu }) {
         </div>
 
         <p className="mt-3 text-[10.5px] text-ink-400">{m.note}</p>
+      </div>
+    </div>
+  );
+}
+
+function DistributionSignalsCard({ d }: { d: DistributionSignals }) {
+  const TIER: Record<NonNullable<SignalMetric['tier']>, { label: string; color: string }> = {
+    strong: { label: 'Strong', color: '#16a34a' },
+    solid: { label: 'Solid', color: '#d97706' },
+    low: { label: 'Light', color: '#6b7280' },
+  };
+  const metrics = [d.saves, d.shares].filter((m): m is SignalMetric => m != null);
+
+  const primaryValue = (m: SignalMetric): { value: string; unit: string } => {
+    if (m.rate_per_1k_reach != null) return { value: String(m.rate_per_1k_reach), unit: 'per 1k reached' };
+    if (m.per_100_interactions != null) return { value: String(m.per_100_interactions), unit: 'per 100 likes+comments' };
+    return { value: m.avg_per_post != null ? fmt(m.avg_per_post) : '—', unit: 'per post' };
+  };
+
+  return (
+    <div className="rounded-xl bg-white border border-border shadow-card overflow-hidden">
+      <div className="px-4 py-3" style={{ background: `linear-gradient(90deg, ${ACCENT_SOFT}, #ffffff)` }}>
+        <div className="text-[13px] font-semibold text-ink-900">Distribution signals</div>
+        {d.headline && <div className="text-[11.5px] text-ink-500 leading-snug max-w-xl">{d.headline}</div>}
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-2 gap-3">
+          {metrics.map((m) => {
+            const isStar = d.strongest === m.key;
+            const pv = primaryValue(m);
+            const t = m.tier ? TIER[m.tier] : null;
+            return (
+              <div key={m.key} className={`rounded-lg border px-3 py-3 ${isStar ? '' : 'border-border'}`}
+                style={isStar ? { borderColor: ACCENT, background: ACCENT_SOFT } : undefined}>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-[12px] font-semibold text-ink-800">{m.label}</span>
+                  {t && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0"
+                      style={{ color: t.color, background: `${t.color}14` }}>{t.label}</span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[22px] font-bold text-ink-900 leading-none tabular-nums">{pv.value}</span>
+                </div>
+                <div className="text-[10px] text-ink-400 mt-0.5">{pv.unit}</div>
+                <div className="text-[10.5px] text-ink-500 mt-1.5 tabular-nums">
+                  ~{m.avg_per_post != null ? fmt(m.avg_per_post) : '—'} / post · {m.sample} posts
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {d.tip && (
+          <div className="mt-3 rounded-lg px-3 py-2.5 text-[12px] text-ink-700" style={{ background: ACCENT_SOFT }}>
+            <span className="font-semibold" style={{ color: ACCENT }}>Do this · </span>{d.tip}
+          </div>
+        )}
+
+        <p className="mt-3 text-[10.5px] text-ink-400">
+          Saves and shares from your post insights — the actions Instagram weighs most when deciding whether to
+          push a post further. Rates are per 1k accounts reached where reach is available. Tiers are rough platform
+          norms, directional.
+        </p>
       </div>
     </div>
   );

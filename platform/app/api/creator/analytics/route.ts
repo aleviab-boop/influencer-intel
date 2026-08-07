@@ -28,6 +28,7 @@ import { analyzeCaptionHooks } from '@/lib/caption-hooks';
 import { analyzeCaptionLength } from '@/lib/caption-length';
 import { analyzeEngagementReliability } from '@/lib/engagement-reliability';
 import { analyzeFormatRoi } from '@/lib/format-roi';
+import { analyzeDistributionSignals } from '@/lib/distribution-signals';
 import { analyzeContentPillars } from '@/lib/content-pillars';
 import { analyzeBrandSafety } from '@/lib/brand-safety';
 import { buildScorecard } from '@/lib/creator-scorecard';
@@ -362,6 +363,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const formatRoi = analyzeFormatRoi(
       posts.map((p) => ({ media_type: p.media_type, er: p.er, reach: p.reach })),
     );
+    // Saves/shares — the high-intent actions IG weighs most for distribution.
+    const distributionSignals = analyzeDistributionSignals(
+      enriched.map((p) => ({ saved: p.saved, shares: p.shares, reach: p.reach, likes: p.like_count, comments: p.comments_count })),
+    );
     // Recurring content themes (pillars) and which ones over/under-perform their share.
     const contentPillars = analyzeContentPillars(
       posts.map((p) => ({ caption: p.caption, er: p.er })),
@@ -513,6 +518,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       caption_length: captionLength,
       engagement_reliability: engagementReliability,
       format_roi: formatRoi,
+      distribution_signals: distributionSignals,
       content_pillars: contentPillars,
       brand_safety: brandSafety,
       scorecard,
