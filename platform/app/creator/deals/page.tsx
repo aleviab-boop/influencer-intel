@@ -92,8 +92,19 @@ function Deals() {
           Back to dashboard
         </Link>
 
-        <h1 className="text-2xl font-bold text-ink-900">Your deals</h1>
-        {data?.headline && <p className="mt-1.5 text-[14px] text-ink-600">{data.headline}</p>}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-ink-900">Your deals</h1>
+            {data?.headline && <p className="mt-1.5 text-[14px] text-ink-600">{data.headline}</p>}
+          </div>
+          <Link
+            href={handle ? `/creator/calendar?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator/calendar'}
+            className="inline-flex items-center gap-1.5 shrink-0 px-3.5 py-2 rounded-xl border border-border bg-white text-[13px] font-semibold text-ink-700 hover:border-[#d9d4f5] transition-colors"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+            Calendar
+          </Link>
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
