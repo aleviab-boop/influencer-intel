@@ -114,7 +114,13 @@ export default function CampaignsPage() {
             <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Campaign Management</div>
             <h1 className="text-2xl font-bold text-ink-900">Your campaigns</h1>
           </div>
-          <button onClick={() => setCreating((c) => !c)} className="px-4 py-2.5 text-sm font-semibold text-white bg-ink-900 rounded-xl hover:bg-ink-800 transition-colors">+ New campaign</button>
+          <div className="flex items-center gap-2">
+            <Link href="/inbox" className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-ink-700 bg-white border border-border rounded-xl hover:border-[#d9d4f5] hover:text-ink-900 transition-colors">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
+              Action inbox
+            </Link>
+            <button onClick={() => setCreating((c) => !c)} className="px-4 py-2.5 text-sm font-semibold text-white bg-ink-900 rounded-xl hover:bg-ink-800 transition-colors">+ New campaign</button>
+          </div>
         </div>
 
         {/* Metric strip — each tile drills into the relevant page */}
