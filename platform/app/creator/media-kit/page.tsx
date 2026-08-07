@@ -18,6 +18,7 @@ interface MKPost {
 }
 interface MK {
   connected: boolean;
+  source?: 'db';
   profile?: {
     username: string; name: string | null; biography: string | null;
     followers_count: number | null; follows_count: number | null;
@@ -66,10 +67,24 @@ function MediaKit() {
     const handle = params.get('handle');
     if (account) q.set('account', account);
     else if (handle) q.set('handle', handle);
-    fetch(`/api/creator/analytics${q.toString() ? `?${q}` : ''}`)
+    const qs = q.toString() ? `?${q}` : '';
+
+    // Prefer a live Instagram pull; fall back to the stored profile so the kit
+    // still renders when the creator hasn't connected (or the token is stale).
+    fetch(`/api/creator/analytics${qs}`)
       .then((r) => r.json())
-      .then((d: MK) => setData(d))
-      .catch(() => setData({ connected: false }))
+      .then((d: MK) => {
+        if (d?.connected && d.profile) return setData(d);
+        return fetch(`/api/creator/media-kit${qs}`)
+          .then((r) => r.json())
+          .then((db: MK) => setData(db.connected && db.profile ? db : d));
+      })
+      .catch(() =>
+        fetch(`/api/creator/media-kit${qs}`)
+          .then((r) => r.json())
+          .then((db: MK) => setData(db))
+          .catch(() => setData({ connected: false })),
+      )
       .finally(() => setLoading(false));
   }, []);
 
@@ -273,7 +288,9 @@ function MediaKit() {
 
         {/* Footer */}
         <div className="px-7 py-4 border-t border-border text-center">
-          <p className="text-[11px] text-ink-400">Live Instagram stats · media kit auto-generated for @{profile.username}</p>
+          <p className="text-[11px] text-ink-400">
+            {data.source === 'db' ? 'From saved profile stats' : 'Live Instagram stats'} · media kit auto-generated for @{profile.username}
+          </p>
         </div>
       </div>
 
