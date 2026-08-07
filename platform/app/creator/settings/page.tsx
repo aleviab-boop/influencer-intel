@@ -206,6 +206,20 @@ function Settings() {
               <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
             </Link>
 
+            {/* Rate card link */}
+            <Link href={`/creator/rate-card${qs}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 hover:border-[#d9d4f5] transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+                </div>
+                <div>
+                  <div className="text-[14px] font-semibold text-ink-900">Rate card</div>
+                  <div className="text-[12px] text-ink-400">Set your price per deliverable to share with brands</div>
+                </div>
+              </div>
+              <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+            </Link>
+
             <p className="text-[12px] text-ink-400 rounded-xl p-3" style={{ background: ACCENT_SOFT }}>
               Changes here update your public media kit and how you appear in brand searches.
             </p>
