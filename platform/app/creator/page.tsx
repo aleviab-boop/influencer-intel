@@ -45,6 +45,7 @@ export default function CreatorPortal() {
   const [applying, setApplying] = useState<string | null>(null);
   const [igConfigured, setIgConfigured] = useState<boolean | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
+  const [setup, setSetup] = useState<{ score: number; done_count: number; total_count: number; next: { label: string; href: string } | null } | null>(null);
 
   // Resolve handle from URL (?handle=) or localStorage on first load; surface
   // OAuth outcome; check whether Instagram login is set up.
@@ -86,6 +87,10 @@ export default function CreatorPortal() {
           loadApplications(handle),
         ]);
         setCampaigns(camps.campaigns ?? []);
+        fetch(`/api/creator/setup?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
+          .then((x) => x.json())
+          .then((d) => { if (d?.available) setSetup(d); })
+          .catch(() => {});
       } finally {
         setLoading(false);
       }
@@ -203,6 +208,29 @@ export default function CreatorPortal() {
                 </div>
               </div>
             </div>
+
+            {/* Setup nudge — only while the profile is incomplete */}
+            {setup && setup.score < 100 && (
+              <Link href={`/creator/setup?handle=${encodeURIComponent(profile.handle)}`}
+                className="flex items-center gap-4 rounded-2xl border shadow-card px-5 py-4 mb-4 hover:brightness-[1.01] transition-all"
+                style={{ borderColor: ACCENT, background: ACCENT_SOFT }}>
+                <div className="relative shrink-0" style={{ width: 44, height: 44 }}>
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#ffffff" strokeWidth="5" />
+                    <circle cx="22" cy="22" r="18" fill="none" stroke={ACCENT} strokeWidth="5" strokeLinecap="round"
+                      strokeDasharray={`${(setup.score / 100) * 2 * Math.PI * 18} ${2 * Math.PI * 18}`} transform="rotate(-90 22 22)" />
+                  </svg>
+                  <div className="absolute inset-0 grid place-items-center text-[11px] font-bold tabular-nums" style={{ color: ACCENT }}>{setup.score}%</div>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14px] font-semibold text-ink-900">Get brand-ready</div>
+                  <div className="text-[12.5px] text-ink-500 truncate">
+                    {setup.next ? `Next: ${setup.next.label}` : `${setup.done_count} of ${setup.total_count} steps done`}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[13px] font-semibold" style={{ color: ACCENT }}>Finish →</span>
+              </Link>
+            )}
 
             {/* Quick links to the creator's own workspaces */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-8">
