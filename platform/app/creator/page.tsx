@@ -204,6 +204,14 @@ export default function CreatorPortal() {
               </div>
             </div>
 
+            {/* Quick links to the creator's own workspaces */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-8">
+              <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" />
+              <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" />
+              <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" />
+              <QuickLink href="/creator" label="Campaigns" desc="Browse & apply" />
+            </div>
+
             {/* My applications */}
             {applications.length > 0 && (
               <section className="mb-8">
@@ -270,6 +278,15 @@ export default function CreatorPortal() {
         ) : null}
       </main>
     </div>
+  );
+}
+
+function QuickLink({ href, label, desc }: { href: string; label: string; desc: string }) {
+  return (
+    <Link href={href} className="rounded-2xl border border-border bg-white shadow-card px-4 py-3.5 hover:-translate-y-0.5 hover:shadow-[0_10px_40px_rgba(108,77,246,0.12)] transition-all">
+      <div className="text-[14px] font-semibold text-ink-900">{label}</div>
+      <div className="text-[11.5px] text-ink-400 mt-0.5">{desc}</div>
+    </Link>
   );
 }
 
