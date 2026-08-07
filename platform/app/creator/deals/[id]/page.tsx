@@ -111,6 +111,27 @@ function Brief({ id }: { id: string }) {
               ))}
             </div>
 
+            {/* Generate invoice */}
+            {data.rate > 0 && data.stage !== 'invited' && (
+              <Link
+                href={`/creator/deals/${encodeURIComponent(data.id)}/invoice${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`}
+                className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 hover:border-[#d9d4f5] transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h6" /></svg>
+                  </div>
+                  <div>
+                    <div className="text-[14px] font-semibold text-ink-900">
+                      {data.stage === 'paid' ? 'View invoice' : 'Generate invoice'}
+                    </div>
+                    <div className="text-[12px] text-ink-400">Brand-ready, with your payout details</div>
+                  </div>
+                </div>
+                <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+              </Link>
+            )}
+
             {/* Brief */}
             {(data.description || data.note) && (
               <section className="mt-6 rounded-2xl bg-white border border-border shadow-card p-5">
