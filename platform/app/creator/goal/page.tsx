@@ -144,9 +144,15 @@ function Goal() {
                   {data.tip}
                 </div>
 
-                <button onClick={() => setEditing(true)} className="text-[13px] font-semibold" style={{ color: ACCENT }}>
-                  Change goal
-                </button>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setEditing(true)} className="text-[13px] font-semibold" style={{ color: ACCENT }}>
+                    Change goal
+                  </button>
+                  <Link href={`/creator/statement${qs}`} className="text-[13px] font-semibold text-ink-500 hover:text-ink-800 inline-flex items-center gap-1">
+                    Earnings statement
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                  </Link>
+                </div>
               </>
             )}
 
