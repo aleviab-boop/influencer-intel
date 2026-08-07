@@ -12,6 +12,8 @@
 // stays testable and timezone-honest.
 // ============================================================
 
+import { normalizeStored } from './deliverable-submission';
+
 export interface NotificationInput {
   id: string;
   brand: string;
@@ -22,6 +24,7 @@ export interface NotificationInput {
   status: string;
   due_date: string | null;  // YYYY-MM-DD
   created_at: string | null; // ISO
+  submissions?: unknown;     // raw JSONB — carries the brand's per-link verdicts
 }
 
 export type NotificationKind =
@@ -30,7 +33,9 @@ export type NotificationKind =
   | 'deadline_soon'
   | 'payment_received'
   | 'payment_pending' // delivered, due passed, still unpaid a while
-  | 'new_deal';       // recently recruited
+  | 'new_deal'        // recently recruited
+  | 'changes_requested' // brand sent a submitted link back for changes
+  | 'submission_approved'; // brand approved submitted work
 
 export interface NotificationView {
   id: string;
@@ -120,6 +125,46 @@ export function buildNotifications(items: NotificationInput[], todayISO: string)
         when_label: relLabel(createdDays),
         href: dealsHref,
       });
+    }
+
+    // Brand verdicts on submitted links — surfaced whether or not the deal is
+    // otherwise "live", but not once it's paid & closed. Changes-requested is
+    // the loudest single signal; a clean approval is a satisfying info nudge.
+    if (!d.paid) {
+      const reviewed = normalizeStored(d.submissions)
+        .map((s) => s.review)
+        .filter((r): r is NonNullable<typeof r> => !!r);
+      const changes = reviewed.filter((r) => r.state === 'changes');
+      const approved = reviewed.filter((r) => r.state === 'approved');
+      if (changes.length > 0) {
+        const latest = changes.reduce((a, b) => (b.at > a.at ? b : a));
+        out.push({
+          id: `${d.id}:changes`,
+          kind: 'changes_requested',
+          severity: 'action',
+          title: `${d.brand} requested changes on ${d.program}`,
+          body: latest.comment
+            ? `\u201c${latest.comment}\u201d — revise and re-submit your link${changes.length > 1 ? 's' : ''}.`
+            : `${changes.length} submitted link${changes.length === 1 ? ' was' : 's were'} sent back. Revise and re-submit.`,
+          brand: d.brand,
+          when: latest.at,
+          when_label: relLabel(daysBetween(latest.at.slice(0, 10), today)),
+          href: `${dealsHref}/${d.id}/submit`,
+        });
+      } else if (approved.length > 0) {
+        const latest = approved.reduce((a, b) => (b.at > a.at ? b : a));
+        out.push({
+          id: `${d.id}:approved`,
+          kind: 'submission_approved',
+          severity: 'info',
+          title: `${d.brand} approved your work`,
+          body: `${approved.length} deliverable${approved.length === 1 ? '' : 's'} approved for ${d.program}${rateStr ? ` — ${rateStr} due` : ''}.`,
+          brand: d.brand,
+          when: latest.at,
+          when_label: relLabel(daysBetween(latest.at.slice(0, 10), today)),
+          href: `${dealsHref}/${d.id}/submit`,
+        });
+      }
     }
 
     // Only rows that are actual deals carry deadline/payment signals.

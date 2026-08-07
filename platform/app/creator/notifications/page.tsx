@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense, type ReactNode } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
-type Kind = 'invite' | 'deadline_overdue' | 'deadline_soon' | 'payment_received' | 'payment_pending' | 'new_deal';
+type Kind = 'invite' | 'deadline_overdue' | 'deadline_soon' | 'payment_received' | 'payment_pending' | 'new_deal' | 'changes_requested' | 'submission_approved';
 
 interface NotificationView {
   id: string;
@@ -50,6 +50,14 @@ const KIND: Record<Kind, { label: string; c: string; icon: ReactNode }> = {
   new_deal: {
     label: 'New deal', c: ACCENT,
     icon: <><path d="M12 2v20M2 12h20" /></>,
+  },
+  changes_requested: {
+    label: 'Changes', c: '#d97706',
+    icon: <><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></>,
+  },
+  submission_approved: {
+    label: 'Approved', c: '#16a34a',
+    icon: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>,
   },
 };
 

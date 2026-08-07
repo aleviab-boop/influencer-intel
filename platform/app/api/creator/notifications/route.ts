@@ -17,6 +17,7 @@ interface Row {
   status: string;
   due_date: string | null;
   created_at: string | null;
+  submissions: unknown;
   program_name: string | null;
   brand_name: string | null;
 }
@@ -63,6 +64,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const rows = await db.query<Row>(
       `SELECT pr.id, pr.rate, pr.paid, pr.paid_at, pr.status,
               pr.due_date::text AS due_date, pr.created_at::text AS created_at,
+              pr.submissions,
               p.name AS program_name, b.name AS brand_name
        FROM program_recruits pr
        JOIN programs p ON p.id = pr.program_id
@@ -81,6 +83,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       status: r.status,
       due_date: r.due_date ? r.due_date.slice(0, 10) : null,
       created_at: r.created_at,
+      submissions: r.submissions,
     }));
 
     return NextResponse.json(buildNotifications(items, new Date().toISOString()));
