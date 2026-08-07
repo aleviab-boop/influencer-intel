@@ -264,6 +264,15 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
                   </select>
                 </span>
                 <div className="ml-auto flex items-center gap-2">
+                  <Link
+                    href={`/campaigns/${encodeURIComponent(id)}/submissions`}
+                    title="Review the live post links creators have submitted"
+                    className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3 py-1.5 border hover:-translate-y-px transition-all"
+                    style={{ color: ACCENT, borderColor: '#d9d4f5', background: '#faf9ff' }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                    Review deliverables
+                  </Link>
                   <button
                     onClick={copyHandles}
                     disabled={recruits.length === 0}

@@ -12,6 +12,14 @@
 // validates. "today" is injected for testable, timezone-honest relative dates.
 // ============================================================
 
+// A brand's verdict on one submitted link. Written by the brand-side review
+// route; read here so the creator sees where each link stands.
+export interface SubmissionReview {
+  state: 'approved' | 'changes';
+  at: string;              // ISO
+  comment: string | null;
+}
+
 export interface SubmissionRecord {
   id: string;
   label: string | null;    // which deliverable this covers (free text)
@@ -19,6 +27,7 @@ export interface SubmissionRecord {
   platform: SubmissionPlatform;
   note: string | null;
   created_at: string;       // ISO
+  review?: SubmissionReview | null;   // brand verdict, if reviewed
 }
 
 export type SubmissionPlatform = 'instagram' | 'youtube' | 'tiktok' | 'x' | 'facebook' | 'link';
@@ -155,12 +164,42 @@ export function normalizeStored(raw: unknown): SubmissionRecord[] {
       platform: typeof r.platform === 'string' ? (r.platform as SubmissionPlatform) : detectPlatform(r.url).platform,
       note: typeof r.note === 'string' ? r.note : null,
       created_at: typeof r.created_at === 'string' ? r.created_at : new Date(0).toISOString(),
+      review: normalizeReview(r.review),
     });
   }
   return out;
 }
 function safeParse(s: string): unknown {
   try { return JSON.parse(s); } catch { return null; }
+}
+
+// Preserve a stored brand review verbatim (so re-saving submissions never drops
+// a verdict). Unknown shapes collapse to null.
+function normalizeReview(raw: unknown): SubmissionReview | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (r.state !== 'approved' && r.state !== 'changes') return null;
+  return {
+    state: r.state,
+    at: typeof r.at === 'string' ? r.at : new Date(0).toISOString(),
+    comment: typeof r.comment === 'string' ? r.comment : null,
+  };
+}
+
+// Apply (or clear, with null) a brand verdict on one submission by id, leaving
+// every other field and record untouched. Returns a fresh array.
+export function setSubmissionReview(
+  records: SubmissionRecord[],
+  submissionId: string,
+  review: SubmissionReview | null,
+): { records: SubmissionRecord[]; matched: boolean } {
+  let matched = false;
+  const next = records.map((r) => {
+    if (r.id !== submissionId) return r;
+    matched = true;
+    return { ...r, review };
+  });
+  return { records: next, matched };
 }
 
 export function buildSubmissionView(d: SubmissionInput, todayISO: string): SubmissionView {
@@ -204,7 +243,7 @@ export function buildSubmissionView(d: SubmissionInput, todayISO: string): Submi
 
   const withMeta: SubmissionEntry[] = submissions.map((s) => {
     const { domain } = detectPlatform(s.url);
-    return { ...s, domain, when_label: relLabel(s.created_at, today) };
+    return { ...s, domain, when_label: relLabel(s.created_at, today), review: s.review ?? null };
   });
 
   const dueLabel = d.due_date ? dateLabel(d.due_date) : null;

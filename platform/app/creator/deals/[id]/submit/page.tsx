@@ -14,6 +14,7 @@ interface SubmissionEntry {
   created_at: string;
   domain: string;
   when_label: string;
+  review: { state: 'approved' | 'changes'; at: string; comment: string | null } | null;
 }
 interface DeliverableProgress { label: string; covered: boolean }
 interface SubmissionView {
@@ -228,6 +229,19 @@ function Submit({ id }: { id: string }) {
                         <div className="text-[11.5px] text-ink-400 mt-0.5">
                           {s.when_label}{s.note ? ` · ${s.note}` : ''}
                         </div>
+                        {s.review && (
+                          <div className="mt-1.5">
+                            <span
+                              className="inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide px-2 py-0.5 rounded"
+                              style={s.review.state === 'approved'
+                                ? { color: '#16a34a', background: '#ecfdf3' }
+                                : { color: '#d97706', background: '#fffbeb' }}
+                            >
+                              {s.review.state === 'approved' ? 'Approved by brand' : 'Changes requested'}
+                            </span>
+                            {s.review.comment && <p className="mt-1 text-[12px] text-ink-600 border-l-2 border-border pl-2">{s.review.comment}</p>}
+                          </div>
+                        )}
                       </div>
                       {data.can_submit && (
                         <button onClick={() => remove(s.id)} disabled={busyId === s.id} className="shrink-0 text-ink-300 hover:text-[#dc2626] disabled:opacity-40" aria-label="Remove link">
