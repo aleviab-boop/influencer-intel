@@ -236,6 +236,7 @@ export default function CreatorPortal() {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-8">
               <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" />
               <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" />
+              <QuickLink href={`/creator/applications?handle=${encodeURIComponent(profile.handle)}`} label="Applications" desc="Campaigns you applied to" />
               <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" />
               <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" />
               <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" />
