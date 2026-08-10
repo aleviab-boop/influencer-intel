@@ -106,6 +106,11 @@ export function AccountMenu() {
   const [role, setRole] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [imgErr, setImgErr] = useState(false);
+  // Creator sessions live in the httpOnly ii_creator cookie, which JS can't
+  // read — so probe the server for the real signed-in state (set on Instagram
+  // OAuth). This is what makes the portal reachable after a creator logs in.
+  const [creatorAuthed, setCreatorAuthed] = useState(false);
+  const [sessionHandle, setSessionHandle] = useState<string | null>(null);
   useEffect(() => {
     const read = () => {
       try {
@@ -120,20 +125,55 @@ export function AccountMenu() {
     return () => window.removeEventListener('storage', read);
   }, [loggedIn]);
 
-  const label = handle ? `@${handle}` : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Guest';
-  const showPhoto = loggedIn && handle && !imgErr;
-  const initials = loggedIn ? (handle || role || 'U').slice(0, 2).toUpperCase() : null;
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/creator/session')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.authenticated) {
+          setCreatorAuthed(true);
+          setSessionHandle(d.handle ?? null);
+        }
+      })
+      .catch(() => { /* not signed in as a creator */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  // A creator OAuth session counts as signed in even without any localStorage.
+  const signedIn = loggedIn || creatorAuthed;
+  const shownHandle = handle ?? sessionHandle;
+  // Where "Go to dashboard" lands: creator portal, admin panel, or the brand
+  // campaigns workspace (agency), in that priority.
+  const dashboardHref = creatorAuthed
+    ? '/creator'
+    : role === 'admin'
+      ? '/admin'
+      : signedIn
+        ? '/campaigns'
+        : null;
+
+  // Log a creator out of the cookie session too, not just localStorage.
+  const doLogout = async () => {
+    if (creatorAuthed) {
+      try { await fetch('/api/creator/session', { method: 'DELETE' }); } catch { /* ignore */ }
+    }
+    logout();
+  };
+
+  const label = shownHandle ? `@${shownHandle}` : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Guest';
+  const showPhoto = signedIn && shownHandle && !imgErr;
+  const initials = signedIn ? (shownHandle || role || 'U').slice(0, 2).toUpperCase() : null;
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="Account"
         className="w-9 h-9 rounded-full overflow-hidden grid place-items-center ring-2 ring-[#ececec] hover:ring-[#d9d2f7] transition-shadow"
-        style={{ background: loggedIn ? ACCENT : '#f2effc' }}
+        style={{ background: signedIn ? ACCENT : '#f2effc' }}
       >
         {showPhoto ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={`/api/ig-avatar?handle=${encodeURIComponent(handle!)}`} alt={label} onError={() => setImgErr(true)} className="w-full h-full object-cover" />
+          <img src={`/api/ig-avatar?handle=${encodeURIComponent(shownHandle!)}`} alt={label} onError={() => setImgErr(true)} className="w-full h-full object-cover" />
         ) : initials ? (
           <span className="text-white text-[12px] font-semibold">{initials}</span>
         ) : (
@@ -147,13 +187,18 @@ export function AccountMenu() {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-2 z-50 w-52 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
-            {loggedIn ? (
+            {signedIn ? (
               <>
                 <div className="px-4 py-3 border-b border-[#f3f3f3]">
                   <div className="text-[13px] font-semibold text-[#111] truncate">{label}</div>
-                  <div className="text-[11px] text-[#999]">{handle ? 'Creator account' : 'Signed in'}</div>
+                  <div className="text-[11px] text-[#999]">{creatorAuthed || shownHandle ? 'Creator account' : 'Signed in'}</div>
                 </div>
-                <button onClick={() => { setOpen(false); logout(); }} className="w-full text-left px-4 py-2.5 text-[13px] text-[#444] hover:bg-[#f6f4ff]">
+                {dashboardHref && (
+                  <Link href={dashboardHref} onClick={() => setOpen(false)} className="block px-4 py-2.5 text-[13px] font-medium hover:bg-[#f6f4ff]" style={{ color: ACCENT }}>
+                    Go to dashboard
+                  </Link>
+                )}
+                <button onClick={() => { setOpen(false); doLogout(); }} className="w-full text-left px-4 py-2.5 text-[13px] text-[#444] hover:bg-[#f6f4ff]">
                   Log out
                 </button>
               </>
