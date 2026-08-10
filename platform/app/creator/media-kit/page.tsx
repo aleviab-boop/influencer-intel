@@ -112,8 +112,8 @@ function MediaKit() {
           <p className="mt-2 text-[13px] text-ink-500">
             Connect an Instagram account to generate a shareable media kit from your live stats.
           </p>
-          <a href="/creator/analytics-preview" className="mt-4 inline-block text-[13px] font-semibold" style={{ color: ACCENT }}>
-            ← Back to analytics
+          <a href="/creator/analytics-preview" className="group mt-4 inline-flex items-center gap-1 text-[13px] font-semibold transition-colors" style={{ color: ACCENT }}>
+            <span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Back to analytics
           </a>
         </div>
       </div>
@@ -134,14 +134,14 @@ function MediaKit() {
     <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
       {/* Action bar — hidden when printing */}
       <div className="max-w-3xl mx-auto mb-4 flex items-center justify-between gap-3 print:hidden">
-        <a href="/creator/analytics-preview" className="text-[13px] font-semibold text-ink-500 hover:text-ink-800">← Analytics</a>
+        <a href="/creator/analytics-preview" className="group inline-flex items-center gap-1 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"><span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Analytics</a>
         <div className="flex gap-2">
           <button onClick={copyLink}
-            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold border border-border bg-white text-ink-700 hover:bg-[#faf9ff] transition-colors">
+            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold border border-border bg-white text-ink-700 transition-colors duration-200 hover:border-[#d9d4f5] hover:bg-[#faf9ff]">
             {copied ? '✓ Link copied' : 'Copy share link'}
           </button>
           <button onClick={() => window.print()}
-            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white hover:brightness-105 transition-all"
+            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5"
             style={{ background: ACCENT }}>
             Save as PDF
           </button>
@@ -265,11 +265,11 @@ function MediaKit() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {topPosts.map((p) => (
                 <a key={p.id} href={p.permalink} target="_blank" rel="noreferrer"
-                  className="rounded-xl overflow-hidden border border-border bg-[#f5f5f7] group">
+                  className="group rounded-xl overflow-hidden border border-border bg-[#f5f5f7] transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-[#e3def9] hover:shadow-[0_12px_32px_rgba(108,77,246,0.16)]">
                   <div className="relative aspect-square">
                     {(p.thumbnail_url || p.media_url) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.thumbnail_url ?? p.media_url ?? ''} alt="" className="h-full w-full object-cover" />
+                      <img src={p.thumbnail_url ?? p.media_url ?? ''} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     ) : <div className="h-full w-full grid place-items-center text-ink-300 text-[10px]">no preview</div>}
                     {p.er != null && (
                       <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-white/90 text-ink-900">

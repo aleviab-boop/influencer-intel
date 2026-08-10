@@ -1858,8 +1858,8 @@ function PitchCoachCard({ c, kitHref }: { c: PitchCoach; kitHref: string }) {
 
         <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
           <p className="text-[10.5px] text-ink-400">Talking points cite your own numbers — bring the receipts.</p>
-          <a href={kitHref} className="text-[12px] font-semibold whitespace-nowrap" style={{ color: ACCENT }}>
-            Open your media kit →
+          <a href={kitHref} className="group text-[12px] font-semibold whitespace-nowrap transition-colors" style={{ color: ACCENT }}>
+            Open your media kit <span className="inline-block transition-transform duration-300 group-hover:translate-x-0.5">→</span>
           </a>
         </div>
       </div>
@@ -2484,8 +2484,8 @@ function BrandMatchCard(
 
       <div className="px-4 py-3 border-t border-border flex items-center justify-between gap-2 flex-wrap">
         <p className="text-[10.5px] text-ink-400">Matched by niche &amp; content topics{hasDemo ? ', then scored on how well your audience fits each brand\u2019s buyer' : ''}, against active campaigns in our network.</p>
-        <a href={kitHref} className="text-[12px] font-semibold whitespace-nowrap" style={{ color: ACCENT }}>
-          Pitch with your media kit →
+        <a href={kitHref} className="group text-[12px] font-semibold whitespace-nowrap transition-colors" style={{ color: ACCENT }}>
+          Pitch with your media kit <span className="inline-block transition-transform duration-300 group-hover:translate-x-0.5">→</span>
         </a>
       </div>
     </div>
@@ -3349,7 +3349,7 @@ function SpotlightPanel({ card, tone }: { card: SpotlightCard; tone: 'top' | 'un
         <div className="mt-2.5 flex items-center justify-between gap-2">
           <span className="text-[11px] text-ink-500 italic">{card.takeaway}</span>
           <a href={card.permalink} target="_blank" rel="noreferrer"
-            className="text-[11px] font-semibold shrink-0" style={{ color: ACCENT }}>Open ↗</a>
+            className="group text-[11px] font-semibold shrink-0 transition-colors" style={{ color: ACCENT }}>Open <span className="inline-block transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">↗</span></a>
         </div>
       </div>
     </div>

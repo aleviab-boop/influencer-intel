@@ -85,7 +85,7 @@ function InvoiceView({ id }: { id: string }) {
         <div className="max-w-md text-center rounded-2xl bg-white border border-border shadow-card p-8">
           <div className="text-[16px] font-bold text-ink-900">Invoice unavailable</div>
           <p className="mt-2 text-[13px] text-ink-500">We couldn\u2019t find this deal. It may have been removed.</p>
-          <Link href={backHref} className="mt-4 inline-block text-[13px] font-semibold" style={{ color: ACCENT }}>← Back to deal</Link>
+          <Link href={backHref} className="group mt-4 inline-flex items-center gap-1 text-[13px] font-semibold transition-colors" style={{ color: ACCENT }}><span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Back to deal</Link>
         </div>
       </div>
     );
@@ -95,14 +95,14 @@ function InvoiceView({ id }: { id: string }) {
     <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
       {/* Action bar — hidden when printing */}
       <div className="max-w-2xl mx-auto mb-4 flex items-center justify-between gap-3 print:hidden">
-        <Link href={backHref} className="text-[13px] font-semibold text-ink-500 hover:text-ink-800">← Deal</Link>
+        <Link href={backHref} className="group inline-flex items-center gap-1 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"><span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Deal</Link>
         <div className="flex gap-2">
           <button onClick={toggleGst}
-            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold border border-border bg-white text-ink-700 hover:bg-[#faf9ff] transition-colors">
+            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold border border-border bg-white text-ink-700 transition-colors duration-200 hover:border-[#d9d4f5] hover:bg-[#faf9ff]">
             {gst === 18 ? 'Remove GST' : 'Add 18% GST'}
           </button>
           <button onClick={() => window.print()}
-            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white hover:brightness-105 transition-all"
+            className="px-3.5 py-2 rounded-lg text-[13px] font-semibold text-white transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5"
             style={{ background: ACCENT }}>
             Save as PDF
           </button>
