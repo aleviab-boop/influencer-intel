@@ -89,6 +89,7 @@ interface PeerBenchmark {
 }
 interface Analytics {
   connected: boolean;
+  source?: 'live' | 'db';
   reason?: string;
   error?: string;
   account?: { id: string; ig_username: string; connected_at: string; token_expires_at: string | null; connection_status: string };
@@ -704,6 +705,33 @@ function AnalyticsPreview() {
 
   return (
     <Shell backHref={backHref}>
+      {/* Stored-data notice — shown when analytics came from our saved profile
+          (creator hasn't connected Instagram, or the live pull couldn't reach
+          insights). Everything below is real, measured data; connecting just
+          adds live reach/plays and refreshes it. */}
+      {data.source === 'db' && (
+        <div className="mb-5 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border px-5 py-4"
+          style={{ borderColor: '#e7e1fb', background: ACCENT_SOFT }}>
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18" opacity="0" /><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>
+            </span>
+            <div className="min-w-0">
+              <div className="text-[14px] font-semibold text-ink-900">Showing your saved profile</div>
+              <p className="text-[12.5px] text-ink-500 leading-relaxed">
+                These are real numbers from your latest saved data. Connect Instagram to pull live reach &amp; plays and keep it refreshed automatically.
+              </p>
+            </div>
+          </div>
+          <a href="/api/oauth/instagram?flow=creator"
+            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-white transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5"
+            style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
+            Connect for live insights
+          </a>
+        </div>
+      )}
+
       {/* Profile header */}
       <div className="rounded-2xl bg-white border border-border shadow-card p-6 flex flex-col sm:flex-row sm:items-center gap-5">
         <div className="flex items-center gap-4 min-w-0">

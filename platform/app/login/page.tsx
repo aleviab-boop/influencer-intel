@@ -94,37 +94,20 @@ export default function LoginPage() {
       return;
     }
 
-    // Agency role uses real email + password accounts.
-    if (role === 'agency') {
-      if (!email.trim() || !password) { setError('Enter your email and password.'); return; }
-      setLoading(true);
-      try {
-        const r = await fetch('/api/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'sign_in', email: email.trim(), password, brand_name: name.trim() || undefined }),
-        });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
-      } catch {
-        setError('Could not reach the server. Try again.'); setLoading(false); return;
-      }
-    } else {
-      // Influencer — legacy passwordless sign-in: creates/loads the brand row and
-      // logs the login (with the name) so it shows in the admin Metrics feed.
-      if (!email.trim()) { setError('Enter your email.'); return; }
-      setLoading(true);
-      try {
-        const r = await fetch('/api/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), brand_name: name.trim() || undefined }),
-        });
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
-      } catch {
-        setError('Could not reach the server. Try again.'); setLoading(false); return;
-      }
+    // Agency role uses real email + password accounts. (Influencers never reach
+    // here — the influencer tab renders the Instagram OAuth card, not this form.)
+    if (!email.trim() || !password) { setError('Enter your email and password.'); return; }
+    setLoading(true);
+    try {
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sign_in', email: email.trim(), password, brand_name: name.trim() || undefined }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(d.error || 'Login failed.'); setLoading(false); return; }
+    } catch {
+      setError('Could not reach the server. Try again.'); setLoading(false); return;
     }
     try { localStorage.setItem('ii_role', role); } catch { /* ignore */ }
     const params = new URLSearchParams(window.location.search);
@@ -239,20 +222,18 @@ export default function LoginPage() {
             </div>
 
             {role === 'influencer' ? (
-              <div className="mt-6 rounded-2xl border border-border bg-ink-50/40 px-6 py-10 text-center" style={{ animation: 'ii-rise .35s both' }}>
+              <div className="mt-6 rounded-2xl border border-border bg-ink-50/40 px-6 py-9 text-center" style={{ animation: 'ii-rise .35s both' }}>
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19V5" /><path d="M4 15l4-4 4 3 6-6" /><path d="M15 8h5v5" /></svg>
                 </div>
-                <h3 className="text-[17px] font-semibold text-ink-900">Influencer login — coming soon</h3>
-                <p className="mt-1.5 text-[13px] text-ink-500">We&apos;re building a dedicated portal for creators to manage their profile, track reel performance, and connect with brands. Stay tuned.</p>
+                <h3 className="text-[17px] font-semibold text-ink-900">Log in with Instagram</h3>
+                <p className="mt-1.5 text-[13px] text-ink-500">Connect your account to see your analytics, media kit &amp; brand matches. No password, no setup — we build your creator profile automatically.</p>
 
-                <div className="my-5 flex items-center gap-3 text-[12px] text-ink-400"><span className="flex-1 h-px bg-border" />get early access<span className="flex-1 h-px bg-border" /></div>
-
-                <a href="/api/oauth/instagram?flow=creator" className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl text-white text-[14px] font-semibold hover:brightness-105 transition" style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}>
+                <a href="/api/oauth/instagram?flow=creator" className="mt-6 flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-white text-[14px] font-semibold hover:brightness-105 hover:-translate-y-0.5 transition-all duration-200" style={{ background: 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>
                   Continue with Instagram
                 </a>
-                <p className="mt-2.5 text-[11px] text-ink-400">Sign in securely with your Instagram account. We never see your password, and we&apos;ll use it to show your own posts &amp; reels once the portal is live.</p>
+                <p className="mt-3 text-[11px] text-ink-400">Use a Business or Creator account for full insights. We never see your password.</p>
               </div>
             ) : (
             <>
@@ -333,9 +314,7 @@ export default function LoginPage() {
             ) : (
               <>
                 <p className="mt-6 text-center text-[13px] text-ink-500">New here? <Link href={`/signup?role=${role}`} className="font-semibold" style={{ color: ACCENT }}>Create an account</Link></p>
-                <p className="mt-1 text-center text-[11px] text-ink-400">
-                  {role === 'agency' ? 'Agency demo login — agency@gmail.com / agency' : 'Demo login — any email gets you in.'}
-                </p>
+                <p className="mt-1 text-center text-[11px] text-ink-400">Agency demo login — agency@gmail.com / agency</p>
               </>
             )}
             </>
