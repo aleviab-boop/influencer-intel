@@ -17,6 +17,15 @@ interface Profile {
 }
 interface Campaign { id: string; name: string; description: string | null; budget: number | string | null; recruit_count: number }
 interface Application { program_id: string; program_name: string; description: string | null; status: string; created_at: string }
+interface Connection {
+  connected: boolean;
+  ig_username?: string | null;
+  connection_status?: string | null;
+  token_expires_at?: string | null;
+  expiring_soon?: boolean;
+  expired?: boolean;
+  days_until_expiry?: number | null;
+}
 
 const fmt = (v: number | string | null): string => {
   const n = Number(v) || 0;
@@ -66,6 +75,7 @@ export default function CreatorPortal() {
   const [igConfigured, setIgConfigured] = useState<boolean | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [setup, setSetup] = useState<{ score: number; done_count: number; total_count: number; next: { label: string; href: string } | null } | null>(null);
+  const [connection, setConnection] = useState<Connection | null>(null);
 
   // Resolve handle from URL (?handle=) or localStorage on first load; surface
   // OAuth outcome; check whether Instagram login is set up.
@@ -125,6 +135,10 @@ export default function CreatorPortal() {
         fetch(`/api/creator/setup?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
           .then((x) => x.json())
           .then((d) => { if (d?.available) setSetup(d); })
+          .catch(() => {});
+        fetch(`/api/creator/connection?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
+          .then((x) => x.json())
+          .then((d: Connection) => setConnection(d))
           .catch(() => {});
       } finally {
         setLoading(false);
@@ -256,6 +270,9 @@ export default function CreatorPortal() {
               </div>
             </div>
 
+            {/* Instagram connection status — live insights vs connect CTA */}
+            {connection && <ConnectionCard c={connection} />}
+
             {/* Setup nudge — only while the profile is incomplete */}
             {setup && setup.score < 100 && (
               <Link href={`/creator/setup?handle=${encodeURIComponent(profile.handle)}`}
@@ -363,6 +380,74 @@ export default function CreatorPortal() {
           </>
         ) : null}
       </main>
+    </div>
+  );
+}
+
+const IG_GRADIENT = 'linear-gradient(90deg,#F58529,#DD2A7B,#8134AF)';
+const IgGlyph = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+function ConnectionCard({ c }: { c: Connection }) {
+  // Connected & healthy — quiet confirmation that live insights are on.
+  if (c.connected && !c.expiring_soon) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-5 py-3.5 mb-4">
+        <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-emerald-600 shadow-sm"><IgGlyph /></span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold text-emerald-900">
+            Instagram connected{c.ig_username ? <> — <span className="font-bold">@{c.ig_username}</span></> : ''}
+          </div>
+          <div className="text-[12.5px] text-emerald-700/90">Live insights are on. Your analytics update from Instagram automatically.</div>
+        </div>
+        <span className="shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />Live
+        </span>
+      </div>
+    );
+  }
+
+  // Connected but the token is about to lapse — nudge a reconnect.
+  if (c.connected && c.expiring_soon) {
+    const days = c.days_until_expiry;
+    return (
+      <a href="/api/oauth/instagram?flow=creator"
+        className="group flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 mb-4 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(217,119,6,0.16)]">
+        <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-amber-600 shadow-sm"><IgGlyph /></span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold text-amber-900">Reconnect Instagram soon</div>
+          <div className="text-[12.5px] text-amber-700">
+            Your connection {days != null && days > 0 ? `expires in ${days} day${days === 1 ? '' : 's'}` : 'is about to expire'}. Reconnect to keep live insights flowing.
+          </div>
+        </div>
+        <span className="shrink-0 text-[13px] font-semibold text-amber-700 inline-flex items-center gap-1">
+          Reconnect<span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
+        </span>
+      </a>
+    );
+  }
+
+  // Not connected (or expired) — the primary CTA to log in with Instagram.
+  return (
+    <div className="rounded-2xl border shadow-card px-5 py-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-4" style={{ borderColor: '#e7e1fb', background: ACCENT_SOFT }}>
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-semibold text-ink-900">
+          {c.expired ? 'Instagram connection expired' : 'Connect Instagram for live insights'}
+        </div>
+        <div className="text-[12.5px] text-ink-500 mt-0.5">
+          {c.expired
+            ? 'Reconnect to resume live reach, reel plays and audience data. Until then, analytics show your saved profile.'
+            : 'See your real reel performance, reach and audience demographics — straight from Instagram.'}
+        </div>
+      </div>
+      <a href="/api/oauth/instagram?flow=creator"
+        className="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-white text-[14px] font-semibold shadow-sm hover:brightness-105 hover:-translate-y-0.5 transition-all"
+        style={{ background: IG_GRADIENT }}>
+        <IgGlyph size={17} />{c.expired ? 'Reconnect' : 'Connect Instagram'}
+      </a>
     </div>
   );
 }
