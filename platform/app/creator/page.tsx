@@ -219,26 +219,36 @@ export default function CreatorPortal() {
           <>
             {/* Profile header */}
             <div className="rounded-3xl bg-white border border-border shadow-card overflow-hidden mb-8">
-              <div className="h-20" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }} />
-              <div className="px-5 sm:px-6 pb-6 -mt-12">
-                <div className="flex items-end gap-4">
+              <div className="relative h-28" style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #8f6cff 55%, #b199ff 100%)` }}>
+                {/* soft light sheen */}
+                <div className="absolute inset-0" style={{ background: 'radial-gradient(120% 140% at 88% -30%, rgba(255,255,255,0.38), transparent 55%)' }} />
+                <button
+                  onClick={signOut}
+                  className="absolute top-4 right-4 z-10 rounded-full border border-white/30 bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/90 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 hover:text-white"
+                >
+                  Sign out
+                </button>
+              </div>
+              <div className="px-5 sm:px-7 pb-6 -mt-14">
+                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
                   <Avatar p={profile} />
-                  <div className="min-w-0 flex-1 pb-1">
-                    <div className="text-[19px] font-bold text-ink-900 truncate flex items-center gap-1.5">
-                      {profile.display_name || `@${profile.handle}`}
-                      {profile.is_verified && <span style={{ color: ACCENT }}>✔</span>}
+                  <div className="min-w-0 flex-1 sm:pb-1.5">
+                    <div className="flex items-center gap-2 text-[22px] font-bold text-ink-900">
+                      <span className="truncate">{profile.display_name || `@${profile.handle}`}</span>
+                      {profile.is_verified && (
+                        <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[12px] leading-none text-white" style={{ background: ACCENT }}>✓</span>
+                      )}
                     </div>
-                    <div className="text-[13px] text-ink-400 truncate">
-                      @{profile.handle}
-                      {profile.primary_category ? ` · ${profile.primary_category}` : ''}
-                      {profile.primary_city ? ` · ${profile.primary_city}` : ''}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-400">
+                      <span className="font-medium text-ink-500">@{profile.handle}</span>
+                      {profile.primary_category && (<><span className="text-ink-300">·</span><span>{profile.primary_category}</span></>)}
+                      {profile.primary_city && (<><span className="text-ink-300">·</span><span>{profile.primary_city}</span></>)}
                     </div>
                   </div>
-                  <button onClick={signOut} className="text-[12px] font-medium text-ink-400 shrink-0 rounded-full border border-transparent px-3 py-1.5 transition-all duration-200 hover:text-ink-800 hover:border-border hover:bg-white">Sign out</button>
                 </div>
 
                 {/* Stats — visible on every screen size */}
-                <div className="mt-5 grid grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="mt-6 grid grid-cols-3 gap-2.5 sm:gap-3">
                   <StatCard label="Followers" value={fmt(profile.follower_count)} />
                   <StatCard label="Engagement" value={erPct(profile.engagement_rate)} />
                   <StatCard label="Quality" value={profile.cred_score ?? '—'} accent />
@@ -390,9 +400,12 @@ function QuickLink({ href, label, desc, icon }: { href: string; label: string; d
 
 function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="group rounded-2xl border border-border bg-[#fafafc] px-3 py-3 text-center transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-white hover:border-[#e3def9] hover:shadow-[0_10px_30px_rgba(108,77,246,0.10)]">
-      <div className="text-[20px] font-bold tabular-nums leading-none transition-transform duration-300 group-hover:scale-105" style={accent ? { color: ACCENT } : undefined}>{value}</div>
-      <div className="mt-1.5 text-[10.5px] uppercase tracking-wider text-ink-400">{label}</div>
+    <div
+      className={`group rounded-2xl border px-3 py-3.5 text-center transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-white hover:border-[#e3def9] hover:shadow-[0_10px_30px_rgba(108,77,246,0.10)] ${accent ? 'border-[#e7e1fb]' : 'border-border bg-[#fafafc]'}`}
+      style={accent ? { background: ACCENT_SOFT } : undefined}
+    >
+      <div className="text-[22px] font-bold tabular-nums leading-none transition-transform duration-300 group-hover:scale-105" style={accent ? { color: ACCENT } : undefined}>{value}</div>
+      <div className="mt-2 text-[10.5px] font-medium uppercase tracking-wider text-ink-400">{label}</div>
     </div>
   );
 }
@@ -410,12 +423,12 @@ function Avatar({ p }: { p: Profile }) {
         src={src}
         alt={p.handle}
         onError={() => setErr(true)}
-        className="w-20 h-20 rounded-full object-cover shrink-0 ring-4 ring-white bg-[#eee] shadow-sm"
+        className="h-24 w-24 shrink-0 rounded-full object-cover bg-[#eee] ring-4 ring-white shadow-[0_8px_24px_rgba(20,20,40,0.16)]"
       />
     );
   }
   return (
-    <div className="w-20 h-20 rounded-full shrink-0 grid place-items-center text-white text-[26px] font-semibold ring-4 ring-white shadow-sm" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
+    <div className="grid h-24 w-24 shrink-0 place-items-center rounded-full text-[28px] font-semibold text-white ring-4 ring-white shadow-[0_8px_24px_rgba(20,20,40,0.16)]" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
       {(p.display_name || p.handle).charAt(0).toUpperCase()}
     </div>
   );
