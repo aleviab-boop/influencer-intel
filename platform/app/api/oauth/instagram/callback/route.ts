@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { handleOAuthCallback } from '@/lib/oauth-service';
 import { syncConnectedAccount } from '@/lib/sync-worker';
+import { buildCreatorSessionCookie } from '@/lib/auth';
 
 export async function GET(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
@@ -26,7 +27,20 @@ export async function GET(request: Request): Promise<NextResponse> {
     const dest = flow === 'creator'
       ? `/creator?handle=${encodeURIComponent(account.ig_username)}&connected=true`
       : `/insights/${account.ig_username}?connected=true`;
-    return NextResponse.redirect(new URL(dest, request.url));
+    const res = NextResponse.redirect(new URL(dest, request.url));
+    // A successful Instagram connect IS the creator's login: mint a signed
+    // creator session so every /creator/* view can trust who's viewing instead
+    // of relying on the (spoofable) ?handle query param. The handle stays on the
+    // redirect for backwards-compat until all routes read the session.
+    if (flow === 'creator') {
+      const cookie = buildCreatorSessionCookie({
+        creator_id: account.creator_id,
+        handle: account.ig_username,
+        ig_user_id: account.ig_user_id ?? null,
+      });
+      res.cookies.set(cookie.name, cookie.value, cookie.options);
+    }
+    return res;
   } catch (err) {
     console.error('[oauth] callback failed:', err);
     const back = flow === 'creator' ? `/creator?oauth_error=token_exchange_failed` : `/?oauth_error=token_exchange_failed`;

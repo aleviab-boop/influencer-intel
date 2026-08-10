@@ -16,6 +16,7 @@ import { logActivity } from '@/lib/activity';
 import crypto from 'node:crypto';
 
 const COOKIE_NAME = 'ii_session';
+const CREATOR_COOKIE_NAME = 'ii_creator';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 interface SessionPayload {
@@ -25,6 +26,19 @@ interface SessionPayload {
   ig_handle: string | null;
   iat: number;
 }
+
+// A creator's session — established when they connect Instagram (OAuth). Kept in
+// a SEPARATE cookie from the brand session so the two identities never collide
+// and the working brand auth is untouched. `creator_id` is the source of truth;
+// `handle` is carried for display + backwards-compatible query fallbacks.
+export interface CreatorSession {
+  creator_id: string;
+  handle: string;
+  ig_user_id: string | null;
+  iat: number;
+}
+
+export { CREATOR_COOKIE_NAME };
 
 function getSecret(): string {
   return process.env.SESSION_SECRET ?? 'change-me-in-prod-influencer-intel-dev';
@@ -217,4 +231,75 @@ export async function signInWithPassword(email: string, password: string, name?:
 export async function signOut(): Promise<void> {
   const c = await cookies();
   c.delete(COOKIE_NAME);
+}
+
+// ---- creator session (Instagram-login) ----------------------------------
+// Signed the same way as the brand session (HMAC-SHA256 over base64url JSON),
+// just a different payload + cookie name.
+
+function signCreator(payload: CreatorSession): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', getSecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyCreator(token: string | undefined): CreatorSession | null {
+  if (!token) return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac('sha256', getSecret()).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    return JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as CreatorSession;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the current creator session from cookies. Null if unauthenticated. */
+export async function getCreatorSession(): Promise<CreatorSession | null> {
+  const c = await cookies();
+  return verifyCreator(c.get(CREATOR_COOKIE_NAME)?.value);
+}
+
+/** Mint a signed creator-session token (pure — caller decides where to set it). */
+export function mintCreatorSessionToken(input: Omit<CreatorSession, 'iat'>): string {
+  return signCreator({ ...input, iat: Math.floor(Date.now() / 1000) });
+}
+
+/**
+ * Cookie descriptor for a creator session — name/value/options. Returned rather
+ * than set directly so a route handler can attach it to a redirect NextResponse
+ * (the reliable pattern when the same response also redirects).
+ */
+export function buildCreatorSessionCookie(input: Omit<CreatorSession, 'iat'>): {
+  name: string;
+  value: string;
+  options: { httpOnly: true; sameSite: 'lax'; path: string; secure: boolean; maxAge: number };
+} {
+  return {
+    name: CREATOR_COOKIE_NAME,
+    value: mintCreatorSessionToken(input),
+    options: {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: COOKIE_MAX_AGE,
+    },
+  };
+}
+
+/** Set the creator session cookie directly (non-redirect contexts). */
+export async function setCreatorSession(input: Omit<CreatorSession, 'iat'>): Promise<void> {
+  const { name, value, options } = buildCreatorSessionCookie(input);
+  const c = await cookies();
+  c.set(name, value, options);
+}
+
+export async function signOutCreator(): Promise<void> {
+  const c = await cookies();
+  c.delete(CREATOR_COOKIE_NAME);
 }
