@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { matchBrands } from '@/lib/brand-match';
 import type { ProgramCandidate } from '@/lib/brand-match';
+import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -14,33 +15,11 @@ export const runtime = 'nodejs';
  * `matches` array with a reason drives a friendly empty state.
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '') ?? null;
-
   const db = getBolticClient();
 
   try {
-    // Resolve the creator: account id > handle > most-recent connected account.
-    let creatorId: string | null = null;
-    if (accountId) {
-      const rows = await db.query<{ creator_id: string }>(
-        `SELECT creator_id FROM connected_accounts WHERE id = $1 LIMIT 1`, [accountId],
-      );
-      creatorId = rows[0]?.creator_id ?? null;
-    } else if (handle) {
-      const rows = await db.query<{ id: string }>(
-        `SELECT id FROM creators WHERE handle = $1 ORDER BY updated_at DESC LIMIT 1`, [handle],
-      );
-      creatorId = rows[0]?.id ?? null;
-    } else {
-      const rows = await db.query<{ creator_id: string }>(
-        `SELECT creator_id FROM connected_accounts WHERE connection_status = 'active'
-         ORDER BY connected_at DESC LIMIT 1`,
-      );
-      creatorId = rows[0]?.creator_id ?? null;
-    }
-
+    // Session-first identity: a logged-in creator only ever sees their own matches.
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) {
       return NextResponse.json({ available: false, reason: 'no_creator', matches: [] }, { status: 200 });
     }

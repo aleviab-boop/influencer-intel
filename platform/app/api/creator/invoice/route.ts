@@ -4,6 +4,7 @@ import {
   buildInvoice,
   type InvoiceDealInput, type InvoiceCreatorInput, type InvoicePayoutInput,
 } from '@/lib/invoice';
+import { creatorMayAccess } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,7 @@ const num = (v: unknown): number => {
 
 interface Row {
   id: string;
+  creator_id: string;
   rate: string | number | null;
   deliverables: string | null;
   due_date: string | null;
@@ -66,7 +68,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const db = getBolticClient();
   try {
     const rows = await db.query<Row>(
-      `SELECT pr.id, pr.rate, pr.deliverables, pr.due_date::text AS due_date,
+      `SELECT pr.id, pr.creator_id, pr.rate, pr.deliverables, pr.due_date::text AS due_date,
               pr.paid, pr.paid_at,
               p.name AS program_name, b.name AS brand_name,
               c.handle, c.display_name, c.primary_city,
@@ -83,6 +85,11 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const r = rows[0];
     if (!r) return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+
+    // A logged-in creator may only invoice their own deals (preview unaffected).
+    if (!(await creatorMayAccess(r.creator_id))) {
+      return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    }
 
     const deal: InvoiceDealInput = {
       id: r.id,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { buildRateCard, sanitizeRateCard, type RateCardStored } from '@/lib/rate-card';
+import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -15,30 +16,6 @@ function safeParse(s: string): unknown {
 function asPrefs(v: unknown): Record<string, unknown> {
   const obj = typeof v === 'string' ? safeParse(v) : v;
   return obj && typeof obj === 'object' ? (obj as Record<string, unknown>) : {};
-}
-
-async function resolveCreatorId(
-  db: ReturnType<typeof getBolticClient>,
-  accountId: string | null,
-  handle: string | null,
-): Promise<string | null> {
-  if (accountId) {
-    const rows = await db.query<{ creator_id: string }>(
-      `SELECT creator_id FROM connected_accounts WHERE id = $1 LIMIT 1`, [accountId],
-    );
-    return rows[0]?.creator_id ?? null;
-  }
-  if (handle) {
-    const rows = await db.query<{ id: string }>(
-      `SELECT id FROM creators WHERE LOWER(handle) = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1`, [handle],
-    );
-    return rows[0]?.id ?? null;
-  }
-  const rows = await db.query<{ creator_id: string }>(
-    `SELECT creator_id FROM connected_accounts WHERE connection_status = 'active'
-     ORDER BY connected_at DESC LIMIT 1`,
-  );
-  return rows[0]?.creator_id ?? null;
 }
 
 interface StatsRow {
@@ -63,13 +40,10 @@ async function cardFor(db: ReturnType<typeof getBolticClient>, creatorId: string
 
 /** GET /api/creator/rate-card?handle=|account= — suggested + saved rate card. */
 export async function GET(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
     return NextResponse.json(await cardFor(db, creatorId));
   } catch (err) {
@@ -84,16 +58,13 @@ export async function GET(request: Request): Promise<NextResponse> {
  * freshly-derived card.
  */
 export async function PATCH(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const patch = sanitizeRateCard(body);
 
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
 
     const existing = await db.query<{ creator_prefs: unknown }>(

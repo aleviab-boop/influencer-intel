@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { buildMediaKit, type MediaKitCreatorRow } from '@/lib/media-kit-builder';
+import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -14,10 +15,6 @@ export const runtime = 'nodejs';
  * kit reads), tagged `source: 'db'`. Always 200 — `{ connected:false, reason }`.
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
-
   const db = getBolticClient();
 
   const SELECT = `SELECT id, handle, display_name, bio, profile_photo_url, is_verified,
@@ -27,32 +24,14 @@ export async function GET(request: Request): Promise<NextResponse> {
                   FROM creators`;
 
   try {
-    let row: MediaKitCreatorRow | null = null;
-
-    if (accountId) {
-      const rows = await db.query<MediaKitCreatorRow>(
-        `${SELECT}
-         WHERE id = (SELECT creator_id FROM connected_accounts WHERE id = $1 LIMIT 1)
-         LIMIT 1`,
-        [accountId],
-      );
-      row = rows[0] ?? null;
-    } else if (handle) {
-      const rows = await db.query<MediaKitCreatorRow>(
-        `${SELECT} WHERE LOWER(handle) = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1`,
-        [handle],
-      );
-      row = rows[0] ?? null;
-    } else {
-      const rows = await db.query<MediaKitCreatorRow>(
-        `${SELECT}
-         WHERE id = (SELECT creator_id FROM connected_accounts WHERE connection_status = 'active'
-                     ORDER BY connected_at DESC LIMIT 1)
-         LIMIT 1`,
-      );
-      row = rows[0] ?? null;
+    // Session-first identity: a logged-in creator only ever sees their own kit.
+    const creatorId = await resolveCreatorId(request);
+    if (!creatorId) {
+      return NextResponse.json({ connected: false, reason: 'no_creator' }, { status: 200 });
     }
 
+    const rows = await db.query<MediaKitCreatorRow>(`${SELECT} WHERE id = $1 LIMIT 1`, [creatorId]);
+    const row = rows[0] ?? null;
     if (!row) {
       return NextResponse.json({ connected: false, reason: 'no_creator' }, { status: 200 });
     }

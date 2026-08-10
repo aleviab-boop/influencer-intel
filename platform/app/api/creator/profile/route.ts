@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { sanitizeSettingsEdit, type SettingsEditInput } from '@/lib/creator-settings';
+import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -17,43 +18,16 @@ interface ProfileRow {
   is_verified: boolean | null;
 }
 
-async function resolveCreatorId(
-  db: ReturnType<typeof getBolticClient>,
-  accountId: string | null,
-  handle: string | null,
-): Promise<string | null> {
-  if (accountId) {
-    const rows = await db.query<{ creator_id: string }>(
-      `SELECT creator_id FROM connected_accounts WHERE id = $1 LIMIT 1`, [accountId],
-    );
-    return rows[0]?.creator_id ?? null;
-  }
-  if (handle) {
-    const rows = await db.query<{ id: string }>(
-      `SELECT id FROM creators WHERE LOWER(handle) = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1`, [handle],
-    );
-    return rows[0]?.id ?? null;
-  }
-  const rows = await db.query<{ creator_id: string }>(
-    `SELECT creator_id FROM connected_accounts WHERE connection_status = 'active'
-     ORDER BY connected_at DESC LIMIT 1`,
-  );
-  return rows[0]?.creator_id ?? null;
-}
-
 const SELECT = `SELECT id, handle, display_name, bio, primary_category, primary_city,
                        profile_photo_url, follower_count, engagement_rate, is_verified
                 FROM creators WHERE id = $1 LIMIT 1`;
 
 /** GET /api/creator/profile?handle=|account= — editable profile fields. */
 export async function GET(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
 
     const rows = await db.query<ProfileRow>(SELECT, [creatorId]);
@@ -73,9 +47,6 @@ export async function GET(request: Request): Promise<NextResponse> {
  * the allow-list and length limits). Returns the updated profile.
  */
 export async function PATCH(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
@@ -83,7 +54,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     const { ok, set, errors } = sanitizeSettingsEdit(body);
     if (!ok) return NextResponse.json({ available: true, saved: false, errors }, { status: 200 });
 
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
 
     if (Object.keys(set).length > 0) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { buildDealBrief, type DealBriefInput } from '@/lib/deal-brief';
+import { creatorMayAccess } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,7 @@ const num = (v: unknown): number => {
 
 interface Row {
   id: string;
+  creator_id: string;
   rate: string | number | null;
   paid: boolean;
   paid_at: string | null;
@@ -41,7 +43,7 @@ export async function GET(
 
   try {
     const rows = await db.query<Row>(
-      `SELECT pr.id, pr.rate, pr.paid, pr.paid_at, pr.status, pr.deliverables, pr.note,
+      `SELECT pr.id, pr.creator_id, pr.rate, pr.paid, pr.paid_at, pr.status, pr.deliverables, pr.note,
               pr.due_date::text AS due_date, pr.created_at::text AS created_at,
               p.name AS program_name, p.description AS program_description,
               b.name AS brand_name
@@ -55,6 +57,11 @@ export async function GET(
 
     const r = rows[0];
     if (!r) {
+      return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    }
+
+    // A logged-in creator may only open their own deal brief (preview unaffected).
+    if (!(await creatorMayAccess(r.creator_id))) {
       return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
     }
 

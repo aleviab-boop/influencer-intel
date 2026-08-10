@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { computeGoalProgress, type GoalInput } from '@/lib/earnings-goal';
+import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
@@ -21,30 +22,6 @@ function istMonth(): { start: string; end: string; day: number; days_in_month: n
   const start = `${y}-${pad(m + 1)}-01`;
   const end = `${y}-${pad(m + 1)}-${pad(daysInMonth)}`;
   return { start, end, day, days_in_month: daysInMonth };
-}
-
-async function resolveCreatorId(
-  db: ReturnType<typeof getBolticClient>,
-  accountId: string | null,
-  handle: string | null,
-): Promise<string | null> {
-  if (accountId) {
-    const rows = await db.query<{ creator_id: string }>(
-      `SELECT creator_id FROM connected_accounts WHERE id = $1 LIMIT 1`, [accountId],
-    );
-    return rows[0]?.creator_id ?? null;
-  }
-  if (handle) {
-    const rows = await db.query<{ id: string }>(
-      `SELECT id FROM creators WHERE LOWER(handle) = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1`, [handle],
-    );
-    return rows[0]?.id ?? null;
-  }
-  const rows = await db.query<{ creator_id: string }>(
-    `SELECT creator_id FROM connected_accounts WHERE connection_status = 'active'
-     ORDER BY connected_at DESC LIMIT 1`,
-  );
-  return rows[0]?.creator_id ?? null;
 }
 
 function readGoal(v: unknown): number {
@@ -90,13 +67,10 @@ async function progressFor(db: ReturnType<typeof getBolticClient>, creatorId: st
 
 /** GET /api/creator/goal?handle=|account= — monthly goal progress. */
 export async function GET(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
     return NextResponse.json({ available: true, ...(await progressFor(db, creatorId)) });
   } catch (err) {
@@ -110,16 +84,13 @@ export async function GET(request: Request): Promise<NextResponse> {
  * returns fresh progress.
  */
 export async function PATCH(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
     const body = (await request.json().catch(() => ({}))) as { monthly_goal?: unknown };
     const goal = Math.max(0, Math.min(100_000_000, Math.round(num(body.monthly_goal))));
 
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
 
     // Merge into existing prefs so we don't clobber other keys.

@@ -8,11 +8,13 @@ import {
   type SubmissionInput,
   type SubmissionRecord,
 } from '@/lib/deliverable-submission';
+import { creatorMayAccess } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
 
 interface DealRow {
   id: string;
+  creator_id: string;
   status: string;
   paid: boolean;
   due_date: string | null;
@@ -24,7 +26,7 @@ interface DealRow {
 
 async function loadDeal(db: ReturnType<typeof getBolticClient>, id: string): Promise<DealRow | null> {
   const rows = await db.query<DealRow>(
-    `SELECT pr.id, pr.status, pr.paid, pr.due_date::text AS due_date,
+    `SELECT pr.id, pr.creator_id, pr.status, pr.paid, pr.due_date::text AS due_date,
             pr.deliverables, pr.submissions,
             p.name AS program_name, b.name AS brand_name
      FROM program_recruits pr
@@ -61,6 +63,10 @@ export async function GET(
   try {
     const row = await loadDeal(db, id);
     if (!row) return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    // A logged-in creator may only touch their own deliverables (preview unaffected).
+    if (!(await creatorMayAccess(row.creator_id))) {
+      return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    }
     return NextResponse.json(viewFor(row, normalizeStored(row.submissions)));
   } catch (err) {
     return NextResponse.json({ available: false, reason: 'db_error', error: (err as Error).message }, { status: 200 });
@@ -83,6 +89,10 @@ export async function POST(
 
     const row = await loadDeal(db, id);
     if (!row) return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    // A logged-in creator may only touch their own deliverables (preview unaffected).
+    if (!(await creatorMayAccess(row.creator_id))) {
+      return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    }
 
     const existing = normalizeStored(row.submissions);
     const record: SubmissionRecord = { id: randomUUID(), created_at: new Date().toISOString(), ...valid.record };
@@ -108,6 +118,10 @@ export async function DELETE(
 
     const row = await loadDeal(db, id);
     if (!row) return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    // A logged-in creator may only touch their own deliverables (preview unaffected).
+    if (!(await creatorMayAccess(row.creator_id))) {
+      return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    }
 
     const next = normalizeStored(row.submissions).filter((s) => s.id !== sid);
     await db.update('program_recruits', { id: row.id }, { submissions: JSON.stringify(next) });

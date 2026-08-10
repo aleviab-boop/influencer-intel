@@ -1,32 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { validatePayout, toDisplay, type PayoutInput, type PayoutRecord } from '@/lib/creator-payout';
+import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
-
-async function resolveCreatorId(
-  db: ReturnType<typeof getBolticClient>,
-  accountId: string | null,
-  handle: string | null,
-): Promise<string | null> {
-  if (accountId) {
-    const rows = await db.query<{ creator_id: string }>(
-      `SELECT creator_id FROM connected_accounts WHERE id = $1 LIMIT 1`, [accountId],
-    );
-    return rows[0]?.creator_id ?? null;
-  }
-  if (handle) {
-    const rows = await db.query<{ id: string }>(
-      `SELECT id FROM creators WHERE LOWER(handle) = $1 AND is_active = true ORDER BY updated_at DESC LIMIT 1`, [handle],
-    );
-    return rows[0]?.id ?? null;
-  }
-  const rows = await db.query<{ creator_id: string }>(
-    `SELECT creator_id FROM connected_accounts WHERE connection_status = 'active'
-     ORDER BY connected_at DESC LIMIT 1`,
-  );
-  return rows[0]?.creator_id ?? null;
-}
 
 // creators.payout_details may come back as an object or a JSON string.
 function parseRecord(v: unknown): PayoutRecord | null {
@@ -41,13 +18,10 @@ function safeParse(s: string): unknown {
 
 /** GET /api/creator/payout?handle=|account= — masked payout details. */
 export async function GET(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
 
     const rows = await db.query<{ payout_details: unknown }>(
@@ -67,9 +41,6 @@ export async function GET(request: Request): Promise<NextResponse> {
  * account number).
  */
 export async function PATCH(request: Request): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const accountId = url.searchParams.get('account');
-  const handle = url.searchParams.get('handle')?.replace(/^@/, '').toLowerCase() ?? null;
   const db = getBolticClient();
 
   try {
@@ -77,7 +48,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     const { ok, record, errors } = validatePayout(body, new Date().toISOString());
     if (!ok || !record) return NextResponse.json({ available: true, saved: false, errors }, { status: 200 });
 
-    const creatorId = await resolveCreatorId(db, accountId, handle);
+    const creatorId = await resolveCreatorId(request);
     if (!creatorId) return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
 
     await db.update('creators', { id: creatorId }, {
