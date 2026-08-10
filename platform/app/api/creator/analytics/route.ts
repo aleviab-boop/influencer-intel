@@ -74,8 +74,8 @@ interface AnalyticsPost {
  * self-contained dashboard payload. Always 200 — `connected:false` carries a
  * friendly reason so the preview page can render an empty state.
  *
- * NOTE: not yet wired into platform nav/login — feeds the standalone
- * /creator/analytics-preview page only.
+ * Powers the creator portal's "My Analytics" page (/creator/analytics-preview),
+ * reachable from the dashboard and shareable read-only via ?handle/?account.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   const db = getBolticClient();

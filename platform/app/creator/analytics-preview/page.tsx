@@ -1,15 +1,18 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import Link from 'next/link';
+import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { evaluateDeal, type DealVerdictKey } from '@/lib/deal-evaluator';
 import { scoreAudienceFit, type FitLabel } from '@/lib/audience-fit';
 import { buildWeeklyPlan, TAG_LABEL, type ActionTag, type WeeklyPlan } from '@/lib/weekly-plan';
 
 /* -------------------------------------------------------------------------
- * Creator "My Analytics" dashboard — PREVIEW (not wired into platform yet).
- * Renders live Instagram Graph data for a connected creator account via
- * /api/creator/analytics. Standalone route; not linked from nav or login.
+ * Creator "My Analytics" dashboard — the creator portal's analytics page,
+ * linked from the dashboard's Analytics card. Renders live Instagram Graph
+ * data for a connected creator account via /api/creator/analytics. Wrapped
+ * in the standard portal chrome (MarketingNav + "Back to dashboard"); it is
+ * also shareable read-only via ?handle=/?account= (middleware-exempt).
  * ---------------------------------------------------------------------- */
 
 interface Post {
@@ -611,6 +614,7 @@ function AnalyticsPreview() {
   const [brandMatches, setBrandMatches] = useState<BrandMatches | null>(null);
   const [loading, setLoading] = useState(true);
   const [kitHref, setKitHref] = useState('/creator/media-kit');
+  const [backHref, setBackHref] = useState('/creator');
   const [tab, setTab] = useState<'all' | 'reels' | 'posts'>('all');
   const [sort, setSort] = useState<'recent' | 'top'>('recent');
 
@@ -623,6 +627,7 @@ function AnalyticsPreview() {
     else if (handle) q.set('handle', handle);
     const qs = q.toString() ? `?${q}` : '';
     setKitHref(`/creator/media-kit${qs}`);
+    setBackHref(handle ? `/creator?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator');
 
     fetch(`/api/creator/analytics${qs}`)
       .then((r) => r.json())
@@ -646,7 +651,7 @@ function AnalyticsPreview() {
 
   if (loading) {
     return (
-      <Shell>
+      <Shell backHref={backHref}>
         <div className="flex items-center justify-center py-32 text-ink-400 text-[14px]">
           <span className="inline-block h-4 w-4 mr-3 rounded-full border-2 border-ink-200 border-t-transparent animate-spin" />
           Loading your analytics…
@@ -657,7 +662,7 @@ function AnalyticsPreview() {
 
   if (!data?.connected) {
     return (
-      <Shell>
+      <Shell backHref={backHref}>
         <EmptyState reason={data?.reason} />
         {/* Earnings works without a live IG token, so surface it here too. */}
         {earnings?.available && (earnings.summary?.deals_count ?? 0) > 0 && (
@@ -698,7 +703,7 @@ function AnalyticsPreview() {
   });
 
   return (
-    <Shell>
+    <Shell backHref={backHref}>
       {/* Profile header */}
       <div className="rounded-2xl bg-white border border-border shadow-card p-6 flex flex-col sm:flex-row sm:items-center gap-5">
         <div className="flex items-center gap-4 min-w-0">
@@ -1115,18 +1120,19 @@ function AnalyticsPreview() {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, backHref = '/creator' }: { children: React.ReactNode; backHref?: string }) {
   return (
-    <div className="min-h-screen bg-[#fafafc] font-sans">
-      {/* Preview banner — remove when wiring into the platform */}
-      <div className="w-full text-center text-[12px] font-semibold text-white py-2" style={{ background: ACCENT }}>
-        Creator Analytics — internal preview (not yet live on the platform)
-      </div>
-      <div className="max-w-5xl mx-auto px-5 py-8">
-        <h1 className="text-[22px] font-bold text-ink-900 mb-1">My Analytics</h1>
+    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <MarketingNav />
+      <main className="flex-1 max-w-5xl mx-auto w-full px-5 sm:px-6 py-8">
+        <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          Back to dashboard
+        </Link>
+        <h1 className="text-2xl font-bold text-ink-900 mb-1">My Analytics</h1>
         <p className="text-[13.5px] text-ink-500 mb-6">Your Instagram performance, straight from your account.</p>
         {children}
-      </div>
+      </main>
     </div>
   );
 }
