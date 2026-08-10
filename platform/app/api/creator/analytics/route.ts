@@ -5,74 +5,36 @@ import { getAccessToken } from '@/lib/oauth-service';
 import { resolveCreatorId } from '@/lib/creator-identity';
 import type { ConnectedAccount } from '@influencer-intel/shared/types';
 import type { IGMedia } from '@influencer-intel/shared/ig-graph/types';
-import { forecastReels, contentBreakdown } from '@/lib/reel-forecast';
-import { audienceQuality } from '@/lib/audience-quality';
-import { analyzeContent } from '@/lib/content-analysis';
-import { analyzeCaptions } from '@/lib/caption-analysis';
-import { computeBenchmark, tierLabel, tierWindow } from '@/lib/peer-benchmark';
-import type { PeerBenchmark } from '@/lib/peer-benchmark';
-import { estimateMediaValue } from '@/lib/media-value';
-import { suggestRateCard } from '@/lib/media-kit';
-import { analyzeProfile } from '@/lib/profile-optimizer';
-import { planTierClimb } from '@/lib/tier-climb';
-import { buildRateMenu } from '@/lib/rate-menu';
-import { generatePitchCoach } from '@/lib/pitch-coach';
-import { analyzePostingTime } from '@/lib/posting-time';
-import { analyzeFormatTiming } from '@/lib/format-timing';
-import { generateContentPlaybook } from '@/lib/content-playbook';
-import { generateContentIdeas } from '@/lib/content-ideas';
-import { analyzeAudience } from '@/lib/audience-insights';
-import { projectGrowth } from '@/lib/growth-projection';
-import { analyzeWinningFormula } from '@/lib/winning-formula';
-import { analyzePostingConsistency } from '@/lib/posting-consistency';
-import { analyzeCaptionHooks } from '@/lib/caption-hooks';
-import { analyzeCaptionLength } from '@/lib/caption-length';
-import { analyzeEngagementReliability } from '@/lib/engagement-reliability';
-import { analyzeFormatRoi } from '@/lib/format-roi';
-import { analyzeDistributionSignals } from '@/lib/distribution-signals';
-import { analyzeContentPillars } from '@/lib/content-pillars';
-import { analyzeBrandSafety } from '@/lib/brand-safety';
-import { buildScorecard } from '@/lib/creator-scorecard';
-import { analyzePostSpotlight } from '@/lib/post-spotlight';
-import { analyzeHashtagStrategy } from '@/lib/hashtag-strategy';
-import { analyzePostingSchedule } from '@/lib/posting-schedule';
-import { analyzeEngagementTrend } from '@/lib/engagement-trend';
-import { generatePitchDraft } from '@/lib/pitch-draft';
-import { generateRecommendations } from '@/lib/recommendations';
+import type { DemographicsInput } from '@/lib/audience-insights';
+import {
+  assembleCreatorAnalytics,
+  loadPeerCohorts,
+  INSIGHTS_CAP,
+  type AnalyticsPost,
+  type PeerCohorts,
+} from '@/lib/analytics-assembler';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-// How many recent posts to enrich with per-media insights (reach/plays/saves).
-// Bounded so we stay well inside the Graph rate budget for a live request.
-const INSIGHTS_CAP = 18;
+// How many recent posts to enrich with per-media insights (reach/plays/saves)
+// on a live pull. Bounded so we stay inside the Graph rate budget.
 const MEDIA_CAP = 24;
-
-interface AnalyticsPost {
-  id: string;
-  shortcode: string;
-  permalink: string;
-  media_type: string;
-  thumbnail_url: string | null;
-  media_url: string | null;
-  caption: string | null;
-  timestamp: string;
-  like_count: number;
-  comments_count: number;
-  er: number | null;
-  reach: number | null;
-  plays: number | null;
-  saved: number | null;
-  shares: number | null;
-}
 
 /**
  * GET /api/creator/analytics?account=<id>|?handle=<h>
  *
- * Live-fetches a connected creator's Instagram analytics straight from the
- * Graph API (no dependency on the sync worker having run). Returns a
- * self-contained dashboard payload. Always 200 — `connected:false` carries a
- * friendly reason so the preview page can render an empty state.
+ * Measures ANY creator's Instagram analytics, via one of two paths that emit
+ * the SAME dashboard payload:
+ *   • LIVE — if the creator has an active connected account, we pull fresh from
+ *     the Graph API (posts enriched with reach/plays/saves/shares).
+ *   • DB   — otherwise (or if the live pull fails: expired token, missing
+ *     insights permission), we measure from the STORED `creators` row
+ *     (recent_posts + audience_demographics + credibility + follower/ER stats).
+ *
+ * Always 200 — `connected:false` carries a friendly reason so the preview page
+ * can render an empty state. The two paths mean the analytics page works for
+ * scraped/seeded creators too, not just OAuth-connected ones.
  *
  * Powers the creator portal's "My Analytics" page (/creator/analytics-preview),
  * reachable from the dashboard and shareable read-only via ?handle/?account.
@@ -82,9 +44,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   // Session-first identity: resolve the creator, then load THEIR active
   // connected account (the ?handle/?account preview fallbacks live in the resolver).
+  let creatorId: string | null = null;
   let account: ConnectedAccount | null = null;
   try {
-    const creatorId = await resolveCreatorId(request);
+    creatorId = await resolveCreatorId(request);
     if (!creatorId) {
       return NextResponse.json({ connected: false, reason: 'no_creator' }, { status: 200 });
     }
@@ -101,427 +64,388 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
   }
 
-  if (!account) {
+  // ---- Live path first (fresh Graph pull) --------------------------------
+  // If the token is stale or insights aren't granted, fall through to the
+  // stored-data path so the creator still sees real analytics.
+  if (account) {
+    try {
+      return await buildLive(db, account);
+    } catch {
+      // fall through to the DB fallback below
+    }
+  }
+
+  // ---- DB fallback (measure from the stored creators row) ----------------
+  try {
+    const payload = await buildDbAnalytics(db, creatorId);
+    if (payload) return NextResponse.json(payload, { status: 200 });
+  } catch (err) {
     return NextResponse.json(
-      { connected: false, reason: 'no_account' },
+      { connected: false, reason: 'db_error', error: (err as Error).message },
       { status: 200 },
     );
   }
 
+  // No connected account and no usable stored data to measure.
+  return NextResponse.json(
+    { connected: false, reason: account ? 'fetch_error' : 'no_account' },
+    { status: 200 },
+  );
+}
+
+// ============================================================
+// LIVE — fresh Instagram Graph pull
+// ============================================================
+
+async function buildLive(
+  db: ReturnType<typeof getBolticClient>,
+  account: ConnectedAccount,
+): Promise<NextResponse> {
+  const token = await getAccessToken(account.id);
+  const client = new IGGraphClient(token);
+
+  const profile = await client.getProfile();
+  const followers = profile.followers_count ?? 0;
+
+  // Record today's follower snapshot (one row per account per day) so the
+  // dashboard can chart growth over time. Best-effort — never blocks the
+  // response. IG only gives us the current count, so history accrues here.
+  let growth: { date: string; followers: number }[] = [];
   try {
-    const token = await getAccessToken(account.id);
-    const client = new IGGraphClient(token);
-
-    const profile = await client.getProfile();
-    const followers = profile.followers_count ?? 0;
-
-    // Record today's follower snapshot (one row per account per day) so the
-    // dashboard can chart growth over time. Best-effort — never blocks the
-    // response. IG only gives us the current count, so history accrues here.
-    let growth: { date: string; followers: number }[] = [];
-    try {
-      await db.query(
-        `INSERT INTO follower_snapshots
-           (connected_account_id, creator_id, followers_count, follows_count, media_count)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (connected_account_id, captured_on) DO UPDATE SET
-           followers_count = EXCLUDED.followers_count,
-           follows_count   = EXCLUDED.follows_count,
-           media_count     = EXCLUDED.media_count,
-           captured_at     = NOW()`,
-        [account.id, account.creator_id, profile.followers_count ?? null,
-          profile.follows_count ?? null, profile.media_count ?? null],
-      );
-      const snaps = await db.query<{ captured_on: string; followers_count: number | string }>(
-        `SELECT captured_on, followers_count FROM follower_snapshots
-         WHERE connected_account_id = $1 AND followers_count IS NOT NULL
-         ORDER BY captured_on ASC LIMIT 90`,
-        [account.id],
-      );
-      growth = snaps.map((s) => ({
-        date: typeof s.captured_on === 'string' ? s.captured_on.slice(0, 10)
-          : new Date(s.captured_on).toISOString().slice(0, 10),
-        followers: Number(s.followers_count),
-      }));
-    } catch {
-      growth = [];
-    }
-
-    const media: IGMedia[] = await client.getAllMedia(MEDIA_CAP);
-
-    // Enrich the most recent posts with per-media insights (reach/plays/etc).
-    const toEnrich = media.slice(0, INSIGHTS_CAP);
-    const insightsResults = await Promise.allSettled(
-      toEnrich.map((m) => client.getMediaInsights(m.id, m.media_type)),
+    await db.query(
+      `INSERT INTO follower_snapshots
+         (connected_account_id, creator_id, followers_count, follows_count, media_count)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (connected_account_id, captured_on) DO UPDATE SET
+         followers_count = EXCLUDED.followers_count,
+         follows_count   = EXCLUDED.follows_count,
+         media_count     = EXCLUDED.media_count,
+         captured_at     = NOW()`,
+      [account.id, account.creator_id, profile.followers_count ?? null,
+        profile.follows_count ?? null, profile.media_count ?? null],
     );
-    const insightsById = new Map<string, Record<string, number>>();
-    toEnrich.forEach((m, i) => {
-      const r = insightsResults[i];
-      if (r && r.status === 'fulfilled') {
-        const map: Record<string, number> = {};
-        for (const item of r.value.data) map[item.name] = item.values[0]?.value ?? 0;
-        insightsById.set(m.id, map);
-      }
-    });
+    const snaps = await db.query<{ captured_on: string; followers_count: number | string }>(
+      `SELECT captured_on, followers_count FROM follower_snapshots
+       WHERE connected_account_id = $1 AND followers_count IS NOT NULL
+       ORDER BY captured_on ASC LIMIT 90`,
+      [account.id],
+    );
+    growth = snaps.map((s) => ({
+      date: typeof s.captured_on === 'string' ? s.captured_on.slice(0, 10)
+        : new Date(s.captured_on).toISOString().slice(0, 10),
+      followers: Number(s.followers_count),
+    }));
+  } catch {
+    growth = [];
+  }
 
-    const posts: AnalyticsPost[] = media.map((m) => {
-      const ins = insightsById.get(m.id);
-      const likes = m.like_count ?? ins?.likes ?? 0;
-      const comments = m.comments_count ?? ins?.comments ?? 0;
-      const er = followers > 0 ? (likes + comments) / followers : null;
-      return {
-        id: m.id,
-        shortcode: m.shortcode,
-        permalink: m.permalink,
-        media_type: m.media_type,
-        thumbnail_url: m.thumbnail_url ?? null,
-        media_url: m.media_url ?? null,
-        caption: m.caption ?? null,
-        timestamp: m.timestamp,
-        like_count: likes,
-        comments_count: comments,
-        er,
-        reach: ins?.reach ?? null,
-        plays: ins?.plays ?? null,
-        saved: ins?.saved ?? null,
-        shares: ins?.shares ?? null,
-      };
-    });
+  const media: IGMedia[] = await client.getAllMedia(MEDIA_CAP);
 
-    // ---- Derived aggregate stats -------------------------------------------
-    const enriched = posts.slice(0, INSIGHTS_CAP);
-    const avg = (nums: number[]): number | null =>
-      nums.length ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
+  // Enrich the most recent posts with per-media insights (reach/plays/etc).
+  const toEnrich = media.slice(0, INSIGHTS_CAP);
+  const insightsResults = await Promise.allSettled(
+    toEnrich.map((m) => client.getMediaInsights(m.id, m.media_type)),
+  );
+  const insightsById = new Map<string, Record<string, number>>();
+  toEnrich.forEach((m, i) => {
+    const r = insightsResults[i];
+    if (r && r.status === 'fulfilled') {
+      const map: Record<string, number> = {};
+      for (const item of r.value.data) map[item.name] = item.values[0]?.value ?? 0;
+      insightsById.set(m.id, map);
+    }
+  });
 
-    const reels = enriched.filter((p) => p.media_type === 'VIDEO' || p.media_type === 'REELS');
-    const images = enriched.filter((p) => p.media_type !== 'VIDEO' && p.media_type !== 'REELS');
-    const ers = enriched.map((p) => p.er).filter((v): v is number => v != null);
-
-    const stats = {
-      posts_analyzed: enriched.length,
-      total_media: profile.media_count ?? media.length,
-      avg_likes: avg(enriched.map((p) => p.like_count)),
-      avg_comments: avg(enriched.map((p) => p.comments_count)),
-      avg_er: ers.length ? ers.reduce((s, v) => s + v, 0) / ers.length : null,
-      reels_count: reels.length,
-      images_count: images.length,
-      avg_reel_plays: avg(reels.map((p) => p.plays ?? 0).filter((v) => v > 0)),
-      avg_reach: avg(enriched.map((p) => p.reach ?? 0).filter((v) => v > 0)),
+  const posts: AnalyticsPost[] = media.map((m) => {
+    const ins = insightsById.get(m.id);
+    const likes = m.like_count ?? ins?.likes ?? 0;
+    const comments = m.comments_count ?? ins?.comments ?? 0;
+    const er = followers > 0 ? (likes + comments) / followers : null;
+    return {
+      id: m.id,
+      shortcode: m.shortcode,
+      permalink: m.permalink,
+      media_type: m.media_type,
+      thumbnail_url: m.thumbnail_url ?? null,
+      media_url: m.media_url ?? null,
+      caption: m.caption ?? null,
+      timestamp: m.timestamp,
+      like_count: likes,
+      comments_count: comments,
+      er,
+      reach: ins?.reach ?? null,
+      plays: ins?.plays ?? null,
+      saved: ins?.saved ?? null,
+      shares: ins?.shares ?? null,
     };
+  });
 
-    // ---- Posting cadence ----------------------------------------------------
-    const ts = media
-      .map((m) => new Date(m.timestamp).getTime())
-      .filter((n) => Number.isFinite(n))
-      .sort((a, b) => b - a);
-    let posts_per_week: number | null = null;
-    let avg_days_between_posts: number | null = null;
-    if (ts.length >= 2) {
-      const spanMs = ts[0]! - ts[ts.length - 1]!;
-      const weeks = spanMs / (7 * 86400000);
-      if (weeks > 0) posts_per_week = Math.round((ts.length / weeks) * 10) / 10;
-      const gaps: number[] = [];
-      for (let i = 0; i < ts.length - 1; i++) gaps.push((ts[i]! - ts[i + 1]!) / 86400000);
-      avg_days_between_posts = Math.round((gaps.reduce((s, v) => s + v, 0) / gaps.length) * 10) / 10;
-    }
+  // Audience demographics (best-effort — needs the insights permission).
+  let demographics: DemographicsInput | null = null;
+  try {
+    demographics = await client.getAudienceDemographics();
+  } catch {
+    demographics = null;
+  }
 
-    // ---- Audience demographics ---------------------------------------------
-    let demographics: {
-      gender_age: Record<string, number>;
-      cities: Record<string, number>;
-      countries: Record<string, number>;
-    } | null = null;
-    try {
-      demographics = await client.getAudienceDemographics();
-    } catch {
-      demographics = null;
-    }
+  // Peer-benchmark cohorts + the creator's own niche (best-effort).
+  let cohorts: PeerCohorts = { niche_label: null, tier_ers: [], niche_ers: [] };
+  try {
+    cohorts = await loadPeerCohorts(db, account.creator_id, followers);
+  } catch {
+    cohorts = { niche_label: null, tier_ers: [], niche_ers: [] };
+  }
 
-    // ---- Peer benchmarking --------------------------------------------------
-    // Rank this creator's engagement against similar-tier (and, if the sample
-    // is big enough, same-niche) creators already in our DB. Best-effort.
-    let benchmark: PeerBenchmark | null = null;
-    let niche: string | null = null;   // creator's niche, hoisted for reuse below
-    try {
-      if (followers > 0 && stats.avg_er != null && stats.avg_er > 0) {
-        const { lo, hi } = tierWindow(followers);
-        // The creator's own niche (category first, vision niche fallback).
-        const nicheRows = await db.query<{ primary_category: string | null; vision_niche: string | null }>(
-          `SELECT primary_category, raw_metadata->'vision'->>'niche' AS vision_niche
-             FROM creators WHERE id = $1 LIMIT 1`,
-          [account.creator_id],
-        );
-        const nicheRaw = (nicheRows[0]?.primary_category ?? nicheRows[0]?.vision_niche ?? '').trim().toLowerCase();
-        const nicheLabel = nicheRaw || null;
-        niche = nicheLabel;
-
-        // Same-tier cohort (excluding self), ER as a fraction.
-        const tierRows = await db.query<{ engagement_rate: number | string }>(
-          `SELECT engagement_rate FROM creators
-            WHERE engagement_rate IS NOT NULL AND engagement_rate > 0
-              AND follower_count BETWEEN $1 AND $2
-              AND id <> $3`,
-          [lo, hi, account.creator_id],
-        );
-        const tierErs = tierRows.map((r) => Number(r.engagement_rate)).filter((v) => Number.isFinite(v) && v > 0);
-
-        // Same-tier + same-niche cohort.
-        let nicheErs: number[] = [];
-        if (nicheLabel) {
-          const nicheRowsC = await db.query<{ engagement_rate: number | string }>(
-            `SELECT engagement_rate FROM creators
-              WHERE engagement_rate IS NOT NULL AND engagement_rate > 0
-                AND follower_count BETWEEN $1 AND $2
-                AND id <> $3
-                AND (LOWER(primary_category) = $4 OR LOWER(raw_metadata->'vision'->>'niche') = $4)`,
-            [lo, hi, account.creator_id, nicheLabel],
-          );
-          nicheErs = nicheRowsC.map((r) => Number(r.engagement_rate)).filter((v) => Number.isFinite(v) && v > 0);
-        }
-
-        benchmark = computeBenchmark({
-          your_er: stats.avg_er,
-          tier_label: tierLabel(followers),
-          niche_label: nicheLabel,
-          tier_ers: tierErs,
-          niche_ers: nicheErs,
-        });
-      }
-    } catch {
-      benchmark = null;
-    }
-
-    // Predictive + depth analyses, computed from the posts we already enriched
-    // with insights (no extra Graph calls).
-    const reelForecast = forecastReels(enriched);
-    const contentBreak = contentBreakdown(enriched);
-    const audQuality = audienceQuality(followers, enriched);
-    const contentAnalysis = analyzeContent(enriched);
-    const captionAnalysis = analyzeCaptions(enriched);
-    // Best-time analysis uses ALL fetched posts (more timestamps = better).
-    const postingTime = analyzePostingTime(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
-    // Format × timing grid — which format wins in which posting window.
-    const formatTiming = analyzeFormatTiming(
-      posts.map((p) => ({ media_type: p.media_type, timestamp: p.timestamp, er: p.er })),
-    );
-    // Overall engagement momentum across every format (not just reels).
-    const engagementTrend = analyzeEngagementTrend(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
-    // Prescriptive "next 3 posts" plan, synthesised from the above signals.
-    const contentPlaybook = generateContentPlaybook({
-      content_breakdown: contentBreak,
-      reel_forecast: reelForecast,
-      content_analysis: contentAnalysis,
-      caption_analysis: captionAnalysis,
-      posting_time: postingTime,
-    });
-    // Ready-to-shoot idea variations off the winning format + topic.
-    const contentIdeas = generateContentIdeas({
-      best_type: contentBreak.best_type,
-      niche,
-      top_hashtag: contentAnalysis.hashtags?.[0]?.tag ?? null,
-      caption_best_length: captionAnalysis.available ? captionAnalysis.best_length : null,
-    });
-    // Whole-audience profile narrative from the demographics blob.
-    const audienceInsights = analyzeAudience(demographics);
-    // Forward follower-growth projection from the snapshot history.
-    const growthProjection = projectGrowth(growth, followers);
-    // Reframe that pace around named creator tiers + the rate uplift a climb unlocks.
-    const tierClimb = planTierClimb({ followers, daily_rate: growthProjection.daily_rate, avg_er: stats.avg_er });
-    // Diagnostic: what do the creator's TOP posts have in common vs the rest?
-    const winningFormula = analyzeWinningFormula(
-      posts.map((p) => ({ media_type: p.media_type, caption: p.caption, timestamp: p.timestamp, er: p.er })),
-    );
-    // How RELIABLY (not just how much) the creator posts — cadence rhythm/health.
-    const postingConsistency = analyzePostingConsistency(
-      posts.map((p) => ({ timestamp: p.timestamp, er: p.er })),
-    );
-    // Reusable caption hooks mined from the openers of the creator's best posts.
-    const captionHooks = analyzeCaptionHooks(
-      posts.map((p) => ({ caption: p.caption, er: p.er, permalink: p.permalink })),
-    );
-    // Does caption LENGTH itself track with engagement? Find the sweet-spot band.
-    const captionLength = analyzeCaptionLength(
-      posts.map((p) => ({ caption: p.caption, er: p.er })),
-    );
-    // How PREDICTABLE is engagement post-to-post, and what floor can they promise?
-    const engagementReliability = analyzeEngagementReliability(
-      posts.map((p) => ({ er: p.er })),
-    );
-    // Which FORMAT pays off best per slot, and does the current mix match it?
-    const formatRoi = analyzeFormatRoi(
-      posts.map((p) => ({ media_type: p.media_type, er: p.er, reach: p.reach })),
-    );
-    // Saves/shares — the high-intent actions IG weighs most for distribution.
-    const distributionSignals = analyzeDistributionSignals(
-      enriched.map((p) => ({ saved: p.saved, shares: p.shares, reach: p.reach, likes: p.like_count, comments: p.comments_count })),
-    );
-    // Recurring content themes (pillars) and which ones over/under-perform their share.
-    const contentPillars = analyzeContentPillars(
-      posts.map((p) => ({ caption: p.caption, er: p.er })),
-    );
-    // Sponsorship-readiness: disclosure hygiene, promo balance, language safety.
-    const brandSafety = analyzeBrandSafety(posts.map((p) => ({ caption: p.caption })));
-    // Real best/under-performing posts with plain-English "why" reasoning.
-    const postSpotlight = analyzePostSpotlight(posts.map((p) => ({
-      id: p.id, permalink: p.permalink, thumbnail_url: p.thumbnail_url, media_url: p.media_url,
-      media_type: p.media_type, caption: p.caption, timestamp: p.timestamp,
-      er: p.er, like_count: p.like_count, comments_count: p.comments_count,
-    })));
-    // Hashtag keep/drop/test tiers + optimal tag-count read.
-    const hashtagStrategy = analyzeHashtagStrategy(posts.map((p) => ({ caption: p.caption, er: p.er })));
-    // Day × time-of-day grid → 3 concrete recommended posting slots (IST).
-    const postingSchedule = analyzePostingSchedule(posts.map((p) => ({ timestamp: p.timestamp, er: p.er })));
-    // One-line rollup: blend the sub-scores into a media-kit-ready grade.
-    const scorecard = buildScorecard({
-      benchmark,
-      audience_quality: audQuality,
-      posting_consistency: postingConsistency,
-      brand_safety: brandSafety,
-      growth_projection: growthProjection,
-    });
-
-    // Earned media value — from the same enriched posts + cadence.
-    const avgOf = (nums: number[]): number | null =>
-      nums.length ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
-    const savesVals = enriched.map((p) => p.saved ?? 0).filter((v) => v > 0);
-    const sharesVals = enriched.map((p) => p.shares ?? 0).filter((v) => v > 0);
-    const mediaValue = estimateMediaValue({
-      followers,
-      avg_reach: stats.avg_reach,
-      avg_likes: stats.avg_likes,
-      avg_comments: stats.avg_comments,
-      avg_saves: avgOf(savesVals),
-      avg_shares: avgOf(sharesVals),
-      posts_per_week,
-    });
-
-    // Pitch coach — synthesises the money + performance signals into a
-    // negotiation cheat-sheet. Rate card is computed here to anchor the ask.
-    const rateCard = suggestRateCard(followers, stats.avg_er);
-    // Expand the rate card into a copy-ready deliverable menu (packages + add-ons).
-    const rateMenu = buildRateMenu(rateCard);
-    // Grade the bio/profile against what converts profile-visitors into follows.
-    const profileOptimizer = analyzeProfile({
+  const body = assembleCreatorAnalytics({
+    followers,
+    media_count: profile.media_count ?? null,
+    niche: cohorts.niche_label,
+    posts,
+    growth,
+    demographics,
+    profile: {
       name: profile.name ?? null,
       username: profile.username ?? null,
       biography: profile.biography ?? null,
       website: profile.website ?? null,
-      niche,
-      followers,
-    });
-    const pitchCoach = generatePitchCoach({
-      followers,
-      tier_label: tierLabel(followers),
-      avg_er: stats.avg_er,
-      media_value: mediaValue,
-      benchmark,
-      audience_quality: audQuality,
-      content_breakdown: contentBreak,
-      rate_card: rateCard,
-      posts_per_week,
-    });
+    },
+    cohorts,
+  });
 
-    // Copy-ready pitch message — turns the numbers above into an outreach
-    // email/DM the creator can paste, tweak a couple of {placeholders}, and send.
-    const pitchDraft = generatePitchDraft({
+  return NextResponse.json({
+    connected: true,
+    source: 'live',
+    account: {
+      id: account.id,
+      ig_username: account.ig_username,
+      connected_at: account.connected_at,
+      token_expires_at: account.token_expires_at,
+      connection_status: account.connection_status,
+    },
+    profile: {
+      username: profile.username,
       name: profile.name ?? null,
-      handle: profile.username ?? null,
-      tier_label: tierLabel(followers),
-      niche,
-      followers,
-      avg_er: stats.avg_er,
-      media_value: mediaValue,
-      benchmark,
-      content_breakdown: contentBreak,
-      posts_per_week,
-    });
+      biography: profile.biography ?? null,
+      followers_count: profile.followers_count ?? null,
+      follows_count: profile.follows_count ?? null,
+      media_count: profile.media_count ?? null,
+      profile_picture_url: profile.profile_picture_url ?? null,
+      website: profile.website ?? null,
+    },
+    ...body,
+  });
+}
 
-    // Saves + shares share of interactions — feeds a recommendation.
-    const interTotals = enriched.reduce(
-      (a, p) => {
-        a.total += (p.like_count || 0) + (p.comments_count || 0) + (p.saved ?? 0) + (p.shares ?? 0);
-        a.sv += (p.saved ?? 0) + (p.shares ?? 0);
-        return a;
-      },
-      { total: 0, sv: 0 },
-    );
-    const savesSharesPct = interTotals.total > 0 ? Math.round((interTotals.sv / interTotals.total) * 100) : null;
+// ============================================================
+// DB — measure from the stored `creators` row
+// ============================================================
 
-    const recommendations = generateRecommendations({
-      content_breakdown: contentBreak,
-      reel_forecast: reelForecast,
-      content_analysis: contentAnalysis,
-      audience_quality: audQuality,
-      caption_analysis: captionAnalysis,
-      benchmark,
-      posting_time: postingTime,
-      posts_per_week,
-      saves_shares_pct: savesSharesPct,
-    });
+const num = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const numOrNull = (v: unknown): number | null => {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
-    return NextResponse.json({
-      connected: true,
-      account: {
-        id: account.id,
-        ig_username: account.ig_username,
-        connected_at: account.connected_at,
-        token_expires_at: account.token_expires_at,
-        connection_status: account.connection_status,
-      },
-      profile: {
-        username: profile.username,
-        name: profile.name ?? null,
-        biography: profile.biography ?? null,
-        followers_count: profile.followers_count ?? null,
-        follows_count: profile.follows_count ?? null,
-        media_count: profile.media_count ?? null,
-        profile_picture_url: profile.profile_picture_url ?? null,
-        website: profile.website ?? null,
-      },
-      stats,
-      cadence: { posts_per_week, avg_days_between_posts },
-      growth,
-      recommendations,
-      reel_forecast: reelForecast,
-      content_breakdown: contentBreak,
-      audience_quality: audQuality,
-      content_analysis: contentAnalysis,
-      caption_analysis: captionAnalysis,
-      benchmark,
-      media_value: mediaValue,
-      pitch_coach: pitchCoach,
-      rate_menu: rateMenu,
-      profile_optimizer: profileOptimizer,
-      pitch_draft: pitchDraft,
-      posting_time: postingTime,
-      format_timing: formatTiming,
-      content_playbook: contentPlaybook,
-      content_ideas: contentIdeas,
-      audience_insights: audienceInsights,
-      growth_projection: growthProjection,
-      tier_climb: tierClimb,
-      winning_formula: winningFormula,
-      posting_consistency: postingConsistency,
-      caption_hooks: captionHooks,
-      caption_length: captionLength,
-      engagement_reliability: engagementReliability,
-      format_roi: formatRoi,
-      distribution_signals: distributionSignals,
-      content_pillars: contentPillars,
-      brand_safety: brandSafety,
-      scorecard,
-      post_spotlight: postSpotlight,
-      hashtag_strategy: hashtagStrategy,
-      posting_schedule: postingSchedule,
-      engagement_trend: engagementTrend,
-      posts,
-      demographics,
-    });
-  } catch (err) {
-    // Token expired, insufficient permissions, or IG API error.
-    return NextResponse.json(
-      { connected: false, reason: 'fetch_error', error: (err as Error).message },
-      { status: 200 },
-    );
+// Loose stored shapes — JSONB columns are best-effort across scraper versions.
+interface DbRecentPost {
+  platform_post_id?: string;
+  post_url?: string;
+  post_type?: string | null;
+  caption?: string | null;
+  posted_at?: string | null;
+  view_count?: number | string | null;
+  like_count?: number | string | null;
+  comment_count?: number | string | null;
+  thumbnail_url?: string | null;
+  media_url?: string | null;
+}
+interface DbDemographics {
+  gender?: { male_pct?: number | string | null; female_pct?: number | string | null; other_pct?: number | string | null };
+  age_bands?: Record<string, number | string | null>;
+  top_cities?: { city?: string; pct?: number | string }[];
+  country_india_pct?: number | string | null;
+}
+interface DbCredibility { overall_score?: number | string; badge?: string }
+interface CreatorRow {
+  id: string;
+  handle: string;
+  display_name: string | null;
+  bio: string | null;
+  profile_photo_url: string | null;
+  is_verified: boolean | null;
+  primary_category: string | null;
+  primary_city: string | null;
+  follower_count: number | string | null;
+  following_count: number | string | null;
+  posts_count: number | string | null;
+  avg_likes: number | string | null;
+  avg_views: number | string | null;
+  engagement_rate: number | string | null;
+  recent_posts: DbRecentPost[] | null;
+  audience_demographics: DbDemographics | null;
+  credibility: DbCredibility | null;
+}
+
+const DB_SELECT = `SELECT id, handle, display_name, bio, profile_photo_url, is_verified,
+                          primary_category, primary_city, follower_count, following_count,
+                          posts_count, avg_likes, avg_views, engagement_rate,
+                          recent_posts, audience_demographics, credibility
+                   FROM creators`;
+
+const REEL_TYPES = new Set(['reel', 'reels', 'video']);
+function mediaTypeFor(t: string | null | undefined): string {
+  const s = (t ?? '').toLowerCase();
+  if (REEL_TYPES.has(s)) return 'REELS';
+  if (s === 'carousel' || s === 'carousel_album') return 'CAROUSEL_ALBUM';
+  return 'IMAGE';
+}
+
+// Map stored age-band keys → the "18-24" form analyzeAudience() parses.
+const AGE_LABELS: Record<string, string> = {
+  '18_24': '18-24', '25_34': '25-34', '35_44': '35-44', '45_64': '45-64', '65_plus': '65+',
+};
+
+/**
+ * Reshape our stored `audience_demographics` (gender + age_bands stored
+ * SEPARATELY, not cross-tabbed) into the gender×age blob analyzeAudience()
+ * expects. We approximate the cross-tab by splitting each age band by the
+ * overall gender ratio — enough to surface skew, dominant segment and top age.
+ */
+function reshapeDbDemographics(demo: DbDemographics | null): DemographicsInput | null {
+  if (!demo) return null;
+
+  const female = num(demo.gender?.female_pct);
+  const male = num(demo.gender?.male_pct);
+  const gTotal = female + male;
+
+  const gender_age: Record<string, number> = {};
+  for (const [key, label] of Object.entries(AGE_LABELS)) {
+    const v = num(demo.age_bands?.[key]);
+    if (v <= 0) continue;
+    if (gTotal > 0) {
+      gender_age[`F ${label}`] = v * (female / gTotal);
+      gender_age[`M ${label}`] = v * (male / gTotal);
+    } else {
+      gender_age[label] = v;
+    }
   }
+
+  const cities: Record<string, number> = {};
+  for (const c of demo.top_cities ?? []) {
+    if (c?.city) cities[c.city] = num(c.pct);
+  }
+
+  const countries: Record<string, number> = {};
+  const indiaPct = num(demo.country_india_pct);
+  if (indiaPct > 0) {
+    countries['India'] = indiaPct;
+    if (indiaPct < 100) countries['Other'] = 100 - indiaPct;
+  }
+
+  const has = Object.keys(gender_age).length > 0 || Object.keys(cities).length > 0;
+  return has ? { gender_age, cities, countries } : null;
+}
+
+/**
+ * Build the analytics payload for a creator from their stored DB row. Returns
+ * null when there's no row or nothing measurable (no followers), so the caller
+ * can emit a friendly `connected:false`.
+ */
+async function buildDbAnalytics(
+  db: ReturnType<typeof getBolticClient>,
+  creatorId: string,
+): Promise<Record<string, unknown> | null> {
+  const rows = await db.query<CreatorRow>(`${DB_SELECT} WHERE id = $1 LIMIT 1`, [creatorId]);
+  const row = rows[0] ?? null;
+  if (!row) return null;
+
+  const followers = num(row.follower_count);
+  if (followers <= 0) return null; // nothing measurable without an audience size
+
+  // Normalise stored recent_posts → the shared AnalyticsPost shape. ER is
+  // derived the same way as the live path ((likes+comments)/followers). We have
+  // no per-post reach/saves/shares stored, so those stay null (the sections
+  // that need them degrade gracefully). `plays` comes from view_count.
+  const posts: AnalyticsPost[] = (row.recent_posts ?? [])
+    .map((p, i): AnalyticsPost => {
+      const likes = num(p.like_count);
+      const comments = num(p.comment_count);
+      const plays = numOrNull(p.view_count);
+      const er = followers > 0 ? (likes + comments) / followers : null;
+      return {
+        id: p.platform_post_id ?? `db-${i}`,
+        shortcode: '',
+        permalink: p.post_url ?? `https://instagram.com/${row.handle}`,
+        media_type: mediaTypeFor(p.post_type),
+        thumbnail_url: p.thumbnail_url ?? null,
+        media_url: p.media_url ?? null,
+        caption: p.caption ?? null,
+        timestamp: p.posted_at ?? '',
+        like_count: likes,
+        comments_count: comments,
+        er,
+        reach: null,
+        plays,
+        saved: null,
+        shares: null,
+      };
+    })
+    .filter((p) => p.like_count > 0 || p.comments_count > 0 || p.plays != null);
+
+  const demographics = reshapeDbDemographics(row.audience_demographics);
+
+  // Peer-benchmark cohorts + niche (best-effort).
+  let cohorts: PeerCohorts = { niche_label: null, tier_ers: [], niche_ers: [] };
+  try {
+    cohorts = await loadPeerCohorts(db, creatorId, followers);
+  } catch {
+    cohorts = { niche_label: null, tier_ers: [], niche_ers: [] };
+  }
+  // Prefer the row's own category as the niche label when the cohort loader
+  // couldn't derive one.
+  const niche = cohorts.niche_label ?? (row.primary_category?.trim().toLowerCase() || null);
+
+  const body = assembleCreatorAnalytics({
+    followers,
+    media_count: numOrNull(row.posts_count),
+    niche,
+    posts,
+    growth: [], // no follower-snapshot history for unconnected creators
+    demographics,
+    profile: {
+      name: row.display_name,
+      username: row.handle,
+      biography: row.bio,
+      website: null,
+    },
+    cohorts,
+    // Stored aggregates keep benchmark/media-value/pitch working even when
+    // recent_posts are sparse or missing.
+    fallback: {
+      avg_er: numOrNull(row.engagement_rate),
+      avg_likes: numOrNull(row.avg_likes),
+      avg_reel_plays: numOrNull(row.avg_views),
+    },
+  });
+
+  return {
+    connected: true,
+    source: 'db',
+    account: null,
+    profile: {
+      username: row.handle,
+      name: row.display_name,
+      biography: row.bio,
+      followers_count: followers,
+      follows_count: numOrNull(row.following_count),
+      media_count: numOrNull(row.posts_count),
+      profile_picture_url: row.profile_photo_url,
+      website: null,
+    },
+    ...body,
+  };
 }
