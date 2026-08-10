@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProgram, updateProgram, deleteProgram } from '@/lib/programs-service';
+import { getProgram, updateProgram, deleteProgram, guardBrandProgram, brandMayAccessProgram } from '@/lib/programs-service';
+import { getSession } from '@/lib/auth';
 import type { ProgramStatus } from '@influencer-intel/shared/types';
 
 const dateOrUndef = (v: unknown): string | null | undefined => {
@@ -16,6 +17,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   try {
     const data = await getProgram(id);
     if (!data) return NextResponse.json({ error: 'program not found' }, { status: 404 });
+    const session = await getSession();
+    if (!brandMayAccessProgram(data.program.brand_id, session?.brand_id)) {
+      return NextResponse.json({ error: 'program not found' }, { status: 404 });
+    }
     return NextResponse.json(data);
   } catch (err) {
     console.error('[programs] detail failed:', err);
@@ -29,6 +34,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 });
   try {
+    const guard = await guardBrandProgram(id);
+    if (guard !== 'ok') return NextResponse.json({ error: 'program not found' }, { status: 404 });
     const program = await updateProgram({
       id,
       name: typeof body.name === 'string' ? body.name : undefined,
@@ -51,6 +58,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   try {
+    const guard = await guardBrandProgram(id);
+    if (guard !== 'ok') return NextResponse.json({ error: 'program not found' }, { status: 404 });
     const ok = await deleteProgram(id);
     if (!ok) return NextResponse.json({ error: 'program not found' }, { status: 404 });
     return NextResponse.json({ ok: true });

@@ -8,6 +8,7 @@
 
 import { getBolticClient } from '@influencer-intel/shared/db';
 import type { Program, ProgramRecruit, ProgramStatus, RecruitStatus } from '@influencer-intel/shared/types';
+import { getSession } from './auth';
 
 export interface ProgramSummary extends Program {
   recruit_count: number;
@@ -28,8 +29,13 @@ export interface ProgramRecruitView extends ProgramRecruit {
   quality_score: number | null;
 }
 
-export async function listPrograms(): Promise<ProgramSummary[]> {
+// List campaigns. When `brandId` is given (a signed-in brand), we scope to that
+// brand's own programs PLUS any legacy/unassigned ones (brand_id IS NULL) so the
+// shared agency-demo seed data stays visible and the global-view demo keeps
+// working. Called with no argument (logged-out/preview) it returns everything.
+export async function listPrograms(brandId?: string | null): Promise<ProgramSummary[]> {
   const db = getBolticClient();
+  const where = brandId ? `WHERE p.brand_id = $1 OR p.brand_id IS NULL` : '';
   return db.query<ProgramSummary>(
     `SELECT p.*, p.start_date::text AS start_date, p.end_date::text AS end_date,
             COUNT(pr.id)::int AS recruit_count,
@@ -37,9 +43,26 @@ export async function listPrograms(): Promise<ProgramSummary[]> {
             COALESCE(SUM(pr.rate) FILTER (WHERE pr.status <> 'declined'), 0)::float AS spent
      FROM programs p
      LEFT JOIN program_recruits pr ON pr.program_id = p.id
+     ${where}
      GROUP BY p.id
      ORDER BY p.created_at DESC`,
+    brandId ? [brandId] : undefined,
   );
+}
+
+/**
+ * Ownership gate for a single program, mirroring creatorMayAccess on the
+ * creator side. No brand session → preview/demo, always allowed. With a
+ * session, a program owned by ANOTHER brand is denied; unassigned (null)
+ * demo programs stay open to everyone.
+ */
+export function brandMayAccessProgram(
+  programBrandId: string | null | undefined,
+  sessionBrandId: string | null | undefined,
+): boolean {
+  if (!sessionBrandId) return true; // logged-out preview/demo
+  if (!programBrandId) return true; // legacy/unassigned demo program
+  return programBrandId === sessionBrandId;
 }
 
 export async function createProgram(input: {
@@ -70,6 +93,32 @@ export async function createProgram(input: {
     start_date: input.start_date ?? null,
     end_date: input.end_date ?? null,
   });
+}
+
+// Lightweight owner lookup for the sub-routes (recruits/submissions) that don't
+// need the full program payload. Returns the brand_id, `null` when unassigned,
+// or `undefined` when the program doesn't exist.
+export async function getProgramBrandId(id: string): Promise<string | null | undefined> {
+  const db = getBolticClient();
+  const rows = await db.query<{ brand_id: string | null }>(
+    `SELECT brand_id FROM programs WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  return rows.length ? rows[0]!.brand_id : undefined;
+}
+
+/**
+ * Route-level gate: may the current caller touch this program? Reads the brand
+ * session itself, so routes just branch on the result. Returns:
+ *   'not_found' — program id doesn't exist
+ *   'forbidden' — belongs to a different brand than the signed-in one
+ *   'ok'        — allowed (own program, unassigned demo, or logged-out preview)
+ */
+export async function guardBrandProgram(id: string): Promise<'ok' | 'not_found' | 'forbidden'> {
+  const brandId = await getProgramBrandId(id);
+  if (brandId === undefined) return 'not_found';
+  const session = await getSession();
+  return brandMayAccessProgram(brandId, session?.brand_id) ? 'ok' : 'forbidden';
 }
 
 export async function deleteProgram(id: string): Promise<boolean> {

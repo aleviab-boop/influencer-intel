@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { recruitToProgram, updateRecruit, removeRecruit } from '@/lib/programs-service';
+import { recruitToProgram, updateRecruit, removeRecruit, guardBrandProgram } from '@/lib/programs-service';
 import type { RecruitStatus } from '@influencer-intel/shared/types';
 
 export const runtime = 'nodejs';
 
 const STATUSES: RecruitStatus[] = ['invited', 'contacted', 'recruited', 'declined'];
+
+// A signed-in brand may only manage recruits on its own (or unassigned demo)
+// campaigns; logged-out preview is unaffected. Cross-brand → treated as absent.
+async function denyCrossBrand(id: string): Promise<NextResponse | null> {
+  return (await guardBrandProgram(id)) === 'ok'
+    ? null
+    : NextResponse.json({ error: 'program not found' }, { status: 404 });
+}
 
 // POST /api/programs/[id]/recruits  { creator_id, source_prompt?, relevance_score?, confidence_score?, note? }
 //   → recruit a creator into the program (status starts at 'invited')
@@ -15,6 +23,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json({ error: 'creator_id is required' }, { status: 400 });
   }
   try {
+    const denied = await denyCrossBrand(id);
+    if (denied) return denied;
     const recruit = await recruitToProgram({
       program_id: id,
       creator_id: body.creator_id,
@@ -43,6 +53,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ error: `status must be one of ${STATUSES.join(', ')}` }, { status: 400 });
   }
   try {
+    const denied = await denyCrossBrand(id);
+    if (denied) return denied;
     const recruit = await updateRecruit({
       program_id: id,
       creator_id: body.creator_id,
@@ -75,6 +87,8 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'creator_id is required' }, { status: 400 });
   }
   try {
+    const denied = await denyCrossBrand(id);
+    if (denied) return denied;
     const removed = await removeRecruit({ program_id: id, creator_id: creatorId });
     if (!removed) return NextResponse.json({ error: 'recruit not found' }, { status: 404 });
     return NextResponse.json({ ok: true });

@@ -6,6 +6,7 @@ import {
   type SubmissionReview,
 } from '@/lib/deliverable-submission';
 import { buildProgramReview, type ReviewRecruitInput } from '@/lib/submission-review';
+import { guardBrandProgram } from '@/lib/programs-service';
 
 export const runtime = 'nodejs';
 
@@ -85,6 +86,9 @@ export async function GET(
   const { id } = await ctx.params;
   const db = getBolticClient();
   try {
+    if ((await guardBrandProgram(id)) !== 'ok') {
+      return NextResponse.json({ error: 'program not found' }, { status: 404 });
+    }
     const name = await loadProgramName(db, id);
     if (name === null) return NextResponse.json({ error: 'program not found' }, { status: 404 });
     const recruits = await loadRecruits(db, id);
@@ -117,6 +121,9 @@ export async function PATCH(
 
   const db = getBolticClient();
   try {
+    if ((await guardBrandProgram(id)) !== 'ok') {
+      return NextResponse.json({ error: 'program not found' }, { status: 404 });
+    }
     const rows = await db.query<{ submissions: unknown }>(
       `SELECT submissions FROM program_recruits WHERE program_id = $1 AND creator_id = $2 LIMIT 1`,
       [id, body.creator_id],

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listPrograms, createProgram } from '@/lib/programs-service';
+import { getSession } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
 // GET /api/programs → ProgramSummary[]
+// A signed-in brand sees its own campaigns (+ shared/unassigned demo ones);
+// logged-out preview keeps the global agency view.
 export async function GET() {
   try {
-    const programs = await listPrograms();
+    const session = await getSession();
+    const programs = await listPrograms(session?.brand_id);
     return NextResponse.json({ programs });
   } catch (err) {
     console.error('[programs] list failed:', err);
@@ -23,11 +27,14 @@ export async function POST(req: NextRequest) {
   const budget = body.budget != null && body.budget !== '' && Number.isFinite(Number(body.budget)) ? Number(body.budget) : null;
   const date = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
   try {
+    // Stamp the new campaign with the signed-in brand so it's scoped to them.
+    const session = await getSession();
     const program = await createProgram({
       name: body.name.trim(),
       description: typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null,
       requirements: typeof body.requirements === 'string' && body.requirements.trim() ? body.requirements.trim() : null,
       source_prompt: typeof body.source_prompt === 'string' ? body.source_prompt : null,
+      brand_id: session?.brand_id ?? null,
       budget,
       start_date: date(body.start_date),
       end_date: date(body.end_date),
