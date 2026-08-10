@@ -59,8 +59,8 @@ export default function CampaignDetail() {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
-        <Link href="/creator" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        <Link href="/creator" className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           Back to dashboard
         </Link>
 
@@ -70,7 +70,7 @@ export default function CampaignDetail() {
           <div className="text-center py-20">
             <h1 className="text-xl font-bold text-ink-900">Campaign not found</h1>
             <p className="mt-2 text-[14px] text-ink-600">This campaign may have closed. Browse the open ones on your dashboard.</p>
-            <Link href="/creator" className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-lg" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>Back to dashboard</Link>
+            <Link href="/creator" className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-lg transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>Back to dashboard</Link>
           </div>
         ) : (
           <div className="rounded-3xl bg-white border border-border shadow-card overflow-hidden">
@@ -109,14 +109,14 @@ export default function CampaignDetail() {
 
               <div className="mt-8">
                 {!handle ? (
-                  <button onClick={() => router.push('/creator')} className="w-full px-5 py-3 rounded-xl text-[15px] font-semibold text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                  <button onClick={() => router.push('/creator')} className="w-full px-5 py-3 rounded-xl text-[15px] font-semibold text-white transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
                     Sign in to apply
                   </button>
                 ) : (
                   <button
                     onClick={apply}
                     disabled={applied || applying}
-                    className={`w-full px-5 py-3 rounded-xl text-[15px] font-semibold transition-all ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white hover:brightness-105'}`}
+                    className={`w-full px-5 py-3 rounded-xl text-[15px] font-semibold transition-all duration-200 ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white hover:brightness-105 hover:-translate-y-0.5'}`}
                     style={applied ? undefined : { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                   >
                     {applied ? 'Applied ✓ — the brand has your profile' : applying ? 'Applying…' : 'Apply now'}

@@ -96,8 +96,8 @@ function Notifications() {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
-        <Link href={handle ? `/creator?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator'} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        <Link href={handle ? `/creator?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator'} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5 transition-colors duration-200">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           Back to dashboard
         </Link>
 
@@ -118,7 +118,7 @@ function Notifications() {
             </div>
             <h2 className="text-[16px] font-semibold text-ink-900">Nothing needs you right now</h2>
             <p className="mt-1.5 text-[13.5px] text-ink-500 max-w-sm mx-auto">Invites, deadlines and payment updates will show up here as your deals move.</p>
-            <Link href="/creator" className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>Browse open campaigns</Link>
+            <Link href="/creator" className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>Browse open campaigns</Link>
           </div>
         ) : (
           <div className="mt-6 space-y-2.5">
@@ -138,7 +138,7 @@ function NotificationRow({ n, handle }: { n: NotificationView; handle: string | 
   return (
     <Link
       href={relTo(n.href, handle)}
-      className="flex items-start gap-3.5 rounded-2xl bg-white border border-border shadow-card p-4 hover:border-[#d9d4f5] transition-colors"
+      className="group flex items-start gap-3.5 rounded-2xl bg-white border border-border shadow-card p-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
     >
       <div className="mt-0.5 w-9 h-9 shrink-0 rounded-xl grid place-items-center" style={{ background: `${k.c}14`, color: k.c }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{k.icon}</svg>

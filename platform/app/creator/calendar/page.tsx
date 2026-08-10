@@ -103,8 +103,8 @@ function Calendar() {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8">
-        <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5 transition-colors duration-200">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           Back to dashboard
         </Link>
 
@@ -115,11 +115,11 @@ function Calendar() {
           </div>
           {data && (
             <div className="flex items-center gap-1.5">
-              <button onClick={() => go(data.prev_month)} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5]" aria-label="Previous month">
+              <button onClick={() => go(data.prev_month)} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5] transition-colors duration-200" aria-label="Previous month">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
               </button>
               <div className="text-[14px] font-semibold text-ink-800 w-[130px] text-center tabular-nums">{data.month_label}</div>
-              <button onClick={() => go(data.next_month)} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5]" aria-label="Next month">
+              <button onClick={() => go(data.next_month)} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5] transition-colors duration-200" aria-label="Next month">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
               </button>
             </div>
@@ -208,7 +208,7 @@ function Calendar() {
                     <Link
                       key={`${e.deal_id}:${e.date}`}
                       href={dealHref(e.deal_id)}
-                      className="flex items-center gap-3 rounded-xl bg-white border border-border shadow-card px-4 py-3 hover:border-[#d9d4f5] transition-colors"
+                      className="group flex items-center gap-3 rounded-xl bg-white border border-border shadow-card px-4 py-3 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
                     >
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: STATE_C[e.state] }} />
                       <div className="min-w-0 flex-1">

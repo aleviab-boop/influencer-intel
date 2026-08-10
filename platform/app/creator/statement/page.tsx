@@ -81,8 +81,8 @@ function Statement() {
       <div className="print:hidden"><MarketingNav /></div>
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
         <div className="print:hidden">
-          <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">
+            <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             Back to dashboard
           </Link>
 
@@ -93,11 +93,11 @@ function Statement() {
             </div>
             {data && (
               <div className="flex items-center gap-1.5">
-                <button onClick={() => go(data.prev_fy)} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5]" aria-label="Previous financial year">
+                <button onClick={() => go(data.prev_fy)} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5] transition-colors duration-200" aria-label="Previous financial year">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
                 </button>
                 <div className="text-[14px] font-semibold text-ink-800 w-[120px] text-center tabular-nums">{data.fy_label}</div>
-                <button onClick={() => go(data.next_fy)} disabled={data.is_current_fy} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5] disabled:opacity-40 disabled:hover:border-border" aria-label="Next financial year">
+                <button onClick={() => go(data.next_fy)} disabled={data.is_current_fy} className="w-9 h-9 grid place-items-center rounded-lg border border-border bg-white text-ink-600 hover:border-[#d9d4f5] transition-colors duration-200 disabled:opacity-40 disabled:hover:border-border" aria-label="Next financial year">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
                 </button>
               </div>
@@ -111,7 +111,7 @@ function Statement() {
           <div className="mt-8 text-center py-16 rounded-2xl border border-dashed border-border bg-white">
             <h2 className="text-[16px] font-semibold text-ink-900">Nothing to report yet</h2>
             <p className="mt-1.5 text-[13.5px] text-ink-500 max-w-sm mx-auto">Once brands mark your deals as paid, your financial-year earnings will roll up here for tax time.</p>
-            <Link href={handle ? `/creator/deals?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator/deals'} className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>View your deals</Link>
+            <Link href={handle ? `/creator/deals?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator/deals'} className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>View your deals</Link>
           </div>
         ) : (
           <div className="mt-6 space-y-5">
@@ -179,7 +179,7 @@ function Statement() {
 
             {/* Print */}
             <div className="print:hidden flex justify-end">
-              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+              <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" /></svg>
                 Save as PDF
               </button>

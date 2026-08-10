@@ -55,8 +55,8 @@ function Setup() {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-8">
-        <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           Back to dashboard
         </Link>
 
@@ -92,7 +92,7 @@ function Setup() {
                 <div className="text-[13px] text-ink-500 mt-1">{data.done_count} of {data.total_count} steps done</div>
                 {data.next && (
                   <Link href={withHandle(data.next.href, handle)}
-                    className="mt-3 inline-block px-4 py-2 text-[13px] font-semibold text-white rounded-xl"
+                    className="mt-3 inline-block px-4 py-2 text-[13px] font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5"
                     style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
                     Next: {data.next.label} →
                   </Link>
@@ -104,7 +104,7 @@ function Setup() {
             <div className="mt-5 space-y-2.5">
               {data.items.map((it) => (
                 <Link key={it.key} href={withHandle(it.href, handle)}
-                  className="flex items-start gap-3.5 rounded-2xl bg-white border border-border shadow-card p-4 hover:border-[#d9d4f5] transition-colors">
+                  className="group flex items-start gap-3.5 rounded-2xl bg-white border border-border shadow-card p-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]">
                   <div className="mt-0.5 w-6 h-6 shrink-0 rounded-full grid place-items-center border-2"
                     style={it.done ? { background: '#16a34a', borderColor: '#16a34a' } : { borderColor: '#d6d3e8' }}>
                     {it.done && (

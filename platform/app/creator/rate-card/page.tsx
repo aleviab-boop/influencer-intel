@@ -106,8 +106,8 @@ function RateCardView() {
       <div className="print:hidden"><MarketingNav /></div>
       <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-8">
         <div className="print:hidden">
-          <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">
+            <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
             Back to dashboard
           </Link>
           <h1 className="text-2xl font-bold text-ink-900">Your rate card</h1>
@@ -131,7 +131,7 @@ function RateCardView() {
                 <div className="text-[12px] text-ink-500 mt-0.5">{data.basis}</div>
               </div>
               {!editing && (
-                <button onClick={() => setEditing(true)} className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl border border-border text-ink-700 hover:border-[#d9d4f5]">
+                <button onClick={() => setEditing(true)} className="shrink-0 px-4 py-2 text-sm font-semibold rounded-xl border border-border text-ink-700 hover:border-[#d9d4f5] transition-colors duration-200">
                   Edit rates
                 </button>
               )}
@@ -225,14 +225,14 @@ function RateCardView() {
 
             {editing ? (
               <div className="flex items-center gap-3">
-                <button onClick={save} disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl disabled:opacity-60" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                <button onClick={save} disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5 disabled:opacity-60" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
                   {saving ? 'Saving…' : 'Save rate card'}
                 </button>
                 <button onClick={() => { setEditing(false); seedDraft(data); }} className="text-[13px] font-semibold text-ink-500">Cancel</button>
               </div>
             ) : (
               <div className="print:hidden flex justify-end">
-                <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border text-ink-700 hover:border-[#d9d4f5]">
+                <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border border-border text-ink-700 hover:border-[#d9d4f5] transition-colors duration-200">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z" /></svg>
                   Save as PDF
                 </button>

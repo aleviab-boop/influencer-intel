@@ -67,8 +67,8 @@ function Applications() {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
-        <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5 transition-colors duration-200">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           Back to dashboard
         </Link>
 
@@ -84,7 +84,7 @@ function Applications() {
             </div>
             <h2 className="text-[16px] font-semibold text-ink-900">No applications yet</h2>
             <p className="mt-1.5 text-[13.5px] text-ink-500 max-w-sm mx-auto">When you apply to an open campaign, it\u2019ll appear here so you can track whether the brand has responded.</p>
-            <Link href={backHref} className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>Browse open campaigns</Link>
+            <Link href={backHref} className="inline-block mt-5 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>Browse open campaigns</Link>
           </div>
         ) : (
           <>
@@ -101,7 +101,7 @@ function Applications() {
               {data.items.map((a) => {
                 const oc = OUTCOME_C[a.outcome];
                 return (
-                  <Link key={a.program_id} href={hrefFor(a)} className="block rounded-2xl bg-white border border-border shadow-card p-5 hover:border-[#d9d4f5] transition-colors">
+                  <Link key={a.program_id} href={hrefFor(a)} className="group block rounded-2xl bg-white border border-border shadow-card p-5 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-[15px] font-semibold text-ink-900 truncate">{a.program}</div>

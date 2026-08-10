@@ -77,8 +77,8 @@ function Brief({ id }: { id: string }) {
     <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
       <MarketingNav />
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
-        <Link href={backHref} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">
+          <svg className="transition-transform duration-300 group-hover:-translate-x-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           Back to deals
         </Link>
 
@@ -115,7 +115,7 @@ function Brief({ id }: { id: string }) {
             {data.rate > 0 && data.stage !== 'invited' && (
               <Link
                 href={`/creator/deals/${encodeURIComponent(data.id)}/invoice${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`}
-                className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 hover:border-[#d9d4f5] transition-colors"
+                className="group mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: ACCENT_SOFT, color: ACCENT }}>
@@ -136,7 +136,7 @@ function Brief({ id }: { id: string }) {
             {data.stage !== 'invited' && (
               <Link
                 href={`/creator/deals/${encodeURIComponent(data.id)}/submit${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`}
-                className="mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 hover:border-[#d9d4f5] transition-colors"
+                className="group mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: ACCENT_SOFT, color: ACCENT }}>
