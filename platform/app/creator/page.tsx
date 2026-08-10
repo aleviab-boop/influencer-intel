@@ -59,6 +59,21 @@ export default function CreatorPortal() {
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('creator_handle') : null;
     const h = (fromUrl || stored || '').trim();
     if (h) { setHandle(h); if (params.get('connected')) localStorage.setItem('creator_handle', h.replace(/^@/, '')); }
+
+    // The signed ii_creator cookie (minted on Instagram OAuth) is authoritative.
+    // Recognise a logged-in creator even with no ?handle and empty localStorage,
+    // and hydrate localStorage so every sub-page (which reads it) works too.
+    fetch('/api/creator/session')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.authenticated && d.handle) {
+          const clean = String(d.handle).replace(/^@/, '');
+          try { localStorage.setItem('creator_handle', clean); } catch { /* ignore */ }
+          setHandle(clean); // session wins over any stray ?handle
+        }
+      })
+      .catch(() => { /* not signed in as a creator */ });
+
     fetch('/api/oauth/status').then((r) => r.json()).then((d) => setIgConfigured(!!d.configured)).catch(() => setIgConfigured(false));
   }, []);
 
@@ -106,6 +121,8 @@ export default function CreatorPortal() {
   }
   function signOut() {
     localStorage.removeItem('creator_handle');
+    // Clear the cookie session too, else the next load re-authenticates.
+    void fetch('/api/creator/session', { method: 'DELETE' }).catch(() => { /* ignore */ });
     window.history.replaceState(null, '', '/creator');
     setHandle(null);
     setProfile(null);
@@ -237,6 +254,11 @@ export default function CreatorPortal() {
               <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" />
               <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" />
               <QuickLink href={`/creator/applications?handle=${encodeURIComponent(profile.handle)}`} label="Applications" desc="Campaigns you applied to" />
+              <QuickLink href={`/creator/calendar?handle=${encodeURIComponent(profile.handle)}`} label="Calendar" desc="Deadlines by month" />
+              <QuickLink href={`/creator/goal?handle=${encodeURIComponent(profile.handle)}`} label="Monthly goal" desc="Track your target" />
+              <QuickLink href={`/creator/statement?handle=${encodeURIComponent(profile.handle)}`} label="Earnings statement" desc="FY totals & TDS" />
+              <QuickLink href={`/creator/rate-card?handle=${encodeURIComponent(profile.handle)}`} label="Rate card" desc="Set your prices" />
+              <QuickLink href={`/creator/payout?handle=${encodeURIComponent(profile.handle)}`} label="Payout details" desc="Where you get paid" />
               <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" />
               <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" />
               <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" />
