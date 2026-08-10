@@ -219,9 +219,9 @@ export default function CreatorPortal() {
           <>
             {/* Profile header */}
             <div className="rounded-3xl bg-white border border-border shadow-card overflow-hidden mb-8">
-              <div className="relative h-28" style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #8f6cff 55%, #b199ff 100%)` }}>
+              <div className="relative h-24" style={{ background: `linear-gradient(120deg, ${ACCENT} 0%, #8f6cff 55%, #b199ff 100%)` }}>
                 {/* soft light sheen */}
-                <div className="absolute inset-0" style={{ background: 'radial-gradient(120% 140% at 88% -30%, rgba(255,255,255,0.38), transparent 55%)' }} />
+                <div className="absolute inset-0" style={{ background: 'radial-gradient(130% 160% at 90% -40%, rgba(255,255,255,0.4), transparent 55%)' }} />
                 <button
                   onClick={signOut}
                   className="absolute top-4 right-4 z-10 rounded-full border border-white/30 bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/90 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 hover:text-white"
@@ -229,26 +229,26 @@ export default function CreatorPortal() {
                   Sign out
                 </button>
               </div>
-              <div className="px-5 sm:px-7 pb-6 -mt-14">
-                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
+              <div className="px-5 sm:px-7 pb-6 -mt-11">
+                <div className="flex items-end gap-4">
                   <Avatar p={profile} />
-                  <div className="min-w-0 flex-1 sm:pb-1.5">
-                    <div className="flex items-center gap-2 text-[22px] font-bold text-ink-900">
-                      <span className="truncate">{profile.display_name || `@${profile.handle}`}</span>
+                  <div className="min-w-0 flex-1 pb-1">
+                    <div className="flex items-center gap-2 text-[21px] font-bold leading-tight text-ink-900">
+                      <span className="truncate">{profile.display_name?.trim() || `@${profile.handle}`}</span>
                       {profile.is_verified && (
                         <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-[12px] leading-none text-white" style={{ background: ACCENT }}>✓</span>
                       )}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-400">
-                      <span className="font-medium text-ink-500">@{profile.handle}</span>
-                      {profile.primary_category && (<><span className="text-ink-300">·</span><span>{profile.primary_category}</span></>)}
-                      {profile.primary_city && (<><span className="text-ink-300">·</span><span>{profile.primary_city}</span></>)}
+                    <div className="mt-1 text-[13px] text-ink-400">
+                      {[profile.display_name?.trim() ? `@${profile.handle}` : null, profile.primary_category, profile.primary_city]
+                        .filter(Boolean)
+                        .join('  ·  ')}
                     </div>
                   </div>
                 </div>
 
                 {/* Stats — visible on every screen size */}
-                <div className="mt-6 grid grid-cols-3 gap-2.5 sm:gap-3">
+                <div className="mt-5 grid grid-cols-3 gap-2.5 sm:gap-3">
                   <StatCard label="Followers" value={fmt(profile.follower_count)} />
                   <StatCard label="Engagement" value={erPct(profile.engagement_rate)} />
                   <StatCard label="Quality" value={profile.cred_score ?? '—'} accent />
@@ -423,12 +423,12 @@ function Avatar({ p }: { p: Profile }) {
         src={src}
         alt={p.handle}
         onError={() => setErr(true)}
-        className="h-24 w-24 shrink-0 rounded-full object-cover bg-[#eee] ring-4 ring-white shadow-[0_8px_24px_rgba(20,20,40,0.16)]"
+        className="h-[84px] w-[84px] shrink-0 rounded-full object-cover bg-[#eee] ring-4 ring-white shadow-[0_8px_22px_rgba(20,20,40,0.16)]"
       />
     );
   }
   return (
-    <div className="grid h-24 w-24 shrink-0 place-items-center rounded-full text-[28px] font-semibold text-white ring-4 ring-white shadow-[0_8px_24px_rgba(20,20,40,0.16)]" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
+    <div className="grid h-[84px] w-[84px] shrink-0 place-items-center rounded-full text-[27px] font-semibold text-white ring-4 ring-white shadow-[0_8px_22px_rgba(20,20,40,0.16)]" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
       {(p.display_name || p.handle).charAt(0).toUpperCase()}
     </div>
   );
