@@ -18,7 +18,11 @@ export async function middleware(req: NextRequest) {
   // every /api/creator route via getCreatorSession). Preview/demo links that
   // carry ?handle or ?account are always let through so shared demos keep
   // working without a login. The standalone analytics-preview is exempt.
-  if (pathname.startsWith('/creator') && !pathname.startsWith('/creator/analytics-preview')) {
+  if (pathname.startsWith('/creator')) {
+    // The standalone analytics-preview is a public/shareable page — always let
+    // it through (it must NOT fall into the admin gate below).
+    if (pathname.startsWith('/creator/analytics-preview')) return NextResponse.next();
+
     const hasSession = !!req.cookies.get(CREATOR_COOKIE)?.value;
     const hasPreview = req.nextUrl.searchParams.has('handle') || req.nextUrl.searchParams.has('account');
     if (hasSession || hasPreview) return NextResponse.next();
