@@ -229,10 +229,10 @@ export default function CreatorPortal() {
                   Sign out
                 </button>
               </div>
-              <div className="px-5 sm:px-7 pb-6 -mt-11">
+              <div className="relative z-10 px-5 sm:px-7 pb-6 -mt-9">
                 <div className="flex items-end gap-4">
                   <Avatar p={profile} />
-                  <div className="min-w-0 flex-1 pb-1">
+                  <div className="min-w-0 flex-1 pb-0.5">
                     <div className="flex items-center gap-2 text-[21px] font-bold leading-tight text-ink-900">
                       <span className="truncate">{profile.display_name?.trim() || `@${profile.handle}`}</span>
                       {profile.is_verified && (
