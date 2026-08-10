@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type ReactNode } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
@@ -32,6 +32,26 @@ const STATUS_META: Record<string, { t: string; c: string; b: string }> = {
   contacted: { t: 'In conversation', c: '#0ea5e9', b: '#f0f9ff' },
   recruited: { t: 'Recruited 🎉', c: '#10b981', b: '#f0fdf4' },
   declined: { t: 'Not selected', c: '#f43f5e', b: '#fff1f2' },
+};
+
+// Shared stroke styling for the quick-link glyphs.
+const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+const Svg = ({ children }: { children: ReactNode }) => (
+  <svg width="19" height="19" viewBox="0 0 24 24" {...S}>{children}</svg>
+);
+const ICONS: Record<string, ReactNode> = {
+  notifications: <Svg><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></Svg>,
+  deals: <Svg><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /></Svg>,
+  applications: <Svg><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" /></Svg>,
+  calendar: <Svg><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Svg>,
+  goal: <Svg><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></Svg>,
+  statement: <Svg><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 13h6M9 17h4" /></Svg>,
+  rate: <Svg><path d="M20.6 13.4 11 3.8A2 2 0 0 0 9.6 3H4a1 1 0 0 0-1 1v5.6A2 2 0 0 0 3.6 11l9.6 9.6a2 2 0 0 0 2.8 0l4.6-4.6a2 2 0 0 0 0-2.6z" /><circle cx="7" cy="7" r="1" /></Svg>,
+  payout: <Svg><path d="M20 12V7H5a2 2 0 0 1 0-4h13v4" /><path d="M3 5v14a2 2 0 0 0 2 2h15v-4" /><path d="M18 12a2 2 0 0 0 0 4h3v-4z" /></Svg>,
+  analytics: <Svg><path d="M3 3v18h18" /><path d="M7 15l3-3 3 2 4-5" /></Svg>,
+  mediakit: <Svg><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8" cy="12" r="2" /><path d="M13 10h5M13 14h3" /></Svg>,
+  settings: <Svg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-1.1 2.7V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" /></Svg>,
+  campaigns: <Svg><path d="m3 11 18-5v12L3 14z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></Svg>,
 };
 
 export default function CreatorPortal() {
@@ -214,7 +234,7 @@ export default function CreatorPortal() {
                       {profile.primary_city ? ` · ${profile.primary_city}` : ''}
                     </div>
                   </div>
-                  <button onClick={signOut} className="text-[12px] font-medium text-ink-400 hover:text-ink-700 shrink-0 pb-1">Sign out</button>
+                  <button onClick={signOut} className="text-[12px] font-medium text-ink-400 shrink-0 rounded-full border border-transparent px-3 py-1.5 transition-all duration-200 hover:text-ink-800 hover:border-border hover:bg-white">Sign out</button>
                 </div>
 
                 {/* Stats — visible on every screen size */}
@@ -229,7 +249,7 @@ export default function CreatorPortal() {
             {/* Setup nudge — only while the profile is incomplete */}
             {setup && setup.score < 100 && (
               <Link href={`/creator/setup?handle=${encodeURIComponent(profile.handle)}`}
-                className="flex items-center gap-4 rounded-2xl border shadow-card px-5 py-4 mb-4 hover:brightness-[1.01] transition-all"
+                className="group flex items-center gap-4 rounded-2xl border shadow-card px-5 py-4 mb-4 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_16px_44px_rgba(108,77,246,0.18)]"
                 style={{ borderColor: ACCENT, background: ACCENT_SOFT }}>
                 <div className="relative shrink-0" style={{ width: 44, height: 44 }}>
                   <svg width="44" height="44" viewBox="0 0 44 44">
@@ -245,24 +265,27 @@ export default function CreatorPortal() {
                     {setup.next ? `Next: ${setup.next.label}` : `${setup.done_count} of ${setup.total_count} steps done`}
                   </div>
                 </div>
-                <span className="shrink-0 text-[13px] font-semibold" style={{ color: ACCENT }}>Finish →</span>
+                <span className="shrink-0 text-[13px] font-semibold inline-flex items-center gap-1" style={{ color: ACCENT }}>
+                  Finish
+                  <span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
+                </span>
               </Link>
             )}
 
             {/* Quick links to the creator's own workspaces */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-8">
-              <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" />
-              <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" />
-              <QuickLink href={`/creator/applications?handle=${encodeURIComponent(profile.handle)}`} label="Applications" desc="Campaigns you applied to" />
-              <QuickLink href={`/creator/calendar?handle=${encodeURIComponent(profile.handle)}`} label="Calendar" desc="Deadlines by month" />
-              <QuickLink href={`/creator/goal?handle=${encodeURIComponent(profile.handle)}`} label="Monthly goal" desc="Track your target" />
-              <QuickLink href={`/creator/statement?handle=${encodeURIComponent(profile.handle)}`} label="Earnings statement" desc="FY totals & TDS" />
-              <QuickLink href={`/creator/rate-card?handle=${encodeURIComponent(profile.handle)}`} label="Rate card" desc="Set your prices" />
-              <QuickLink href={`/creator/payout?handle=${encodeURIComponent(profile.handle)}`} label="Payout details" desc="Where you get paid" />
-              <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" />
-              <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" />
-              <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" />
-              <QuickLink href="/creator" label="Campaigns" desc="Browse & apply" />
+              <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" icon={ICONS.notifications} />
+              <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" icon={ICONS.deals} />
+              <QuickLink href={`/creator/applications?handle=${encodeURIComponent(profile.handle)}`} label="Applications" desc="Campaigns you applied to" icon={ICONS.applications} />
+              <QuickLink href={`/creator/calendar?handle=${encodeURIComponent(profile.handle)}`} label="Calendar" desc="Deadlines by month" icon={ICONS.calendar} />
+              <QuickLink href={`/creator/goal?handle=${encodeURIComponent(profile.handle)}`} label="Monthly goal" desc="Track your target" icon={ICONS.goal} />
+              <QuickLink href={`/creator/statement?handle=${encodeURIComponent(profile.handle)}`} label="Earnings statement" desc="FY totals & TDS" icon={ICONS.statement} />
+              <QuickLink href={`/creator/rate-card?handle=${encodeURIComponent(profile.handle)}`} label="Rate card" desc="Set your prices" icon={ICONS.rate} />
+              <QuickLink href={`/creator/payout?handle=${encodeURIComponent(profile.handle)}`} label="Payout details" desc="Where you get paid" icon={ICONS.payout} />
+              <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" icon={ICONS.analytics} />
+              <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" icon={ICONS.mediakit} />
+              <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" icon={ICONS.settings} />
+              <QuickLink href="/creator" label="Campaigns" desc="Browse & apply" icon={ICONS.campaigns} />
             </div>
 
             {/* My applications */}
@@ -297,7 +320,7 @@ export default function CreatorPortal() {
                     const applied = appliedIds.has(c.id);
                     const hasBudget = c.budget != null && Number(c.budget) > 0;
                     return (
-                      <div key={c.id} className="rounded-2xl bg-white border border-border shadow-card p-5 flex flex-col hover:-translate-y-0.5 hover:shadow-[0_10px_40px_rgba(108,77,246,0.12)] transition-all">
+                      <div key={c.id} className="group rounded-2xl bg-white border border-border shadow-card p-5 flex flex-col transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_48px_rgba(108,77,246,0.16)]">
                         <Link href={`/creator/campaigns/${c.id}`} className="font-semibold text-ink-900 text-[15px] hover:underline" style={{ textDecorationColor: ACCENT }}>{c.name}</Link>
                         <p className="mt-1 text-[13px] text-ink-500 leading-relaxed line-clamp-3 flex-1">{c.description || 'A brand campaign looking for creators like you.'}</p>
                         <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
@@ -334,19 +357,41 @@ export default function CreatorPortal() {
   );
 }
 
-function QuickLink({ href, label, desc }: { href: string; label: string; desc: string }) {
+function QuickLink({ href, label, desc, icon }: { href: string; label: string; desc: string; icon?: ReactNode }) {
   return (
-    <Link href={href} className="rounded-2xl border border-border bg-white shadow-card px-4 py-3.5 hover:-translate-y-0.5 hover:shadow-[0_10px_40px_rgba(108,77,246,0.12)] transition-all">
-      <div className="text-[14px] font-semibold text-ink-900">{label}</div>
-      <div className="text-[11.5px] text-ink-400 mt-0.5">{desc}</div>
+    <Link
+      href={href}
+      className="group relative flex items-start gap-3 rounded-2xl border border-border bg-white shadow-card px-4 py-3.5 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#d9d1fb] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
+    >
+      {icon && (
+        <span
+          className="shrink-0 grid place-items-center w-9 h-9 rounded-xl transition-all duration-300 ease-out group-hover:scale-110 group-hover:-rotate-3"
+          style={{ background: ACCENT_SOFT, color: ACCENT }}
+        >
+          {icon}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1 text-[14px] font-semibold text-ink-900">
+          <span className="truncate transition-colors duration-300 group-hover:text-[#6C4DF6]">{label}</span>
+          <span
+            className="opacity-0 -translate-x-1 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-x-0"
+            style={{ color: ACCENT }}
+            aria-hidden
+          >
+            →
+          </span>
+        </div>
+        <div className="text-[11.5px] text-ink-400 mt-0.5 truncate">{desc}</div>
+      </div>
     </Link>
   );
 }
 
 function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="rounded-2xl border border-border bg-[#fafafc] px-3 py-3 text-center">
-      <div className="text-[20px] font-bold tabular-nums leading-none" style={accent ? { color: ACCENT } : undefined}>{value}</div>
+    <div className="group rounded-2xl border border-border bg-[#fafafc] px-3 py-3 text-center transition-all duration-300 ease-out hover:-translate-y-0.5 hover:bg-white hover:border-[#e3def9] hover:shadow-[0_10px_30px_rgba(108,77,246,0.10)]">
+      <div className="text-[20px] font-bold tabular-nums leading-none transition-transform duration-300 group-hover:scale-105" style={accent ? { color: ACCENT } : undefined}>{value}</div>
       <div className="mt-1.5 text-[10.5px] uppercase tracking-wider text-ink-400">{label}</div>
     </div>
   );
