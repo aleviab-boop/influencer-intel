@@ -14,12 +14,20 @@ export interface MetricAccuracy {
   within_50pct: number | null;  // fraction within ±50%
 }
 
+export interface FormatAccuracy {
+  likes: MetricAccuracy;
+  views: MetricAccuracy;
+}
+
 export interface ForecastAccuracy {
   total_outcomes: number;       // rows in the log
   scored_outcomes: number;      // rows usable for at least one metric
   likes: MetricAccuracy;
   views: MetricAccuracy;
   er: MetricAccuracy;
+  // Per-format breakdown (reel / photo / carousel), for format-specific
+  // calibration. Only formats that appear in the log are present.
+  by_format: Record<string, FormatAccuracy>;
   last_recorded_at: string | null;
 }
 
@@ -30,6 +38,7 @@ interface OutcomeRow {
   actual_likes: number | string | null;
   actual_views: number | string | null;
   actual_er: number | string | null;
+  format: string | null;
   created_at: string;
 }
 
@@ -76,14 +85,19 @@ function metricAccuracy(pairs: Array<{ predicted: number | null; actual: number 
 export async function computeForecastAccuracy(): Promise<ForecastAccuracy> {
   const empty: MetricAccuracy = { n: 0, median_ape: null, median_bias: null, within_25pct: null, within_50pct: null };
   const blank: ForecastAccuracy = {
-    total_outcomes: 0, scored_outcomes: 0, likes: empty, views: empty, er: empty, last_recorded_at: null,
+    total_outcomes: 0, scored_outcomes: 0, likes: empty, views: empty, er: empty, by_format: {}, last_recorded_at: null,
   };
+
+  const likesViews = (rs: OutcomeRow[]): FormatAccuracy => ({
+    likes: metricAccuracy(rs.map((r) => ({ predicted: num(r.predicted_likes), actual: num(r.actual_likes) }))),
+    views: metricAccuracy(rs.map((r) => ({ predicted: num(r.predicted_views), actual: num(r.actual_views) }))),
+  });
 
   try {
     const db = getBolticClient();
     const rows = await db.query<OutcomeRow>(
       `SELECT predicted_likes, predicted_views, predicted_er,
-              actual_likes, actual_views, actual_er, created_at
+              actual_likes, actual_views, actual_er, format, created_at
          FROM post_outcomes`,
     );
     if (rows.length === 0) return blank;
@@ -91,6 +105,12 @@ export async function computeForecastAccuracy(): Promise<ForecastAccuracy> {
     const likes = metricAccuracy(rows.map((r) => ({ predicted: num(r.predicted_likes), actual: num(r.actual_likes) })));
     const views = metricAccuracy(rows.map((r) => ({ predicted: num(r.predicted_views), actual: num(r.actual_views) })));
     const er = metricAccuracy(rows.map((r) => ({ predicted: num(r.predicted_er), actual: num(r.actual_er) })));
+
+    const byFormat: Record<string, FormatAccuracy> = {};
+    for (const fmt of ['reel', 'photo', 'carousel']) {
+      const rs = rows.filter((r) => r.format === fmt);
+      if (rs.length > 0) byFormat[fmt] = likesViews(rs);
+    }
 
     const scored = rows.filter((r) =>
       (num(r.predicted_likes) != null && num(r.actual_likes) != null) ||
@@ -104,7 +124,7 @@ export async function computeForecastAccuracy(): Promise<ForecastAccuracy> {
       .sort()
       .at(-1) ?? null;
 
-    return { total_outcomes: rows.length, scored_outcomes: scored, likes, views, er, last_recorded_at: lastRecorded };
+    return { total_outcomes: rows.length, scored_outcomes: scored, likes, views, er, by_format: byFormat, last_recorded_at: lastRecorded };
   } catch {
     // Table not created yet → no outcomes.
     return blank;

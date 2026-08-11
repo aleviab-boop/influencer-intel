@@ -201,6 +201,8 @@ export interface ReachPrediction {
   // Neutral (corrections = 1) until enough outcomes accumulate.
   calibration?: {
     applied: boolean;
+    scope: 'format' | 'global' | 'none';
+    format: string | null;
     likes_correction: number;
     views_correction: number;
     n_outcomes: number;

@@ -262,6 +262,7 @@ export interface PostOutcome {
   actual_comments: number | null;
   actual_views: number | null;
   actual_er: number | null;
+  format: string | null;
   note: string | null;
   created_at: string;
 }

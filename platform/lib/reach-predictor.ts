@@ -326,8 +326,10 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
   // A bounded correction learned from recorded forecast-vs-actual outcomes,
   // cancelling systematic over/under-prediction. Neutral until enough
   // outcomes accumulate; best-effort (never blocks a prediction).
-  let calibration = { applied: false, likes_correction: 1, views_correction: 1, n_outcomes: 0 };
-  try { calibration = await loadReachCalibration(); } catch { /* neutral */ }
+  let calibration: NonNullable<ReachPrediction['calibration']> = {
+    applied: false, scope: 'none', format: args.format, likes_correction: 1, views_correction: 1, n_outcomes: 0,
+  };
+  try { calibration = await loadReachCalibration(args.format); } catch { /* neutral */ }
   const likesCal = calibration.likes_correction;
   const viewsCal = calibration.views_correction;
 
@@ -430,7 +432,10 @@ function buildNotes(a: {
   if (a.calibration.applied) {
     const c = a.calibration.likes_correction;
     const dir = c < 1 ? `trimmed ~${Math.round((1 - c) * 100)}% down` : `nudged ~${Math.round((c - 1) * 100)}% up`;
-    notes.push(`Self-calibrated from ${a.calibration.n_outcomes} recorded result${a.calibration.n_outcomes > 1 ? 's' : ''}: past forecasts ran ${c < 1 ? 'high' : 'low'}, so this estimate is ${dir}.`);
+    const basis = a.calibration.scope === 'format'
+      ? `${a.calibration.n_outcomes} recorded ${a.format} result${a.calibration.n_outcomes > 1 ? 's' : ''}`
+      : `${a.calibration.n_outcomes} recorded result${a.calibration.n_outcomes > 1 ? 's' : ''} across formats`;
+    notes.push(`Self-calibrated from ${basis}: past forecasts ran ${c < 1 ? 'high' : 'low'}, so this estimate is ${dir}.`);
   }
   if (a.conf === 'low' || a.conf === 'very_low') notes.push('Limited post history — treat this as a rough estimate; it sharpens as more posts are analysed.');
   return notes;

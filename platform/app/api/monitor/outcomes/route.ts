@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
         ? (actualLikes + (actualComments ?? 0)) / followers
         : null;
 
+    const FORMATS = ['reel', 'photo', 'carousel'];
+    const format = typeof body.format === 'string' && FORMATS.includes(body.format) ? body.format : null;
+
     const outcome = await db.insert<PostOutcome>('post_outcomes', {
       creator_id: body.creator_id,
       program_id: typeof body.program_id === 'string' ? body.program_id : null,
@@ -62,6 +65,7 @@ export async function POST(req: NextRequest) {
       actual_comments: actualComments,
       actual_views: numOrNull(body.actual_views),
       actual_er: actualEr,
+      format,
       note: typeof body.note === 'string' ? body.note : null,
     });
 

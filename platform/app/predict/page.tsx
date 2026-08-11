@@ -246,6 +246,7 @@ function PredictPage() {
           actual_likes: likes,
           actual_comments: capComments.trim() ? Number(capComments) : undefined,
           actual_views: capViews.trim() ? Number(capViews) : undefined,
+          format: forecast.format,
           note: `${forecast.format} · predicted ${forecast.bucket}`,
         }),
       });
