@@ -322,6 +322,8 @@ function footerHref(label: string): string {
     'Competitor Analysis': '/brand-mentions',
     'Search': '/influencer-search',
     'Payouts': '/payouts',
+    'Privacy Policy': '/privacy',
+    'Terms': '/terms',
   };
   return map[label] ?? '#';
 }
