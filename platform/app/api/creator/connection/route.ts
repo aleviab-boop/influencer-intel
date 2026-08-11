@@ -92,3 +92,31 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ connected: false, reason: 'error' }, { status: 200 });
   }
 }
+
+/**
+ * DELETE /api/creator/connection?handle=|account=
+ *
+ * Disconnect Instagram for the resolved creator — removes their
+ * connected_accounts row(s) and the encrypted access token with it, so we stop
+ * accessing new Instagram data. This is the in-app counterpart to the
+ * /data-deletion promise. Always 200 with { ok, removed }.
+ */
+export async function DELETE(request: Request): Promise<NextResponse> {
+  try {
+    const creatorId = await resolveCreatorId(request);
+    if (!creatorId) {
+      return NextResponse.json({ ok: false, removed: 0, reason: 'no_creator' }, { status: 200 });
+    }
+
+    const db = getBolticClient();
+    const removed = await db.query<{ id: string }>(
+      `DELETE FROM connected_accounts WHERE creator_id = $1 RETURNING id`,
+      [creatorId],
+    );
+    console.log(`[creator/connection] disconnected ${removed.length} account(s) for creator=${creatorId}`);
+    return NextResponse.json({ ok: true, removed: removed.length, connected: false }, { status: 200 });
+  } catch (err) {
+    console.error('[creator/connection] disconnect failed:', err);
+    return NextResponse.json({ ok: false, removed: 0, reason: 'error' }, { status: 200 });
+  }
+}

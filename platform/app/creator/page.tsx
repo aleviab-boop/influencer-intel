@@ -112,6 +112,20 @@ export default function CreatorPortal() {
     setApplications(r.applications ?? []);
   }, []);
 
+  const loadConnection = useCallback(async (h: string) => {
+    try {
+      const d: Connection = await fetch(`/api/creator/connection?handle=${encodeURIComponent(h.replace(/^@/, ''))}`).then((x) => x.json());
+      setConnection(d);
+    } catch { /* ignore */ }
+  }, []);
+
+  const disconnectIg = useCallback(async () => {
+    if (!handle) return;
+    if (!window.confirm('Disconnect Instagram? We’ll stop pulling live insights and delete the stored access token. Your saved profile stays.')) return;
+    await fetch(`/api/creator/connection?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`, { method: 'DELETE' }).catch(() => {});
+    await loadConnection(handle);
+  }, [handle, loadConnection]);
+
   useEffect(() => {
     if (!handle) return;
     setLoading(true);
@@ -136,15 +150,12 @@ export default function CreatorPortal() {
           .then((x) => x.json())
           .then((d) => { if (d?.available) setSetup(d); })
           .catch(() => {});
-        fetch(`/api/creator/connection?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
-          .then((x) => x.json())
-          .then((d: Connection) => setConnection(d))
-          .catch(() => {});
+        void loadConnection(handle);
       } finally {
         setLoading(false);
       }
     })();
-  }, [handle, loadApplications]);
+  }, [handle, loadApplications, loadConnection]);
 
   function signIn() {
     const h = input.trim().replace(/^@/, '');
@@ -271,7 +282,7 @@ export default function CreatorPortal() {
             </div>
 
             {/* Instagram connection status — live insights vs connect CTA */}
-            {connection && <ConnectionCard c={connection} />}
+            {connection && <ConnectionCard c={connection} onDisconnect={disconnectIg} />}
 
             {/* Setup nudge — only while the profile is incomplete */}
             {setup && setup.score < 100 && (
@@ -391,7 +402,7 @@ const IgGlyph = ({ size = 18 }: { size?: number }) => (
   </svg>
 );
 
-function ConnectionCard({ c }: { c: Connection }) {
+function ConnectionCard({ c, onDisconnect }: { c: Connection; onDisconnect: () => void }) {
   // Connected & healthy — quiet confirmation that live insights are on.
   if (c.connected && !c.expiring_soon) {
     return (
@@ -403,9 +414,12 @@ function ConnectionCard({ c }: { c: Connection }) {
           </div>
           <div className="text-[12.5px] text-emerald-700/90">Live insights are on. Your analytics update from Instagram automatically.</div>
         </div>
-        <span className="shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />Live
-        </span>
+        <div className="shrink-0 flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />Live
+          </span>
+          <button onClick={onDisconnect} className="text-[12px] font-medium text-emerald-700/70 hover:text-emerald-900 hover:underline">Disconnect</button>
+        </div>
       </div>
     );
   }
@@ -414,8 +428,7 @@ function ConnectionCard({ c }: { c: Connection }) {
   if (c.connected && c.expiring_soon) {
     const days = c.days_until_expiry;
     return (
-      <a href="/api/oauth/instagram?flow=creator"
-        className="group flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 mb-4 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-[0_14px_40px_rgba(217,119,6,0.16)]">
+      <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 mb-4">
         <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-amber-600 shadow-sm"><IgGlyph /></span>
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-semibold text-amber-900">Reconnect Instagram soon</div>
@@ -423,10 +436,13 @@ function ConnectionCard({ c }: { c: Connection }) {
             Your connection {days != null && days > 0 ? `expires in ${days} day${days === 1 ? '' : 's'}` : 'is about to expire'}. Reconnect to keep live insights flowing.
           </div>
         </div>
-        <span className="shrink-0 text-[13px] font-semibold text-amber-700 inline-flex items-center gap-1">
-          Reconnect<span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
-        </span>
-      </a>
+        <div className="shrink-0 flex items-center gap-3">
+          <a href="/api/oauth/instagram?flow=creator" className="group text-[13px] font-semibold text-amber-700 inline-flex items-center gap-1">
+            Reconnect<span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
+          </a>
+          <button onClick={onDisconnect} className="text-[12px] font-medium text-amber-700/70 hover:text-amber-900 hover:underline">Disconnect</button>
+        </div>
+      </div>
     );
   }
 
