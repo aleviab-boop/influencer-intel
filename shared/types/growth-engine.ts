@@ -196,6 +196,15 @@ export interface ReachPrediction {
   matched_trends: MatchedTrend[];
   posts_analyzed: number;
   notes: string[];                  // plain-English drivers + suggestions
+  // Self-calibration layer: a bounded correction learned from recorded
+  // forecast-vs-actual outcomes, cancelling systematic over/under-prediction.
+  // Neutral (corrections = 1) until enough outcomes accumulate.
+  calibration?: {
+    applied: boolean;
+    likes_correction: number;
+    views_correction: number;
+    n_outcomes: number;
+  } | null;
   // Trained-model layer: present when a fitted reach model calibrated the
   // content effect (format/caption). Absent → pure baseline × trend × timing.
   model_meta?: {

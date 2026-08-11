@@ -22,6 +22,7 @@ import type {
 } from '@influencer-intel/shared/types';
 import { computeScrapedInsights } from './insights-service';
 import { loadReachModels, likesMultiplier, viewsMultiplier, type ContentFeatures } from './ml/reach-model';
+import { loadReachCalibration } from './reach-calibration';
 import { scoreContent } from '@influencer-intel/shared/content-scorer';
 import type { ContentScores } from '@influencer-intel/shared/types';
 
@@ -321,26 +322,36 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
     }
   }
 
+  // ── Self-calibration ──
+  // A bounded correction learned from recorded forecast-vs-actual outcomes,
+  // cancelling systematic over/under-prediction. Neutral until enough
+  // outcomes accumulate; best-effort (never blocks a prediction).
+  let calibration = { applied: false, likes_correction: 1, views_correction: 1, n_outcomes: 0 };
+  try { calibration = await loadReachCalibration(); } catch { /* neutral */ }
+  const likesCal = calibration.likes_correction;
+  const viewsCal = calibration.views_correction;
+
   // ── Predictions ──
-  const predictedLikes = Math.round(baselineLikes * combined * likesContentMult * contentMult);
+  const predictedLikes = Math.round(baselineLikes * combined * likesContentMult * contentMult * likesCal);
   const predictedComments = Math.round(baselineComments * combined);
-  const predictedViews = baselineViews != null ? Math.round(baselineViews * combined * viewsContentMult * contentMult) : null;
+  const predictedViews = baselineViews != null ? Math.round(baselineViews * combined * viewsContentMult * contentMult * viewsCal) : null;
   const predictedEr = followers > 0 ? (predictedLikes + predictedComments) / followers : predictedEr0(baselineEr, combined);
 
   // Ranges: scale the creator's own P25/P75 spread by the same factors, then
   // widen by the confidence band.
-  const likeLo = Math.round((likePool.length ? percentile(likePool, 25) : baselineLikes * 0.7) * combined * likesContentMult * contentMult * (1 - iw * 0.4));
-  const likeHi = Math.round((likePool.length ? percentile(likePool, 75) : baselineLikes * 1.3) * combined * likesContentMult * contentMult * (1 + iw * 0.6));
+  const likeLo = Math.round((likePool.length ? percentile(likePool, 25) : baselineLikes * 0.7) * combined * likesContentMult * contentMult * likesCal * (1 - iw * 0.4));
+  const likeHi = Math.round((likePool.length ? percentile(likePool, 75) : baselineLikes * 1.3) * combined * likesContentMult * contentMult * likesCal * (1 + iw * 0.6));
   let viewsRange: [number, number] | null = null;
   if (predictedViews != null && baselineViews != null) {
-    const vLo = Math.round((viewPool.length ? percentile(viewPool, 25) : baselineViews * 0.7) * combined * viewsContentMult * contentMult * (1 - iw * 0.4));
-    const vHi = Math.round((viewPool.length ? percentile(viewPool, 75) : baselineViews * 1.3) * combined * viewsContentMult * contentMult * (1 + iw * 0.6));
+    const vLo = Math.round((viewPool.length ? percentile(viewPool, 25) : baselineViews * 0.7) * combined * viewsContentMult * contentMult * viewsCal * (1 - iw * 0.4));
+    const vHi = Math.round((viewPool.length ? percentile(viewPool, 75) : baselineViews * 1.3) * combined * viewsContentMult * contentMult * viewsCal * (1 + iw * 0.6));
     viewsRange = [Math.max(0, vLo), Math.max(vHi, vLo)];
   }
 
   const notes = buildNotes({
     trend, timing, formatLift: likesContentMult, matched, format: args.format,
     conf, hasViews: baselineViews != null, modelUsed: !!models.likes, content: contentBlock,
+    calibration,
   });
 
   return {
@@ -367,6 +378,7 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
     matched_trends: matched,
     posts_analyzed: posts.length,
     notes,
+    calibration,
     model_meta: {
       likes_model: !!models.likes,
       views_model: !!models.views,
@@ -387,6 +399,7 @@ function buildNotes(a: {
   trend: number; timing: number; formatLift: number; matched: MatchedTrend[];
   format: ReachPredictorArgs['format']; conf: InsightConfidence; hasViews: boolean;
   modelUsed: boolean; content: ReachPrediction['content'];
+  calibration: NonNullable<ReachPrediction['calibration']>;
 }): string[] {
   const notes: string[] = [];
   if (a.content?.scored) {
@@ -413,6 +426,11 @@ function buildNotes(a: {
   } else {
     if (a.formatLift > 1.05) notes.push(`${Fmt}s outperform this creator’s other formats.`);
     else if (a.formatLift < 0.95) notes.push(`${Fmt}s tend to underperform this creator’s other formats.`);
+  }
+  if (a.calibration.applied) {
+    const c = a.calibration.likes_correction;
+    const dir = c < 1 ? `trimmed ~${Math.round((1 - c) * 100)}% down` : `nudged ~${Math.round((c - 1) * 100)}% up`;
+    notes.push(`Self-calibrated from ${a.calibration.n_outcomes} recorded result${a.calibration.n_outcomes > 1 ? 's' : ''}: past forecasts ran ${c < 1 ? 'high' : 'low'}, so this estimate is ${dir}.`);
   }
   if (a.conf === 'low' || a.conf === 'very_low') notes.push('Limited post history — treat this as a rough estimate; it sharpens as more posts are analysed.');
   return notes;
