@@ -288,13 +288,13 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
 
   // ── Content quality (vision) ──
   // If the caller supplied a draft media / thumbnail URL, score the ACTUAL
-  // content with Gemini (which sees the image) and let its quality move the
-  // prediction. Entirely optional and best-effort — any failure, or a missing
-  // API key, simply leaves the prediction on baseline × trend × timing.
+  // content with OpenAI gpt-4o vision (which sees the image) and let its quality
+  // move the prediction. Entirely optional and best-effort — any failure, or a
+  // missing API key, simply leaves the prediction on baseline × trend × timing.
   let contentMult = 1;
   let contentBlock: ReachPrediction['content'] = null;
   const mediaToScore = args.thumbnail_url || args.media_url;
-  if (mediaToScore && process.env.GEMINI_API_KEY) {
+  if (mediaToScore && process.env.OPENAI_API_KEY) {
     try {
       const mediaType = args.format === 'photo' ? 'IMAGE' : args.format === 'carousel' ? 'CAROUSEL_ALBUM' : 'VIDEO';
       const scored = await scoreContent({

@@ -5,6 +5,67 @@
 // ============================================================
 
 import OpenAI from 'openai';
+import type {
+  ContentScoreRequest,
+  ContentScoreResponse,
+  ContentScores,
+  PerformanceBucket,
+  InsightConfidence,
+} from '../types/growth-engine.js';
+
+// ── Content-quality scoring (vision) ──────────────────────────────────────
+// Score a post's creative on 12 dimensions from the actual image (a photo, or a
+// reel's cover frame). Powers the reach predictor's content-quality multiplier.
+
+const CONTENT_SCORING_PROMPT = `You are an expert Instagram content analyst. Score this content on 12 dimensions, each from 0.0 to 1.0.
+
+Dimensions:
+1. hook_strength — How compelling is the first 1-3 seconds? Does it stop the scroll?
+2. retention_design — Does the content maintain attention throughout? Pacing, pattern interrupts, curiosity gaps.
+3. information_density — Value delivered per second of watch time.
+4. emotional_trigger — Does it evoke strong emotion? Surprise, humor, inspiration, outrage, nostalgia.
+5. production_quality — Lighting, framing, audio clarity, editing polish.
+6. trend_leverage — Does it use trending audio, formats, or cultural references?
+7. brand_integration — If branded, how naturally is the product/brand woven in? (1.0 = seamless, 0.3 = forced)
+8. cta_effectiveness — Does it prompt saves, shares, comments, or follows?
+9. audio_fit — Does the audio enhance the content? Music-content sync, voiceover quality.
+10. shareability — Would someone DM this to a friend?
+11. comment_magnetism — Does it provoke opinions, questions, tags?
+12. niche_authority — Does the creator demonstrate expertise in their niche?
+
+Respond ONLY with valid JSON:
+{
+  "hook_strength": 0.0, "retention_design": 0.0, "information_density": 0.0,
+  "emotional_trigger": 0.0, "production_quality": 0.0, "trend_leverage": 0.0,
+  "brand_integration": 0.0, "cta_effectiveness": 0.0, "audio_fit": 0.0,
+  "shareability": 0.0, "comment_magnetism": 0.0, "niche_authority": 0.0,
+  "improvement_suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"]
+}`;
+
+const CONTENT_DIMENSION_WEIGHTS: Record<string, number> = {
+  hook_strength: 0.15, retention_design: 0.12, information_density: 0.08,
+  emotional_trigger: 0.10, production_quality: 0.07, trend_leverage: 0.10,
+  brand_integration: 0.08, cta_effectiveness: 0.05, audio_fit: 0.07,
+  shareability: 0.08, comment_magnetism: 0.05, niche_authority: 0.05,
+};
+
+// Fetch an image URL and return it as a base64 data URL, so the model actually
+// sees the pixels rather than being handed a URL string it may not fetch.
+// Returns null on any failure (non-image, too big, network error) — the caller
+// then falls back to a caption-only score. Bounded to ~5MB to keep the request small.
+async function fetchInlineImageDataUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) return null;
+    const ct = (res.headers.get('content-type') || '').split(';')[0]!.trim().toLowerCase();
+    if (!ct.startsWith('image/')) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 5_000_000) return null;
+    return `data:${ct};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
 
 export class OpenAIClient {
   private readonly client: OpenAI;
@@ -979,6 +1040,71 @@ ${context}`,
       ],
     });
     return res.choices[0]?.message?.content?.trim() ?? '';
+  }
+
+  /**
+   * Score a post's creative on 12 content-quality dimensions using gpt-4o
+   * vision. Prefers an explicit thumbnail; else the media itself if it's an
+   * image. The image bytes are inlined as a data URL so the model genuinely
+   * SEES the creative (vision=true); if no fetchable image is available it
+   * scores from the caption/metadata alone (vision=false, lower confidence).
+   */
+  async scoreContentQuality(req: ContentScoreRequest): Promise<ContentScoreResponse> {
+    const imageCandidate = req.thumbnail_url
+      || (req.media_type === 'IMAGE' ? req.media_url : undefined);
+    const dataUrl = imageCandidate ? await fetchInlineImageDataUrl(imageCandidate) : null;
+    const vision = dataUrl != null;
+
+    const textPrompt = `${CONTENT_SCORING_PROMPT}\n\nContent type: ${req.media_type}\nCaption: ${req.caption ?? '(no caption)'}\nCreator category: ${req.creator_category ?? 'unknown'}\n\n${vision ? 'Analyze the attached image (a frame/cover of the content).' : `Analyze the content described above (no image available).`}`;
+
+    const userContent: Array<Record<string, unknown>> = [{ type: 'text', text: textPrompt }];
+    if (dataUrl) userContent.push({ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } });
+
+    const res = await this.client.chat.completions.create({
+      model: this.outreachModel, // gpt-4o has vision
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      messages: [{ role: 'user', content: userContent as any }],
+    });
+
+    const raw = JSON.parse(res.choices[0]?.message?.content ?? '{}') as Record<string, unknown>;
+
+    const scores: ContentScores = {
+      hook_strength: Number(raw.hook_strength ?? 0),
+      retention_design: Number(raw.retention_design ?? 0),
+      information_density: Number(raw.information_density ?? 0),
+      emotional_trigger: Number(raw.emotional_trigger ?? 0),
+      production_quality: Number(raw.production_quality ?? 0),
+      trend_leverage: Number(raw.trend_leverage ?? 0),
+      brand_integration: Number(raw.brand_integration ?? 0),
+      cta_effectiveness: Number(raw.cta_effectiveness ?? 0),
+      audio_fit: Number(raw.audio_fit ?? 0),
+      shareability: Number(raw.shareability ?? 0),
+      comment_magnetism: Number(raw.comment_magnetism ?? 0),
+      niche_authority: Number(raw.niche_authority ?? 0),
+      overall_weighted: 0,
+      improvement_suggestions: (raw.improvement_suggestions as string[] | undefined) ?? [],
+    };
+
+    let weighted = 0;
+    for (const [dim, weight] of Object.entries(CONTENT_DIMENSION_WEIGHTS)) {
+      weighted += (scores[dim as keyof ContentScores] as number) * weight;
+    }
+    scores.overall_weighted = Math.round(weighted * 1000) / 1000;
+
+    let bucket: PerformanceBucket = 'average';
+    if (scores.overall_weighted >= 0.75) bucket = 'breakout';
+    else if (scores.overall_weighted >= 0.55) bucket = 'above_average';
+    else if (scores.overall_weighted < 0.35) bucket = 'below_average';
+
+    return {
+      scores,
+      overall_bucket_estimate: bucket,
+      // Seeing the image lifts confidence above a caption-only guess.
+      confidence: (vision ? 'medium' : 'low') as InsightConfidence,
+      vision,
+    };
   }
 }
 

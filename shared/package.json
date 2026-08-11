@@ -11,7 +11,7 @@
     "./llm": "./llm/openai-client.ts",
     "./ig-graph": "./ig-graph/client.ts",
     "./ig-graph/types": "./ig-graph/types.ts",
-    "./content-scorer": "./content-scorer/gemini-client.ts",
+    "./content-scorer": "./content-scorer/openai-scorer.ts",
     "./scoring": "./scoring/quality.ts",
     "./notify": "./notify/slack.ts"
   },

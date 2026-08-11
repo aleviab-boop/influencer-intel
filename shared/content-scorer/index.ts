@@ -1,1 +1,1 @@
-export { scoreContent } from './gemini-client.js';
+export { scoreContent } from './openai-scorer.js';
