@@ -21,7 +21,7 @@ import type {
   InsightConfidence, PerformanceBucket, TrendSignal, ReachPrediction, MatchedTrend,
 } from '@influencer-intel/shared/types';
 import { computeScrapedInsights } from './insights-service';
-import { loadReachModels, likesMultiplier, viewsMultiplier, type ContentFeatures } from './ml/reach-model';
+import { loadReachModels, likesMultiplier, viewsMultiplier, modelUsesContent, type ContentFeatures } from './ml/reach-model';
 import { loadReachCalibration } from './reach-calibration';
 import { scoreContent } from '@influencer-intel/shared/content-scorer';
 import type { ContentScores } from '@influencer-intel/shared/types';
@@ -275,13 +275,6 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
   // hand-tuned format lift; otherwise we fall back to it. Trend + timing stay
   // as live signals on top (they can't be learned from old posts).
   const models = await loadReachModels();
-  const contentFeat: ContentFeatures = {
-    format: args.format,
-    caption: args.caption ?? '',
-    hashtagCount: (args.hashtags ?? []).length,
-  };
-  const likesContentMult = models.likes ? likesMultiplier(models.likes, contentFeat) : formatLift;
-  const viewsContentMult = models.views ? viewsMultiplier(models.views, contentFeat) : 1.0;
 
   const combined = trend * timing;
   const conf = confidenceOf(posts.length);
@@ -289,37 +282,69 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
 
   // ── Content quality (vision) ──
   // If the caller supplied a draft media / thumbnail URL, score the ACTUAL
-  // content with OpenAI gpt-4o vision (which sees the image) and let its quality
-  // move the prediction. Entirely optional and best-effort — any failure, or a
-  // missing API key, simply leaves the prediction on baseline × trend × timing.
-  let contentMult = 1;
-  let contentBlock: ReachPrediction['content'] = null;
+  // content with OpenAI gpt-4o vision (which sees the image). Entirely optional
+  // and best-effort — any failure, or a missing API key, simply leaves the
+  // prediction on baseline × trend × timing × learned format/caption effect.
+  let visionOverall: number | null = null;
+  let scored: Awaited<ReturnType<typeof scoreContent>> | null = null;
   const mediaToScore = args.thumbnail_url || args.media_url;
   if (mediaToScore && process.env.OPENAI_API_KEY) {
     try {
       const mediaType = args.format === 'photo' ? 'IMAGE' : args.format === 'carousel' ? 'CAROUSEL_ALBUM' : 'VIDEO';
-      const scored = await scoreContent({
+      scored = await scoreContent({
         media_url: args.media_url || mediaToScore,
         thumbnail_url: args.thumbnail_url || (args.format !== 'photo' ? args.media_url : undefined),
         media_type: mediaType,
         caption: args.caption,
         creator_category: insights.primary_category ?? undefined,
       });
-      const overall = scored.scores.overall_weighted;
-      // Neutral quality is ~0.5; good content lifts, weak content dampens.
-      contentMult = clamp(1 + (overall - 0.5) * 0.9, 0.75, 1.4);
-      contentBlock = {
-        scored: true,
-        vision: !!scored.vision,
-        overall: Math.round(overall * 100) / 100,
-        multiplier: Math.round(contentMult * 100) / 100,
-        top_dimensions: rankDims(scored.scores, 3, 'desc'),
-        weak_dimensions: rankDims(scored.scores, 3, 'asc'),
-        suggestions: scored.scores.improvement_suggestions.slice(0, 3),
-      };
+      visionOverall = scored.scores.overall_weighted;
     } catch (err) {
       console.error('[predict/reach] content scoring failed:', err);
     }
+  }
+
+  // Trained content effect: a ridge model fit on ALL creators' history learns
+  // how this format + caption — and, once enough posts are backfilled, the
+  // vision content-quality — move a post off the creator's baseline. Feeding the
+  // freshly-scored quality here lets the trained model own the content effect.
+  const contentFeat: ContentFeatures = {
+    format: args.format,
+    caption: args.caption ?? '',
+    hashtagCount: (args.hashtags ?? []).length,
+    contentQuality: visionOverall,
+  };
+  const likesContentMult = models.likes ? likesMultiplier(models.likes, contentFeat) : formatLift;
+  const viewsContentMult = models.views ? viewsMultiplier(models.views, contentFeat) : 1.0;
+
+  // If a trained model carries the content_quality feature, the vision effect is
+  // already inside likesContentMult/viewsContentMult — so leave the standalone
+  // multiplier at 1 to avoid double-counting. Otherwise apply the bounded
+  // hand-tuned effect (neutral quality ~0.5; good lifts, weak dampens).
+  const modelOwnsContent = modelUsesContent(models.likes) || modelUsesContent(models.views);
+  let contentMult = 1;
+  let contentBlock: ReachPrediction['content'] = null;
+  if (scored && visionOverall != null) {
+    let displayMult: number;
+    if (modelOwnsContent) {
+      const cm = modelUsesContent(models.likes) ? models.likes : models.views;
+      const withQ = likesMultiplier(cm, contentFeat);
+      const neutralQ = likesMultiplier(cm, { ...contentFeat, contentQuality: null });
+      displayMult = neutralQ > 0 ? withQ / neutralQ : 1;
+      contentMult = 1;
+    } else {
+      contentMult = clamp(1 + (visionOverall - 0.5) * 0.9, 0.75, 1.4);
+      displayMult = contentMult;
+    }
+    contentBlock = {
+      scored: true,
+      vision: !!scored.vision,
+      overall: Math.round(visionOverall * 100) / 100,
+      multiplier: Math.round(displayMult * 100) / 100,
+      top_dimensions: rankDims(scored.scores, 3, 'desc'),
+      weak_dimensions: rankDims(scored.scores, 3, 'asc'),
+      suggestions: scored.scores.improvement_suggestions.slice(0, 3),
+    };
   }
 
   // ── Self-calibration ──
