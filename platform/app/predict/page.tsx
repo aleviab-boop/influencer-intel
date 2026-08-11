@@ -72,6 +72,34 @@ interface PostAnalysis {
   note?: string;
 }
 
+interface MatchedTrend {
+  trend_type: string;
+  display_name: string;
+  phase: string;
+  velocity: number;
+  matched_on: string;
+  boost_pct: number;
+}
+interface ReachPrediction {
+  format: string;
+  predicted_views: number | null;
+  predicted_views_range: [number, number] | null;
+  predicted_likes: number;
+  predicted_likes_range: [number, number];
+  predicted_comments: number;
+  predicted_er: number;
+  bucket: string;
+  confidence: string;
+  baseline_views: number | null;
+  baseline_likes: number;
+  baseline_er: number;
+  factors: { trend: number; timing: number; format: number };
+  trend_score: number;
+  matched_trends: MatchedTrend[];
+  posts_analyzed: number;
+  notes: string[];
+}
+
 interface CreatorMatch {
   id: string;
   handle: string;
@@ -91,7 +119,7 @@ export default function PredictPageWrapper() {
 
 function PredictPage() {
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'predict' | 'monitor'>('predict');
+  const [mode, setMode] = useState<'forecast' | 'predict' | 'monitor'>('forecast');
   const [handle, setHandle] = useState('');
   const [creator, setCreator] = useState<CreatorMatch | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -101,11 +129,20 @@ function PredictPage() {
   const [postUrl, setPostUrl] = useState('');
   const [analysis, setAnalysis] = useState<PostAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  // Views & Likes forecast
+  const [fFormat, setFFormat] = useState<'reel' | 'photo' | 'carousel'>('reel');
+  const [fCaption, setFCaption] = useState('');
+  const [fTime, setFTime] = useState('');
+  const [forecast, setForecast] = useState<ReachPrediction | null>(null);
+  const [forecasting, setForecasting] = useState(false);
+  const [forecastErr, setForecastErr] = useState<string | null>(null);
 
   useEffect(() => {
     const qHandle = searchParams.get('handle');
     const qMode = searchParams.get('mode');
     if (qMode === 'monitor') setMode('monitor');
+    else if (qMode === 'predict') setMode('predict');
+    else if (qMode === 'forecast') setMode('forecast');
     if (qHandle) {
       setHandle(qHandle);
       setLookupBusy(true);
@@ -136,6 +173,33 @@ function PredictPage() {
     } finally {
       setLookupBusy(false);
     }
+  }
+
+  async function runForecast() {
+    if (!creator) return;
+    setForecasting(true);
+    setForecastErr(null);
+    setForecast(null);
+    try {
+      const res = await fetch('/api/predict/reach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: creator.id,
+          format: fFormat,
+          caption: fCaption,
+          post_time: fTime ? new Date(fTime).toISOString() : undefined,
+        }),
+      });
+      if (res.ok) setForecast(await res.json());
+      else {
+        const e = await res.json().catch(() => ({}));
+        setForecastErr(e.message || e.error || 'Not enough post history to forecast for this creator.');
+      }
+    } catch {
+      setForecastErr('Forecast failed');
+    }
+    setForecasting(false);
   }
 
   async function runPrediction() {
@@ -177,13 +241,21 @@ function PredictPage() {
       <div className="max-w-2xl mx-auto px-6 pt-10 pb-20">
         <h1 className="text-2xl font-light text-[#111] mb-1">Predict</h1>
         <p className="text-[13px] text-[#999] mb-8">
-          Score content or track live posts.
+          Forecast a post’s views &amp; likes, score engagement, or track live posts.
         </p>
 
         <div className="flex gap-0 mb-8 border border-[#e5e5e5] w-fit">
           <button
-            onClick={() => setMode('predict')}
+            onClick={() => setMode('forecast')}
             className={`px-4 py-2 text-[13px] transition-colors ${
+              mode === 'forecast' ? 'bg-[#111] text-white' : 'text-[#999] hover:text-[#111]'
+            }`}
+          >
+            Views &amp; Likes
+          </button>
+          <button
+            onClick={() => setMode('predict')}
+            className={`px-4 py-2 text-[13px] border-l border-[#e5e5e5] transition-colors ${
               mode === 'predict' ? 'bg-[#111] text-white' : 'text-[#999] hover:text-[#111]'
             }`}
           >
@@ -241,6 +313,50 @@ function PredictPage() {
           )}
         </div>
 
+        {/* Step 2 — Views & Likes forecast */}
+        {creator && mode === 'forecast' && (
+          <div className="border border-[#e5e5e5] p-6 mb-4">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#999] mb-3">Step 2 &mdash; Describe the post</div>
+            <div className="flex gap-0 mb-3 border border-[#e5e5e5] w-fit">
+              {(['reel', 'photo', 'carousel'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFFormat(f)}
+                  className={`px-3 py-1.5 text-[12px] capitalize transition-colors ${f !== 'reel' ? 'border-l border-[#e5e5e5]' : ''} ${
+                    fFormat === f ? 'bg-[#111] text-white' : 'text-[#999] hover:text-[#111]'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={fCaption}
+              onChange={(e) => setFCaption(e.target.value)}
+              placeholder="Paste your caption + hashtags. We match them against what's trending right now."
+              rows={4}
+              className="w-full px-3 py-2 border border-[#e5e5e5] text-[14px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111] resize-none"
+            />
+            <div className="flex items-center gap-2 mt-3">
+              <label className="text-[12px] text-[#999]">Planned time</label>
+              <input
+                type="datetime-local"
+                value={fTime}
+                onChange={(e) => setFTime(e.target.value)}
+                className="px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] focus:outline-none focus:border-[#111]"
+              />
+              <button
+                onClick={runForecast}
+                disabled={forecasting}
+                className="ml-auto px-5 py-2 bg-[#111] text-white text-[13px] hover:bg-[#333] disabled:opacity-50"
+              >
+                {forecasting ? 'Forecasting...' : 'Forecast'}
+              </button>
+            </div>
+            {forecastErr && <p className="text-[13px] text-[#cc0000] mt-3">{forecastErr}</p>}
+          </div>
+        )}
+
         {/* Step 2 */}
         {creator && mode === 'predict' && (
           <div className="border border-[#e5e5e5] p-6 mb-4">
@@ -276,6 +392,106 @@ function PredictPage() {
               >
                 {analyzing ? '...' : 'Analyze'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Forecast results */}
+        {forecast && mode === 'forecast' && (
+          <div className="border border-[#e5e5e5] p-6 space-y-6">
+            <div className="flex items-baseline gap-4">
+              <span className="text-xl font-medium text-[#111] capitalize">{forecast.bucket.replace(/_/g, ' ')}</span>
+              <span className="text-[13px] text-[#999] capitalize">{forecast.format}</span>
+              <span className="text-[13px] text-[#ccc]">{forecast.confidence.replace('_', ' ')} confidence &middot; {forecast.posts_analyzed} posts</span>
+            </div>
+
+            {/* Headline predictions */}
+            <div className={`grid ${forecast.predicted_views != null ? 'grid-cols-2' : 'grid-cols-1'} gap-4 py-4 border-y border-[#f0f0f0]`}>
+              {forecast.predicted_views != null && (
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-[#ccc]">Predicted views</div>
+                  <div className="text-3xl font-light text-[#111] tabular-nums">{formatK(forecast.predicted_views)}</div>
+                  {forecast.predicted_views_range && (
+                    <div className="text-[11px] text-[#ccc] tabular-nums">
+                      {formatK(forecast.predicted_views_range[0])} &ndash; {formatK(forecast.predicted_views_range[1])}
+                    </div>
+                  )}
+                  {forecast.baseline_views != null && forecast.baseline_views > 0 && (
+                    <ComparisonTag value={forecast.predicted_views / forecast.baseline_views} label="vs usual" />
+                  )}
+                </div>
+              )}
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.12em] text-[#ccc]">Predicted likes</div>
+                <div className="text-3xl font-light text-[#111] tabular-nums">{formatK(forecast.predicted_likes)}</div>
+                <div className="text-[11px] text-[#ccc] tabular-nums">
+                  {formatK(forecast.predicted_likes_range[0])} &ndash; {formatK(forecast.predicted_likes_range[1])}
+                </div>
+                {forecast.baseline_likes > 0 && (
+                  <ComparisonTag value={forecast.predicted_likes / forecast.baseline_likes} label="vs usual" />
+                )}
+              </div>
+            </div>
+
+            {/* Trend match — "is it trending right now" */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-[#999]">Trend match</div>
+                <div className="text-[13px] font-medium text-[#111] tabular-nums">{(forecast.trend_score * 100).toFixed(0)}%</div>
+              </div>
+              <div className="h-1 bg-[#f0f0f0] mb-3">
+                <div className="h-1 bg-[#111] transition-all" style={{ width: `${Math.max(2, forecast.trend_score * 100)}%` }} />
+              </div>
+              {forecast.matched_trends.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {forecast.matched_trends.map((t, i) => (
+                    <span key={i} className="inline-flex items-center gap-1.5 text-[12px] text-[#111] border border-[#e5e5e5] px-2 py-1">
+                      <span className="capitalize text-[#999]">{t.phase}</span>
+                      {t.display_name}
+                      <span className="text-[#ccc] tabular-nums">+{t.boost_pct}%</span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[13px] text-[#999]">No live trends detected in this caption.</p>
+              )}
+            </div>
+
+            {/* Factor bars */}
+            <div className="space-y-2">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#999] mb-2">What moved the forecast</div>
+              <Factor label="Baseline likes" value={formatK(forecast.baseline_likes)} pct={60} />
+              <Factor label="Trend" value={`${forecast.factors.trend.toFixed(2)}x`} pct={((forecast.factors.trend - 0.7) / 1.1) * 100} />
+              <Factor label="Timing" value={`${forecast.factors.timing.toFixed(2)}x`} pct={((forecast.factors.timing - 0.7) / 1.1) * 100} />
+              <Factor label="Format" value={`${forecast.factors.format.toFixed(2)}x`} pct={((forecast.factors.format - 0.7) / 1.1) * 100} />
+            </div>
+
+            {forecast.notes.length > 0 && (
+              <div className="pt-4 border-t border-[#f0f0f0]">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-[#999] mb-2">Why</div>
+                {forecast.notes.map((n, i) => (
+                  <p key={i} className="text-[13px] text-[#6b6b6b] mb-1">&ndash; {n}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* How it works — forecast empty state */}
+        {mode === 'forecast' && !forecast && !creator && (
+          <div className="border border-[#e5e5e5] p-6">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#999] mb-4">How it works</div>
+            <div className="space-y-3">
+              {[
+                { step: '1', desc: 'Find a creator to base the forecast on their real day-to-day performance' },
+                { step: '2', desc: 'Describe the post — format, caption + hashtags, and planned time' },
+                { step: '3', desc: 'We match the caption against what’s trending right now and predict views + likes' },
+              ].map((cp) => (
+                <div key={cp.step} className="flex items-baseline gap-4">
+                  <span className="text-[13px] font-medium text-[#111] w-8 tabular-nums">{cp.step}</span>
+                  <span className="text-[13px] text-[#6b6b6b] flex-1">{cp.desc}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

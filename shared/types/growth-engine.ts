@@ -150,6 +150,43 @@ export interface TrendSignal {
   updated_at: string;
 }
 
+// ── Reach & Likes predictor ────────────────────────────────────────────────
+// Predicts the raw views/likes a creator's NEXT post is likely to get, from
+// their day-to-day baseline distribution × how trend-aligned the content is.
+
+export interface MatchedTrend {
+  trend_type: 'audio' | 'format' | 'hashtag' | 'topic';
+  display_name: string;
+  phase: 'emerging' | 'growing' | 'peak' | 'saturated' | 'declining';
+  velocity: number;
+  matched_on: string;      // the caption token / category that matched
+  boost_pct: number;       // this trend's contribution to the lift, in %
+}
+
+export interface ReachPrediction {
+  format: 'reel' | 'photo' | 'carousel';
+  // Predicted raw outcomes (views are null for non-video formats).
+  predicted_views: number | null;
+  predicted_views_range: [number, number] | null;
+  predicted_likes: number;
+  predicted_likes_range: [number, number];
+  predicted_comments: number;
+  predicted_er: number;
+  bucket: PerformanceBucket;
+  confidence: InsightConfidence;
+  // The creator's day-to-day baseline (median of their real posts).
+  baseline_views: number | null;
+  baseline_likes: number;
+  baseline_er: number;
+  // Multiplicative factors that moved the prediction off baseline.
+  factors: { trend: number; timing: number; format: number };
+  // "Is the content trending / how popular is it right now."
+  trend_score: number;              // 0–1, how trend-aligned the content is
+  matched_trends: MatchedTrend[];
+  posts_analyzed: number;
+  notes: string[];                  // plain-English drivers + suggestions
+}
+
 export interface ContentScoreRequest {
   media_url: string;
   media_type: 'VIDEO' | 'IMAGE' | 'CAROUSEL_ALBUM';
