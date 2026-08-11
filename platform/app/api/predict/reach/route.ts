@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { predictReach } from '@/lib/reach-predictor';
+import { logReachPrediction } from '@/lib/reach-prediction-log';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -63,7 +64,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!result) {
       return NextResponse.json({ error: 'not_enough_data', message: 'No post history to predict from for this creator.' }, { status: 404 });
     }
-    return NextResponse.json(result);
+    // Persist the forecast to the ledger (best-effort) and ride the id back so a
+    // recorded actual can link straight to this exact forecast.
+    const predictionId = await logReachPrediction(creatorId, body.caption, result);
+    return NextResponse.json({ ...result, prediction_id: predictionId });
   } catch (err) {
     console.error('[predict/reach] error:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

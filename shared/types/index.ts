@@ -263,6 +263,7 @@ export interface PostOutcome {
   actual_views: number | null;
   actual_er: number | null;
   format: string | null;
+  prediction_id: string | null; // links back to the reach_predictions ledger row
   note: string | null;
   created_at: string;
 }

@@ -81,6 +81,7 @@ interface MatchedTrend {
   boost_pct: number;
 }
 interface ReachPrediction {
+  prediction_id?: string | null;
   format: string;
   predicted_views: number | null;
   predicted_views_range: [number, number] | null;
@@ -240,6 +241,7 @@ function PredictPage() {
         body: JSON.stringify({
           creator_id: creator.id,
           post_url: capUrl.trim() || undefined,
+          prediction_id: forecast.prediction_id ?? undefined,
           predicted_likes: forecast.predicted_likes,
           predicted_views: forecast.predicted_views ?? undefined,
           predicted_er: forecast.predicted_er,

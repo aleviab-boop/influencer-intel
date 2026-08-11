@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       actual_views: numOrNull(body.actual_views),
       actual_er: actualEr,
       format,
+      prediction_id: typeof body.prediction_id === 'string' ? body.prediction_id : null,
       note: typeof body.note === 'string' ? body.note : null,
     });
 

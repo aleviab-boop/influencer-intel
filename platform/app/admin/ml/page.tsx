@@ -48,6 +48,19 @@ interface TrainResp {
   views?: { trained: boolean; rmse: number; r2: number; n_samples: number };
 }
 
+interface LoggedPrediction {
+  id: string;
+  creator_handle: string | null;
+  format: string | null;
+  predicted_likes: number | null;
+  predicted_views: number | null;
+  bucket: string | null;
+  created_at: string;
+  scored: boolean;
+  actual_likes: number | null;
+  likes_ape: number | null;
+}
+
 function ago(iso: string | null | undefined): string {
   if (!iso) return 'never';
   const ms = Date.now() - new Date(iso).getTime();
@@ -70,6 +83,7 @@ const biasPct = (r: number | null): string => (r == null ? '—' : `${r >= 0 ? '
 export default function MlPage() {
   const [status, setStatus] = useState<StatusResp | null>(null);
   const [accuracy, setAccuracy] = useState<ForecastAccuracy | null>(null);
+  const [predictions, setPredictions] = useState<LoggedPrediction[] | null>(null);
   const [training, setTraining] = useState(false);
   const [lastRun, setLastRun] = useState<TrainResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -83,6 +97,10 @@ export default function MlPage() {
       .then((r) => r.json())
       .then((d) => setAccuracy(d as ForecastAccuracy))
       .catch(() => setAccuracy(null));
+    fetch('/api/admin/ml/predictions?limit=15')
+      .then((r) => r.json())
+      .then((d) => setPredictions((d?.predictions ?? []) as LoggedPrediction[]))
+      .catch(() => setPredictions([]));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -247,6 +265,55 @@ export default function MlPage() {
               </p>
             </div>
           </>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-[#ececf3] bg-white p-6 shadow-[0_10px_40px_rgba(108,77,246,0.06)] mb-6">
+        <div className="mb-4">
+          <div className="text-[15px] font-semibold text-[#1a1a2e]">Recent forecasts</div>
+          <div className="text-[13px] text-[#777] mt-0.5">
+            The last {predictions?.length ?? 0} forecasts logged to the ledger. A recorded actual links straight
+            back to its forecast — no re-entering numbers — and shows how close it landed.
+          </div>
+        </div>
+        {predictions && predictions.length === 0 ? (
+          <div className="rounded-xl bg-[#faf9ff] border border-[#ececf3] px-4 py-3 text-[13px] text-[#777]">
+            No forecasts logged yet. Each reach forecast (<code className="text-[12px]">POST /api/predict/reach</code>) is
+            recorded here with its predicted likes/views, and marked <b>scored</b> once a real result is captured against it.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px] border-collapse">
+              <thead>
+                <tr className="text-left text-[#999] border-b border-[#ececf3]">
+                  <th className="py-2 pr-3 font-medium">When</th>
+                  <th className="py-2 px-3 font-medium">Creator</th>
+                  <th className="py-2 px-3 font-medium">Format</th>
+                  <th className="py-2 px-3 font-medium">Pred. likes</th>
+                  <th className="py-2 px-3 font-medium">Pred. views</th>
+                  <th className="py-2 px-3 font-medium">Actual likes</th>
+                  <th className="py-2 px-3 font-medium">Likes error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(predictions ?? []).map((p) => (
+                  <tr key={p.id} className="border-b border-[#f4f4f9] text-[#333]">
+                    <td className="py-2 pr-3 whitespace-nowrap text-[#888]">{ago(p.created_at)}</td>
+                    <td className="py-2 px-3">{p.creator_handle ? `@${p.creator_handle}` : '—'}</td>
+                    <td className="py-2 px-3 capitalize">{p.format ?? '—'}</td>
+                    <td className="py-2 px-3 tabular-nums">{p.predicted_likes?.toLocaleString() ?? '—'}</td>
+                    <td className="py-2 px-3 tabular-nums">{p.predicted_views != null ? p.predicted_views.toLocaleString() : '—'}</td>
+                    <td className="py-2 px-3 tabular-nums">
+                      {p.scored ? (p.actual_likes?.toLocaleString() ?? '—') : (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-[#f1f0fa] text-[#8b83b8]">pending</span>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 tabular-nums">{p.likes_ape != null ? errPct(p.likes_ape) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

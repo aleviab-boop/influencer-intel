@@ -164,6 +164,9 @@ export interface MatchedTrend {
 }
 
 export interface ReachPrediction {
+  // Ledger id for this forecast, set once it's persisted to reach_predictions.
+  // Rides back to the client so a recorded actual can link to the exact forecast.
+  prediction_id?: string | null;
   format: 'reel' | 'photo' | 'carousel';
   // Predicted raw outcomes (views are null for non-video formats).
   predicted_views: number | null;
