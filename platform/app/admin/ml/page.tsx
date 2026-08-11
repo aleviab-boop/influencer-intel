@@ -19,12 +19,23 @@ interface MetricAccuracy {
   within_25pct: number | null;
   within_50pct: number | null;
 }
+interface FormatAccuracy { likes: MetricAccuracy; views: MetricAccuracy }
+interface Calibration {
+  applied: boolean;
+  scope: 'format' | 'global' | 'none';
+  format: string | null;
+  likes_correction: number;
+  views_correction: number;
+  n_outcomes: number;
+}
 interface ForecastAccuracy {
   total_outcomes: number;
   scored_outcomes: number;
   likes: MetricAccuracy;
   views: MetricAccuracy;
   er: MetricAccuracy;
+  by_format: Record<string, FormatAccuracy>;
+  calibrations: Calibration[];
   last_recorded_at: string | null;
 }
 
@@ -178,6 +189,62 @@ export default function MlPage() {
             <div className="mt-3 text-[12.5px] text-[#888]">
               ER: {errPct(accuracy?.er.median_ape ?? null)} median error, {pct(accuracy?.er.within_25pct ?? null)} within ±25% (n={accuracy?.er.n ?? 0}).
               {' '}<span className="text-[#aaa]">Lower error is better; a positive bias means the model over-predicts.</span>
+            </div>
+
+            {/* Per-format accuracy & the live self-calibration correction */}
+            <div className="mt-6">
+              <div className="text-[13px] font-semibold text-[#1a1a2e] mb-2">By format &amp; active calibration</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12.5px] border-collapse">
+                  <thead>
+                    <tr className="text-left text-[#999] border-b border-[#ececf3]">
+                      <th className="py-2 pr-3 font-medium">Format</th>
+                      <th className="py-2 px-3 font-medium">Outcomes</th>
+                      <th className="py-2 px-3 font-medium">Likes error</th>
+                      <th className="py-2 px-3 font-medium">Likes bias</th>
+                      <th className="py-2 px-3 font-medium">Views error</th>
+                      <th className="py-2 px-3 font-medium">Correction</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {['reel', 'photo', 'carousel'].map((fmt) => {
+                      const fa = accuracy?.by_format?.[fmt];
+                      const cal = accuracy?.calibrations?.find((c) => c.format === fmt);
+                      const n = fa?.likes.n ?? 0;
+                      return (
+                        <tr key={fmt} className="border-b border-[#f4f4f9] text-[#333]">
+                          <td className="py-2 pr-3 capitalize font-medium">{fmt}</td>
+                          <td className="py-2 px-3 tabular-nums">{n}</td>
+                          <td className="py-2 px-3 tabular-nums">{errPct(fa?.likes.median_ape ?? null)}</td>
+                          <td className="py-2 px-3 tabular-nums">{biasPct(fa?.likes.median_bias ?? null)}</td>
+                          <td className="py-2 px-3 tabular-nums">{errPct(fa?.views.median_ape ?? null)}</td>
+                          <td className="py-2 px-3">
+                            {cal && cal.applied ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="tabular-nums font-medium text-[#1a1a2e]">×{cal.likes_correction.toFixed(2)}</span>
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide"
+                                  style={cal.scope === 'format'
+                                    ? { background: '#ecfdf5', color: '#059669' }
+                                    : { background: '#fef3c7', color: '#b45309' }}
+                                >
+                                  {cal.scope === 'format' ? 'own' : 'pooled'}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-[#bbb]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-[12px] text-[#999]">
+                Correction is applied to the next forecast for that format. <span className="text-[#059669] font-semibold">own</span> = learned from that
+                format&apos;s ≥8 recorded results; <span className="text-[#b45309] font-semibold">pooled</span> = borrowed from all formats until it has enough of its own.
+              </p>
             </div>
           </>
         )}
