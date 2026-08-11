@@ -93,7 +93,16 @@ interface ReachPrediction {
   baseline_views: number | null;
   baseline_likes: number;
   baseline_er: number;
-  factors: { trend: number; timing: number; format: number };
+  factors: { trend: number; timing: number; format: number; content?: number };
+  content?: {
+    scored: boolean;
+    vision: boolean;
+    overall: number;
+    multiplier: number;
+    top_dimensions: Array<{ name: string; score: number }>;
+    weak_dimensions: Array<{ name: string; score: number }>;
+    suggestions: string[];
+  } | null;
   trend_score: number;
   matched_trends: MatchedTrend[];
   posts_analyzed: number;
@@ -133,6 +142,7 @@ function PredictPage() {
   const [fFormat, setFFormat] = useState<'reel' | 'photo' | 'carousel'>('reel');
   const [fCaption, setFCaption] = useState('');
   const [fTime, setFTime] = useState('');
+  const [fMedia, setFMedia] = useState('');
   const [forecast, setForecast] = useState<ReachPrediction | null>(null);
   const [forecasting, setForecasting] = useState(false);
   const [forecastErr, setForecastErr] = useState<string | null>(null);
@@ -189,6 +199,7 @@ function PredictPage() {
           format: fFormat,
           caption: fCaption,
           post_time: fTime ? new Date(fTime).toISOString() : undefined,
+          media_url: fMedia.trim() || undefined,
         }),
       });
       if (res.ok) setForecast(await res.json());
@@ -337,6 +348,13 @@ function PredictPage() {
               rows={4}
               className="w-full px-3 py-2 border border-[#e5e5e5] text-[14px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111] resize-none"
             />
+            <input
+              type="url"
+              value={fMedia}
+              onChange={(e) => setFMedia(e.target.value)}
+              placeholder="Optional: draft image / cover-frame URL — we'll vision-score the actual content"
+              className="w-full mt-3 px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
+            />
             <div className="flex items-center gap-2 mt-3">
               <label className="text-[12px] text-[#999]">Planned time</label>
               <input
@@ -457,13 +475,58 @@ function PredictPage() {
               )}
             </div>
 
+            {/* Content quality — vision score of the actual media */}
+            {forecast.content?.scored && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-[#999]">
+                    Content quality {forecast.content.vision
+                      ? <span className="text-[#111] normal-case tracking-normal">· AI looked at the media</span>
+                      : <span className="text-[#ccc] normal-case tracking-normal">· from caption only</span>}
+                  </div>
+                  <div className="text-[13px] font-medium text-[#111] tabular-nums">{Math.round(forecast.content.overall * 100)}/100</div>
+                </div>
+                <div className="h-1 bg-[#f0f0f0] mb-3">
+                  <div className="h-1 bg-[#111] transition-all" style={{ width: `${Math.max(2, forecast.content.overall * 100)}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-[11px] text-[#999] mb-1">Strongest</div>
+                    {forecast.content.top_dimensions.map((d, i) => (
+                      <div key={i} className="flex justify-between text-[12px] text-[#111] tabular-nums">
+                        <span>{d.name}</span><span className="text-[#999]">{Math.round(d.score * 100)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-[#999] mb-1">Weakest</div>
+                    {forecast.content.weak_dimensions.map((d, i) => (
+                      <div key={i} className="flex justify-between text-[12px] text-[#111] tabular-nums">
+                        <span>{d.name}</span><span className="text-[#999]">{Math.round(d.score * 100)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {forecast.content.suggestions.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
+                    {forecast.content.suggestions.map((s, i) => (
+                      <p key={i} className="text-[12px] text-[#6b6b6b] mb-1">&rarr; {s}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Factor bars */}
             <div className="space-y-2">
               <div className="text-[11px] uppercase tracking-[0.12em] text-[#999] mb-2">What moved the forecast</div>
               <Factor label="Baseline likes" value={formatK(forecast.baseline_likes)} pct={60} />
               <Factor label="Trend" value={`${forecast.factors.trend.toFixed(2)}x`} pct={((forecast.factors.trend - 0.7) / 1.1) * 100} />
               <Factor label="Timing" value={`${forecast.factors.timing.toFixed(2)}x`} pct={((forecast.factors.timing - 0.7) / 1.1) * 100} />
-              <Factor label="Format" value={`${forecast.factors.format.toFixed(2)}x`} pct={((forecast.factors.format - 0.7) / 1.1) * 100} />
+              <Factor label="Content (learned)" value={`${forecast.factors.format.toFixed(2)}x`} pct={((forecast.factors.format - 0.7) / 1.1) * 100} />
+              {forecast.factors.content != null && forecast.factors.content !== 1 && (
+                <Factor label="Content (vision)" value={`${forecast.factors.content.toFixed(2)}x`} pct={((forecast.factors.content - 0.7) / 1.1) * 100} />
+              )}
             </div>
 
             {forecast.notes.length > 0 && (

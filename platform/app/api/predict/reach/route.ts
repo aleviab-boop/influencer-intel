@@ -22,6 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   let body: {
     creator_id?: string; handle?: string; format?: string;
     caption?: string; hashtags?: string[]; post_time?: string;
+    media_url?: string; thumbnail_url?: string;
   };
   try {
     body = await request.json();
@@ -56,6 +57,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       caption: body.caption,
       hashtags: Array.isArray(body.hashtags) ? body.hashtags : undefined,
       post_time: body.post_time,
+      media_url: typeof body.media_url === 'string' ? body.media_url.trim() || undefined : undefined,
+      thumbnail_url: typeof body.thumbnail_url === 'string' ? body.thumbnail_url.trim() || undefined : undefined,
     });
     if (!result) {
       return NextResponse.json({ error: 'not_enough_data', message: 'No post history to predict from for this creator.' }, { status: 404 });

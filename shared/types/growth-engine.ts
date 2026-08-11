@@ -179,7 +179,18 @@ export interface ReachPrediction {
   baseline_likes: number;
   baseline_er: number;
   // Multiplicative factors that moved the prediction off baseline.
-  factors: { trend: number; timing: number; format: number };
+  factors: { trend: number; timing: number; format: number; content?: number };
+  // Vision-based content quality (present only when a media/thumbnail URL was
+  // scored). The multiplier is applied to views & likes.
+  content?: {
+    scored: boolean;
+    vision: boolean;              // the model actually saw the image
+    overall: number;             // 0–1 overall weighted content quality
+    multiplier: number;          // bounded content effect applied
+    top_dimensions: Array<{ name: string; score: number }>;
+    weak_dimensions: Array<{ name: string; score: number }>;
+    suggestions: string[];
+  } | null;
   // "Is the content trending / how popular is it right now."
   trend_score: number;              // 0–1, how trend-aligned the content is
   matched_trends: MatchedTrend[];
@@ -201,10 +212,16 @@ export interface ContentScoreRequest {
   media_type: 'VIDEO' | 'IMAGE' | 'CAROUSEL_ALBUM';
   caption?: string;
   creator_category?: string;
+  // An image URL to actually show the model (a photo, or a reel's cover frame).
+  // When present and fetchable, the score is genuinely vision-based.
+  thumbnail_url?: string;
 }
 
 export interface ContentScoreResponse {
   scores: ContentScores;
   overall_bucket_estimate: PerformanceBucket;
   confidence: InsightConfidence;
+  // True when the model actually saw the image (bytes inlined), not just the
+  // caption/metadata.
+  vision?: boolean;
 }

@@ -35,11 +35,39 @@ const DIMENSION_WEIGHTS: Record<string, number> = {
   shareability: 0.08, comment_magnetism: 0.05, niche_authority: 0.05,
 };
 
+// Fetch an image URL and return it as Gemini inlineData, so the model actually
+// sees the pixels rather than just being told a URL string. Returns null on any
+// failure (non-image, too big, network error) — the caller then falls back to a
+// text-only score. Bounded to ~5MB to keep the request small.
+async function fetchInlineImage(url: string): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) return null;
+    const ct = (res.headers.get('content-type') || '').split(';')[0]!.trim().toLowerCase();
+    if (!ct.startsWith('image/')) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > 5_000_000) return null;
+    return { mimeType: ct, data: buf.toString('base64') };
+  } catch {
+    return null;
+  }
+}
+
 export async function scoreContent(req: ContentScoreRequest): Promise<ContentScoreResponse> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
-  const prompt = `${SCORING_PROMPT}\n\nContent type: ${req.media_type}\nCaption: ${req.caption ?? '(no caption)'}\nCreator category: ${req.creator_category ?? 'unknown'}\n\nAnalyze the content at: ${req.media_url}`;
+  // Prefer an explicit thumbnail; else the media itself if it's an image.
+  const imageCandidate = req.thumbnail_url
+    || (req.media_type === 'IMAGE' ? req.media_url : undefined);
+  const inline = imageCandidate ? await fetchInlineImage(imageCandidate) : null;
+  const vision = inline != null;
+
+  const prompt = `${SCORING_PROMPT}\n\nContent type: ${req.media_type}\nCaption: ${req.caption ?? '(no caption)'}\nCreator category: ${req.creator_category ?? 'unknown'}\n\n${vision ? 'Analyze the attached image (a frame/cover of the content).' : `Analyze the content at: ${req.media_url}`}`;
+
+  const parts: Array<Record<string, unknown>> = [];
+  if (inline) parts.push({ inlineData: { mimeType: inline.mimeType, data: inline.data } });
+  parts.push({ text: prompt });
 
   const res = await fetch(
     `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
@@ -47,7 +75,7 @@ export async function scoreContent(req: ContentScoreRequest): Promise<ContentSco
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts }],
         generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
       }),
     },
@@ -94,6 +122,8 @@ export async function scoreContent(req: ContentScoreRequest): Promise<ContentSco
   return {
     scores,
     overall_bucket_estimate: bucket,
-    confidence: 'low' as InsightConfidence,
+    // Seeing the image lifts confidence above a caption-only guess.
+    confidence: (vision ? 'medium' : 'low') as InsightConfidence,
+    vision,
   };
 }

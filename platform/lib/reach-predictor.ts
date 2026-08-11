@@ -22,6 +22,8 @@ import type {
 } from '@influencer-intel/shared/types';
 import { computeScrapedInsights } from './insights-service';
 import { loadReachModels, likesMultiplier, viewsMultiplier, type ContentFeatures } from './ml/reach-model';
+import { scoreContent } from '@influencer-intel/shared/content-scorer';
+import type { ContentScores } from '@influencer-intel/shared/types';
 
 export interface ReachPredictorArgs {
   creator_id: string;
@@ -29,6 +31,8 @@ export interface ReachPredictorArgs {
   caption?: string;
   hashtags?: string[];        // optional explicit tags, merged with caption tags
   post_time?: string;         // ISO; defaults to now
+  media_url?: string;         // draft media to vision-score (photo or reel cover)
+  thumbnail_url?: string;     // explicit image frame to show the vision model
 }
 
 type Post = {
@@ -194,6 +198,27 @@ function bucketOf(predEr: number, baseEr: number): PerformanceBucket {
   return 'below_average';
 }
 
+// ── content (vision) helpers ─────────────────────────────────────────────────
+const CONTENT_DIMS: Array<{ key: keyof ContentScores; label: string }> = [
+  { key: 'hook_strength', label: 'Hook strength' },
+  { key: 'retention_design', label: 'Retention' },
+  { key: 'information_density', label: 'Info density' },
+  { key: 'emotional_trigger', label: 'Emotional pull' },
+  { key: 'production_quality', label: 'Production' },
+  { key: 'trend_leverage', label: 'Trend leverage' },
+  { key: 'brand_integration', label: 'Brand fit' },
+  { key: 'cta_effectiveness', label: 'CTA' },
+  { key: 'audio_fit', label: 'Audio fit' },
+  { key: 'shareability', label: 'Shareability' },
+  { key: 'comment_magnetism', label: 'Comment pull' },
+  { key: 'niche_authority', label: 'Niche authority' },
+];
+function rankDims(s: ContentScores, n: number, dir: 'asc' | 'desc'): Array<{ name: string; score: number }> {
+  const arr = CONTENT_DIMS.map((d) => ({ name: d.label, score: Math.round((s[d.key] as number) * 100) / 100 }));
+  arr.sort((a, b) => (dir === 'desc' ? b.score - a.score : a.score - b.score));
+  return arr.slice(0, n);
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 export async function predictReach(args: ReachPredictorArgs): Promise<ReachPrediction | null> {
   const insights = await computeScrapedInsights(args.creator_id);
@@ -261,26 +286,61 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
   const conf = confidenceOf(posts.length);
   const iw = INTERVAL[conf];
 
+  // ── Content quality (vision) ──
+  // If the caller supplied a draft media / thumbnail URL, score the ACTUAL
+  // content with Gemini (which sees the image) and let its quality move the
+  // prediction. Entirely optional and best-effort — any failure, or a missing
+  // API key, simply leaves the prediction on baseline × trend × timing.
+  let contentMult = 1;
+  let contentBlock: ReachPrediction['content'] = null;
+  const mediaToScore = args.thumbnail_url || args.media_url;
+  if (mediaToScore && process.env.GEMINI_API_KEY) {
+    try {
+      const mediaType = args.format === 'photo' ? 'IMAGE' : args.format === 'carousel' ? 'CAROUSEL_ALBUM' : 'VIDEO';
+      const scored = await scoreContent({
+        media_url: args.media_url || mediaToScore,
+        thumbnail_url: args.thumbnail_url || (args.format !== 'photo' ? args.media_url : undefined),
+        media_type: mediaType,
+        caption: args.caption,
+        creator_category: insights.primary_category ?? undefined,
+      });
+      const overall = scored.scores.overall_weighted;
+      // Neutral quality is ~0.5; good content lifts, weak content dampens.
+      contentMult = clamp(1 + (overall - 0.5) * 0.9, 0.75, 1.4);
+      contentBlock = {
+        scored: true,
+        vision: !!scored.vision,
+        overall: Math.round(overall * 100) / 100,
+        multiplier: Math.round(contentMult * 100) / 100,
+        top_dimensions: rankDims(scored.scores, 3, 'desc'),
+        weak_dimensions: rankDims(scored.scores, 3, 'asc'),
+        suggestions: scored.scores.improvement_suggestions.slice(0, 3),
+      };
+    } catch (err) {
+      console.error('[predict/reach] content scoring failed:', err);
+    }
+  }
+
   // ── Predictions ──
-  const predictedLikes = Math.round(baselineLikes * combined * likesContentMult);
+  const predictedLikes = Math.round(baselineLikes * combined * likesContentMult * contentMult);
   const predictedComments = Math.round(baselineComments * combined);
-  const predictedViews = baselineViews != null ? Math.round(baselineViews * combined * viewsContentMult) : null;
+  const predictedViews = baselineViews != null ? Math.round(baselineViews * combined * viewsContentMult * contentMult) : null;
   const predictedEr = followers > 0 ? (predictedLikes + predictedComments) / followers : predictedEr0(baselineEr, combined);
 
   // Ranges: scale the creator's own P25/P75 spread by the same factors, then
   // widen by the confidence band.
-  const likeLo = Math.round((likePool.length ? percentile(likePool, 25) : baselineLikes * 0.7) * combined * likesContentMult * (1 - iw * 0.4));
-  const likeHi = Math.round((likePool.length ? percentile(likePool, 75) : baselineLikes * 1.3) * combined * likesContentMult * (1 + iw * 0.6));
+  const likeLo = Math.round((likePool.length ? percentile(likePool, 25) : baselineLikes * 0.7) * combined * likesContentMult * contentMult * (1 - iw * 0.4));
+  const likeHi = Math.round((likePool.length ? percentile(likePool, 75) : baselineLikes * 1.3) * combined * likesContentMult * contentMult * (1 + iw * 0.6));
   let viewsRange: [number, number] | null = null;
   if (predictedViews != null && baselineViews != null) {
-    const vLo = Math.round((viewPool.length ? percentile(viewPool, 25) : baselineViews * 0.7) * combined * viewsContentMult * (1 - iw * 0.4));
-    const vHi = Math.round((viewPool.length ? percentile(viewPool, 75) : baselineViews * 1.3) * combined * viewsContentMult * (1 + iw * 0.6));
+    const vLo = Math.round((viewPool.length ? percentile(viewPool, 25) : baselineViews * 0.7) * combined * viewsContentMult * contentMult * (1 - iw * 0.4));
+    const vHi = Math.round((viewPool.length ? percentile(viewPool, 75) : baselineViews * 1.3) * combined * viewsContentMult * contentMult * (1 + iw * 0.6));
     viewsRange = [Math.max(0, vLo), Math.max(vHi, vLo)];
   }
 
   const notes = buildNotes({
     trend, timing, formatLift: likesContentMult, matched, format: args.format,
-    conf, hasViews: baselineViews != null, modelUsed: !!models.likes,
+    conf, hasViews: baselineViews != null, modelUsed: !!models.likes, content: contentBlock,
   });
 
   return {
@@ -300,7 +360,9 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
       trend: Math.round(trend * 100) / 100,
       timing: Math.round(timing * 100) / 100,
       format: Math.round(likesContentMult * 100) / 100,
+      content: Math.round(contentMult * 100) / 100,
     },
+    content: contentBlock,
     trend_score: Math.round(trendScore * 100) / 100,
     matched_trends: matched,
     posts_analyzed: posts.length,
@@ -324,9 +386,16 @@ function predictedEr0(baseEr: number, combined: number): number {
 function buildNotes(a: {
   trend: number; timing: number; formatLift: number; matched: MatchedTrend[];
   format: ReachPredictorArgs['format']; conf: InsightConfidence; hasViews: boolean;
-  modelUsed: boolean;
+  modelUsed: boolean; content: ReachPrediction['content'];
 }): string[] {
   const notes: string[] = [];
+  if (a.content?.scored) {
+    const q = Math.round(a.content.overall * 100);
+    const seen = a.content.vision ? 'looked at the media and ' : '';
+    if (a.content.multiplier >= 1.05) notes.push(`Content quality is strong (${q}/100) — the model ${seen}lifted the forecast ~${Math.round((a.content.multiplier - 1) * 100)}%. Strongest: ${a.content.top_dimensions.map((d) => d.name.toLowerCase()).join(', ')}.`);
+    else if (a.content.multiplier <= 0.95) notes.push(`Content quality is holding it back (${q}/100), trimming ~${Math.round((1 - a.content.multiplier) * 100)}%. Weakest: ${a.content.weak_dimensions.map((d) => d.name.toLowerCase()).join(', ')}.`);
+    else notes.push(`Content quality scored ${q}/100 — roughly neutral effect.`);
+  }
   if (a.matched.length > 0) {
     const top = a.matched[0]!;
     notes.push(`Riding ${a.matched.length} live trend${a.matched.length > 1 ? 's' : ''} — strongest is “${top.display_name}” (${top.phase}), adding ~${Math.round((a.trend - 1) * 100)}% lift.`);
