@@ -12,6 +12,22 @@ interface ModelStatus {
 }
 interface StatusResp { trained: boolean; models: ModelStatus[] }
 
+interface MetricAccuracy {
+  n: number;
+  median_ape: number | null;
+  median_bias: number | null;
+  within_25pct: number | null;
+  within_50pct: number | null;
+}
+interface ForecastAccuracy {
+  total_outcomes: number;
+  scored_outcomes: number;
+  likes: MetricAccuracy;
+  views: MetricAccuracy;
+  er: MetricAccuracy;
+  last_recorded_at: string | null;
+}
+
 interface TrainResp {
   ok: boolean;
   error?: string;
@@ -36,9 +52,13 @@ function ago(iso: string | null | undefined): string {
 const pct = (r: number | null): string => (r == null ? '—' : `${(r * 100).toFixed(1)}%`);
 // RMSE lives in log space; e^rmse is the typical multiplicative error band.
 const errBand = (rmse: number | null): string => (rmse == null ? '—' : `±${Math.round((Math.exp(rmse) - 1) * 100)}%`);
+// Accuracy formatting: median % error and hit-rate as whole percentages.
+const errPct = (r: number | null): string => (r == null ? '—' : `${Math.round(r * 100)}%`);
+const biasPct = (r: number | null): string => (r == null ? '—' : `${r >= 0 ? '+' : ''}${Math.round(r * 100)}%`);
 
 export default function MlPage() {
   const [status, setStatus] = useState<StatusResp | null>(null);
+  const [accuracy, setAccuracy] = useState<ForecastAccuracy | null>(null);
   const [training, setTraining] = useState(false);
   const [lastRun, setLastRun] = useState<TrainResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -48,6 +68,10 @@ export default function MlPage() {
       .then((r) => r.json())
       .then((d) => setStatus(d as StatusResp))
       .catch(() => setStatus({ trained: false, models: [] }));
+    fetch('/api/admin/ml/accuracy')
+      .then((r) => r.json())
+      .then((d) => setAccuracy(d as ForecastAccuracy))
+      .catch(() => setAccuracy(null));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -122,6 +146,40 @@ export default function MlPage() {
             {' '}likes: {lastRun.likes?.trained ? `${lastRun.likes.n_samples.toLocaleString()} samples, R² ${pct(lastRun.likes.r2)}` : 'skipped (too few samples)'};
             {' '}views: {lastRun.views?.trained ? `${lastRun.views.n_samples.toLocaleString()} samples, R² ${pct(lastRun.views.r2)}` : 'skipped (too few samples)'}.
           </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-[#ececf3] bg-white p-6 shadow-[0_10px_40px_rgba(108,77,246,0.06)] mb-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+          <div>
+            <div className="text-[15px] font-semibold text-[#1a1a2e]">Forecast accuracy</div>
+            <div className="text-[13px] text-[#777] mt-0.5">
+              How the predictions actually did against real posts recorded in the outcomes log.
+              {accuracy ? ` ${accuracy.scored_outcomes.toLocaleString()} of ${accuracy.total_outcomes.toLocaleString()} outcomes scored.` : ''}
+              {accuracy?.last_recorded_at ? ` Last recorded ${ago(accuracy.last_recorded_at)}.` : ''}
+            </div>
+          </div>
+        </div>
+
+        {accuracy && accuracy.scored_outcomes === 0 ? (
+          <div className="rounded-xl bg-[#faf9ff] border border-[#ececf3] px-4 py-3 text-[13px] text-[#777]">
+            No scored outcomes yet. Each time a real post result is recorded against its prediction
+            (<code className="text-[12px]">POST /api/monitor/outcomes</code>), it shows up here as a live measure of how
+            close the forecasts land — median % error, over/under-prediction bias, and hit-rate.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <StatCard label="Likes error" value={errPct(accuracy?.likes.median_ape ?? null)} sub={`median · n=${accuracy?.likes.n ?? 0}`} color="#6C4DF6" />
+              <StatCard label="Likes within ±25%" value={pct(accuracy?.likes.within_25pct ?? null)} sub={`bias ${biasPct(accuracy?.likes.median_bias ?? null)}`} color="#8b5cf6" />
+              <StatCard label="Views error" value={errPct(accuracy?.views.median_ape ?? null)} sub={`median · n=${accuracy?.views.n ?? 0}`} color="#0ea5e9" />
+              <StatCard label="Views within ±25%" value={pct(accuracy?.views.within_25pct ?? null)} sub={`bias ${biasPct(accuracy?.views.median_bias ?? null)}`} color="#06b6d4" />
+            </div>
+            <div className="mt-3 text-[12.5px] text-[#888]">
+              ER: {errPct(accuracy?.er.median_ape ?? null)} median error, {pct(accuracy?.er.within_25pct ?? null)} within ±25% (n={accuracy?.er.n ?? 0}).
+              {' '}<span className="text-[#aaa]">Lower error is better; a positive bias means the model over-predicts.</span>
+            </div>
+          </>
         )}
       </div>
 
