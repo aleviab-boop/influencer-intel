@@ -21,6 +21,7 @@ import type {
   InsightConfidence, PerformanceBucket, TrendSignal, ReachPrediction, MatchedTrend,
 } from '@influencer-intel/shared/types';
 import { computeScrapedInsights } from './insights-service';
+import { loadReachModels, likesMultiplier, viewsMultiplier, type ContentFeatures } from './ml/reach-model';
 
 export interface ReachPredictorArgs {
   creator_id: string;
@@ -233,8 +234,8 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
   const when = args.post_time ? new Date(args.post_time) : new Date();
   const timing = timingMultiplier(posts, Number.isNaN(when.getTime()) ? new Date() : when);
 
-  // Format lift for LIKES: how this format's likes compare to the creator's
-  // overall (bounded). Views are already format-specific via the baseline.
+  // Hand-tuned format lift for LIKES: how this format's likes compare to the
+  // creator's overall (bounded). Used as the fallback when no trained model.
   let formatLift = 1.0;
   if (sameFmt.length >= 3 && posts.length >= 5) {
     const fmtMed = median(sameFmt.map((p) => p.like_count ?? 0).filter((v) => v > 0));
@@ -242,28 +243,45 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
     if (fmtMed > 0 && allMed > 0) formatLift = clamp(fmtMed / allMed, 0.7, 1.4);
   }
 
+  // Trained content effect: a ridge model fit on ALL creators' history learns
+  // how this format + caption (length, hashtags, emoji, CTA) move a post off
+  // the creator's own baseline. When a model is present it supersedes the
+  // hand-tuned format lift; otherwise we fall back to it. Trend + timing stay
+  // as live signals on top (they can't be learned from old posts).
+  const models = await loadReachModels();
+  const contentFeat: ContentFeatures = {
+    format: args.format,
+    caption: args.caption ?? '',
+    hashtagCount: (args.hashtags ?? []).length,
+  };
+  const likesContentMult = models.likes ? likesMultiplier(models.likes, contentFeat) : formatLift;
+  const viewsContentMult = models.views ? viewsMultiplier(models.views, contentFeat) : 1.0;
+
   const combined = trend * timing;
   const conf = confidenceOf(posts.length);
   const iw = INTERVAL[conf];
 
   // ── Predictions ──
-  const predictedLikes = Math.round(baselineLikes * combined * formatLift);
+  const predictedLikes = Math.round(baselineLikes * combined * likesContentMult);
   const predictedComments = Math.round(baselineComments * combined);
-  const predictedViews = baselineViews != null ? Math.round(baselineViews * combined) : null;
+  const predictedViews = baselineViews != null ? Math.round(baselineViews * combined * viewsContentMult) : null;
   const predictedEr = followers > 0 ? (predictedLikes + predictedComments) / followers : predictedEr0(baselineEr, combined);
 
   // Ranges: scale the creator's own P25/P75 spread by the same factors, then
   // widen by the confidence band.
-  const likeLo = Math.round((likePool.length ? percentile(likePool, 25) : baselineLikes * 0.7) * combined * formatLift * (1 - iw * 0.4));
-  const likeHi = Math.round((likePool.length ? percentile(likePool, 75) : baselineLikes * 1.3) * combined * formatLift * (1 + iw * 0.6));
+  const likeLo = Math.round((likePool.length ? percentile(likePool, 25) : baselineLikes * 0.7) * combined * likesContentMult * (1 - iw * 0.4));
+  const likeHi = Math.round((likePool.length ? percentile(likePool, 75) : baselineLikes * 1.3) * combined * likesContentMult * (1 + iw * 0.6));
   let viewsRange: [number, number] | null = null;
   if (predictedViews != null && baselineViews != null) {
-    const vLo = Math.round((viewPool.length ? percentile(viewPool, 25) : baselineViews * 0.7) * combined * (1 - iw * 0.4));
-    const vHi = Math.round((viewPool.length ? percentile(viewPool, 75) : baselineViews * 1.3) * combined * (1 + iw * 0.6));
+    const vLo = Math.round((viewPool.length ? percentile(viewPool, 25) : baselineViews * 0.7) * combined * viewsContentMult * (1 - iw * 0.4));
+    const vHi = Math.round((viewPool.length ? percentile(viewPool, 75) : baselineViews * 1.3) * combined * viewsContentMult * (1 + iw * 0.6));
     viewsRange = [Math.max(0, vLo), Math.max(vHi, vLo)];
   }
 
-  const notes = buildNotes({ trend, timing, formatLift, matched, format: args.format, conf, hasViews: baselineViews != null });
+  const notes = buildNotes({
+    trend, timing, formatLift: likesContentMult, matched, format: args.format,
+    conf, hasViews: baselineViews != null, modelUsed: !!models.likes,
+  });
 
   return {
     format: args.format,
@@ -281,12 +299,19 @@ export async function predictReach(args: ReachPredictorArgs): Promise<ReachPredi
     factors: {
       trend: Math.round(trend * 100) / 100,
       timing: Math.round(timing * 100) / 100,
-      format: Math.round(formatLift * 100) / 100,
+      format: Math.round(likesContentMult * 100) / 100,
     },
     trend_score: Math.round(trendScore * 100) / 100,
     matched_trends: matched,
     posts_analyzed: posts.length,
     notes,
+    model_meta: {
+      likes_model: !!models.likes,
+      views_model: !!models.views,
+      likes_content_multiplier: Math.round(likesContentMult * 100) / 100,
+      views_content_multiplier: Math.round(viewsContentMult * 100) / 100,
+      trained_at: models.trained_at,
+    },
   };
 }
 
@@ -299,6 +324,7 @@ function predictedEr0(baseEr: number, combined: number): number {
 function buildNotes(a: {
   trend: number; timing: number; formatLift: number; matched: MatchedTrend[];
   format: ReachPredictorArgs['format']; conf: InsightConfidence; hasViews: boolean;
+  modelUsed: boolean;
 }): string[] {
   const notes: string[] = [];
   if (a.matched.length > 0) {
@@ -310,8 +336,15 @@ function buildNotes(a: {
   if (a.timing >= 1.05) notes.push('Planned post time lands in one of this creator’s best-performing slots.');
   else if (a.timing < 1) notes.push('This time slot has historically underperformed for this creator — consider one of their peak windows.');
   if (a.format === 'reel' && !a.hasViews) notes.push('No historical reel view data yet, so the view estimate falls back to stored averages.');
-  if (a.formatLift > 1.05) notes.push(`${a.format[0]!.toUpperCase()}${a.format.slice(1)}s outperform this creator’s other formats.`);
-  else if (a.formatLift < 0.95) notes.push(`${a.format[0]!.toUpperCase()}${a.format.slice(1)}s tend to underperform this creator’s other formats.`);
+  const Fmt = `${a.format[0]!.toUpperCase()}${a.format.slice(1)}`;
+  if (a.modelUsed) {
+    if (a.formatLift > 1.05) notes.push(`Trained model: this ${a.format} + caption typically lifts likes ~${Math.round((a.formatLift - 1) * 100)}% above this creator’s baseline.`);
+    else if (a.formatLift < 0.95) notes.push(`Trained model: this ${a.format} + caption typically lands ~${Math.round((1 - a.formatLift) * 100)}% below this creator’s baseline — try a stronger hook or a trending format.`);
+    else notes.push('Trained model: the content effect is roughly neutral vs this creator’s baseline.');
+  } else {
+    if (a.formatLift > 1.05) notes.push(`${Fmt}s outperform this creator’s other formats.`);
+    else if (a.formatLift < 0.95) notes.push(`${Fmt}s tend to underperform this creator’s other formats.`);
+  }
   if (a.conf === 'low' || a.conf === 'very_low') notes.push('Limited post history — treat this as a rough estimate; it sharpens as more posts are analysed.');
   return notes;
 }

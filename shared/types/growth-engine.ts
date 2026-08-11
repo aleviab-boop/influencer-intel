@@ -185,6 +185,15 @@ export interface ReachPrediction {
   matched_trends: MatchedTrend[];
   posts_analyzed: number;
   notes: string[];                  // plain-English drivers + suggestions
+  // Trained-model layer: present when a fitted reach model calibrated the
+  // content effect (format/caption). Absent → pure baseline × trend × timing.
+  model_meta?: {
+    likes_model: boolean;           // a trained likes model was applied
+    views_model: boolean;           // a trained views model was applied
+    likes_content_multiplier: number; // learned content effect on likes
+    views_content_multiplier: number; // learned content effect on views
+    trained_at: string | null;
+  } | null;
 }
 
 export interface ContentScoreRequest {
