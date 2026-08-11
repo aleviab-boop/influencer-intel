@@ -146,6 +146,15 @@ function PredictPage() {
   const [forecast, setForecast] = useState<ReachPrediction | null>(null);
   const [forecasting, setForecasting] = useState(false);
   const [forecastErr, setForecastErr] = useState<string | null>(null);
+  // Record-actual-result capture (closes the forecast-vs-actual loop)
+  const [capOpen, setCapOpen] = useState(false);
+  const [capLikes, setCapLikes] = useState('');
+  const [capComments, setCapComments] = useState('');
+  const [capViews, setCapViews] = useState('');
+  const [capUrl, setCapUrl] = useState('');
+  const [capBusy, setCapBusy] = useState(false);
+  const [capDone, setCapDone] = useState(false);
+  const [capErr, setCapErr] = useState<string | null>(null);
 
   useEffect(() => {
     const qHandle = searchParams.get('handle');
@@ -190,6 +199,8 @@ function PredictPage() {
     setForecasting(true);
     setForecastErr(null);
     setForecast(null);
+    setCapOpen(false); setCapDone(false); setCapErr(null);
+    setCapLikes(''); setCapComments(''); setCapViews(''); setCapUrl('');
     try {
       const res = await fetch('/api/predict/reach', {
         method: 'POST',
@@ -211,6 +222,42 @@ function PredictPage() {
       setForecastErr('Forecast failed');
     }
     setForecasting(false);
+  }
+
+  // Record the real result of a forecasted post, snapshotting the prediction so
+  // the ML panel's forecast-vs-actual scoreboard can score it. predicted_er is
+  // sent as-is (a fraction) — the same scale the outcomes route computes
+  // actual_er in, so the two line up.
+  async function recordOutcome() {
+    if (!creator || !forecast) return;
+    const likes = Number(capLikes);
+    if (!Number.isFinite(likes) || likes < 0) { setCapErr('Enter the actual likes.'); return; }
+    setCapBusy(true); setCapErr(null);
+    try {
+      const res = await fetch('/api/monitor/outcomes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creator_id: creator.id,
+          post_url: capUrl.trim() || undefined,
+          predicted_likes: forecast.predicted_likes,
+          predicted_views: forecast.predicted_views ?? undefined,
+          predicted_er: forecast.predicted_er,
+          actual_likes: likes,
+          actual_comments: capComments.trim() ? Number(capComments) : undefined,
+          actual_views: capViews.trim() ? Number(capViews) : undefined,
+          note: `${forecast.format} · predicted ${forecast.bucket}`,
+        }),
+      });
+      if (res.ok) { setCapDone(true); setCapOpen(false); }
+      else {
+        const e = await res.json().catch(() => ({}));
+        setCapErr(e.error || 'Could not record the result.');
+      }
+    } catch {
+      setCapErr('Could not record the result.');
+    }
+    setCapBusy(false);
   }
 
   async function runPrediction() {
@@ -537,6 +584,69 @@ function PredictPage() {
                 ))}
               </div>
             )}
+
+            {/* Record actual result — closes the forecast-vs-actual loop */}
+            <div className="pt-4 border-t border-[#f0f0f0]">
+              {capDone ? (
+                <p className="text-[13px] text-[#111]">
+                  &#10003; Result recorded. It now scores this forecast on the{' '}
+                  <Link href="/admin/ml" className="underline hover:text-[#000]">ML accuracy board</Link>.
+                </p>
+              ) : !capOpen ? (
+                <button
+                  onClick={() => setCapOpen(true)}
+                  className="text-[13px] text-[#999] hover:text-[#111] transition-colors"
+                >
+                  + Already posted this? Record the actual result &rarr;
+                </button>
+              ) : (
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-[#999] mb-3">Record actual result</div>
+                  <p className="text-[12px] text-[#999] mb-3">
+                    Once the post is live, enter its real numbers. We compare them to this forecast
+                    (predicted {formatK(forecast.predicted_likes)} likes{forecast.predicted_views != null ? `, ${formatK(forecast.predicted_views)} views` : ''}).
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <input
+                      type="number" min="0" value={capLikes} onChange={(e) => setCapLikes(e.target.value)}
+                      placeholder="Actual likes"
+                      className="px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
+                    />
+                    <input
+                      type="number" min="0" value={capComments} onChange={(e) => setCapComments(e.target.value)}
+                      placeholder="Comments"
+                      className="px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
+                    />
+                    <input
+                      type="number" min="0" value={capViews} onChange={(e) => setCapViews(e.target.value)}
+                      placeholder="Views"
+                      className="px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
+                    />
+                  </div>
+                  <input
+                    type="url" value={capUrl} onChange={(e) => setCapUrl(e.target.value)}
+                    placeholder="Optional: post URL"
+                    className="w-full px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
+                  />
+                  <div className="flex items-center gap-2 mt-3">
+                    <button
+                      onClick={recordOutcome}
+                      disabled={capBusy || !capLikes.trim()}
+                      className="px-5 py-2 bg-[#111] text-white text-[13px] hover:bg-[#333] disabled:opacity-50"
+                    >
+                      {capBusy ? 'Saving...' : 'Save result'}
+                    </button>
+                    <button
+                      onClick={() => { setCapOpen(false); setCapErr(null); }}
+                      className="px-3 py-2 text-[13px] text-[#999] hover:text-[#111]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {capErr && <p className="text-[13px] text-[#cc0000] mt-2">{capErr}</p>}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
