@@ -60,6 +60,41 @@ export interface LoggedPrediction {
   likes_ape: number | null; // |predicted-actual|/actual for likes, when scored
 }
 
+// Row shape shared by the recent/creator-scoped list queries.
+interface PredictionRow {
+  id: string; creator_id: string; creator_handle: string | null; format: string | null;
+  predicted_likes: number | string | null; predicted_views: number | string | null;
+  predicted_er: number | string | null; bucket: string | null; confidence: string | null;
+  caption_preview: string | null; created_at: string;
+  actual_likes: number | string | null; actual_views: number | string | null;
+}
+
+function mapPredictionRow(r: PredictionRow): LoggedPrediction {
+  const pLikes = r.predicted_likes != null ? Number(r.predicted_likes) : null;
+  const aLikes = r.actual_likes != null ? Number(r.actual_likes) : null;
+  const scored = aLikes != null;
+  const likesApe = scored && pLikes != null && aLikes! > 0
+    ? Math.round((Math.abs(pLikes - aLikes!) / aLikes!) * 1000) / 1000
+    : null;
+  return {
+    id: r.id,
+    creator_id: r.creator_id,
+    creator_handle: r.creator_handle,
+    format: r.format,
+    predicted_likes: pLikes,
+    predicted_views: r.predicted_views != null ? Number(r.predicted_views) : null,
+    predicted_er: r.predicted_er != null ? Number(r.predicted_er) : null,
+    bucket: r.bucket,
+    confidence: r.confidence,
+    caption_preview: r.caption_preview,
+    created_at: r.created_at,
+    scored,
+    actual_likes: aLikes,
+    actual_views: r.actual_views != null ? Number(r.actual_views) : null,
+    likes_ape: likesApe,
+  };
+}
+
 /**
  * List the most recent forecasts (newest first), each joined to its recorded
  * outcome (if any) so the panel can show which forecasts have been scored and
@@ -69,13 +104,7 @@ export async function listRecentPredictions(limit = 25): Promise<LoggedPredictio
   const lim = Math.max(1, Math.min(limit, 100));
   try {
     const db = getBolticClient();
-    const rows = await db.query<{
-      id: string; creator_id: string; creator_handle: string | null; format: string | null;
-      predicted_likes: number | string | null; predicted_views: number | string | null;
-      predicted_er: number | string | null; bucket: string | null; confidence: string | null;
-      caption_preview: string | null; created_at: string;
-      actual_likes: number | string | null; actual_views: number | string | null;
-    }>(
+    const rows = await db.query<PredictionRow>(
       `SELECT rp.id, rp.creator_id, c.handle AS creator_handle, rp.format,
               rp.predicted_likes, rp.predicted_views, rp.predicted_er, rp.bucket,
               rp.confidence, rp.caption_preview, rp.created_at,
@@ -93,33 +122,65 @@ export async function listRecentPredictions(limit = 25): Promise<LoggedPredictio
         LIMIT $1`,
       [lim],
     );
-    return rows.map((r) => {
-      const pLikes = r.predicted_likes != null ? Number(r.predicted_likes) : null;
-      const aLikes = r.actual_likes != null ? Number(r.actual_likes) : null;
-      const scored = aLikes != null;
-      const likesApe = scored && pLikes != null && aLikes! > 0
-        ? Math.round((Math.abs(pLikes - aLikes!) / aLikes!) * 1000) / 1000
-        : null;
-      return {
-        id: r.id,
-        creator_id: r.creator_id,
-        creator_handle: r.creator_handle,
-        format: r.format,
-        predicted_likes: pLikes,
-        predicted_views: r.predicted_views != null ? Number(r.predicted_views) : null,
-        predicted_er: r.predicted_er != null ? Number(r.predicted_er) : null,
-        bucket: r.bucket,
-        confidence: r.confidence,
-        caption_preview: r.caption_preview,
-        created_at: r.created_at,
-        scored,
-        actual_likes: aLikes,
-        actual_views: r.actual_views != null ? Number(r.actual_views) : null,
-        likes_ape: likesApe,
-      };
-    });
+    return rows.map(mapPredictionRow);
   } catch (err) {
     console.error('[reach-prediction-log] list failed:', err);
     return [];
   }
 }
+
+export interface CreatorForecastHistory {
+  predictions: LoggedPrediction[];
+  total: number;   // forecasts made for this creator
+  scored: number;  // of those, how many have a recorded actual
+  median_likes_ape: number | null; // typical likes error across scored forecasts
+}
+
+/**
+ * A single creator's forecast history + a small accuracy readout, for the
+ * creator-facing "how have my forecasts landed?" panel. Scoped strictly to one
+ * creator_id. Returns an empty history on any error.
+ */
+export async function listPredictionsForCreator(
+  creatorId: string,
+  limit = 15,
+): Promise<CreatorForecastHistory> {
+  const empty: CreatorForecastHistory = { predictions: [], total: 0, scored: 0, median_likes_ape: null };
+  if (!creatorId) return empty;
+  const lim = Math.max(1, Math.min(limit, 50));
+  try {
+    const db = getBolticClient();
+    const rows = await db.query<PredictionRow>(
+      `SELECT rp.id, rp.creator_id, c.handle AS creator_handle, rp.format,
+              rp.predicted_likes, rp.predicted_views, rp.predicted_er, rp.bucket,
+              rp.confidence, rp.caption_preview, rp.created_at,
+              o.actual_likes, o.actual_views
+         FROM reach_predictions rp
+         LEFT JOIN creators c ON c.id::text = rp.creator_id
+         LEFT JOIN LATERAL (
+           SELECT actual_likes, actual_views
+             FROM post_outcomes po
+            WHERE po.prediction_id = rp.id
+            ORDER BY po.created_at DESC
+            LIMIT 1
+         ) o ON true
+        WHERE rp.creator_id = $1
+        ORDER BY rp.created_at DESC
+        LIMIT $2`,
+      [creatorId, lim],
+    );
+    const predictions = rows.map(mapPredictionRow);
+    const apes = predictions.map((p) => p.likes_ape).filter((v): v is number => v != null).sort((a, b) => a - b);
+    const median = apes.length > 0 ? apes[Math.floor((apes.length - 1) / 2)]! : null;
+    return {
+      predictions,
+      total: predictions.length,
+      scored: predictions.filter((p) => p.scored).length,
+      median_likes_ape: median,
+    };
+  } catch (err) {
+    console.error('[reach-prediction-log] creator list failed:', err);
+    return empty;
+  }
+}
+

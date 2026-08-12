@@ -119,6 +119,23 @@ interface CreatorMatch {
   engagement_rate: number | null;
 }
 
+interface HistoryItem {
+  id: string;
+  format: string | null;
+  predicted_likes: number | null;
+  predicted_views: number | null;
+  created_at: string;
+  scored: boolean;
+  actual_likes: number | null;
+  likes_ape: number | null;
+}
+interface ForecastHistory {
+  predictions: HistoryItem[];
+  total: number;
+  scored: number;
+  median_likes_ape: number | null;
+}
+
 export default function PredictPageWrapper() {
   return (
     <Suspense fallback={<main className="min-h-screen bg-white"><AppHeader /><div className="text-[#ccc] text-sm py-20 text-center">Loading...</div></main>}>
@@ -158,6 +175,8 @@ function PredictPage() {
   const [capErr, setCapErr] = useState<string | null>(null);
   const [capFetching, setCapFetching] = useState(false);
   const [capFetchMsg, setCapFetchMsg] = useState<string | null>(null);
+  // Creator-facing forecast history ("how have my forecasts landed?")
+  const [history, setHistory] = useState<ForecastHistory | null>(null);
 
   useEffect(() => {
     const qHandle = searchParams.get('handle');
@@ -234,6 +253,22 @@ function PredictPage() {
   // Best-effort: pull the post's live numbers from its URL so they don't have
   // to be typed in. Falls back silently to manual entry if the scrape can't
   // resolve the post (blocked, too old, private).
+  async function loadHistory(creatorId: string) {
+    try {
+      const res = await fetch(`/api/predict/history?creator_id=${encodeURIComponent(creatorId)}&limit=15`);
+      if (res.ok) setHistory(await res.json());
+      else setHistory(null);
+    } catch {
+      setHistory(null);
+    }
+  }
+
+  // Pull the creator's forecast history whenever a creator is (re)selected.
+  useEffect(() => {
+    if (creator?.id) loadHistory(creator.id);
+    else setHistory(null);
+  }, [creator?.id]);
+
   async function fetchFromUrl() {
     if (!creator) return;
     const url = capUrl.trim();
@@ -283,7 +318,7 @@ function PredictPage() {
           note: `${forecast.format} · predicted ${forecast.bucket}`,
         }),
       });
-      if (res.ok) { setCapDone(true); setCapOpen(false); }
+      if (res.ok) { setCapDone(true); setCapOpen(false); if (creator?.id) loadHistory(creator.id); }
       else {
         const e = await res.json().catch(() => ({}));
         setCapErr(e.error || 'Could not record the result.');
@@ -692,6 +727,47 @@ function PredictPage() {
                   {capErr && <p className="text-[13px] text-[#cc0000] mt-2">{capErr}</p>}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Your forecast history — how past forecasts for this creator landed */}
+        {mode === 'forecast' && creator && history && history.total > 0 && (
+          <div className="border border-[#e5e5e5] p-6 mt-6">
+            <div className="flex items-baseline justify-between mb-4">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[#999]">Your forecast history</div>
+              <div className="text-[12px] text-[#999] tabular-nums">
+                {history.total} forecast{history.total === 1 ? '' : 's'}
+                {history.scored > 0 && ` · ${history.scored} scored`}
+                {history.median_likes_ape != null && ` · typically ${Math.round(history.median_likes_ape * 100)}% off on likes`}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {history.predictions.map((h) => (
+                <div key={h.id} className="flex items-center gap-3 py-2 border-b border-[#f5f5f5] last:border-0 text-[13px]">
+                  <span className="text-[#999] tabular-nums w-20 shrink-0">
+                    {new Date(h.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                  <span className="text-[#6b6b6b] capitalize w-16 shrink-0">{h.format ?? '—'}</span>
+                  <span className="text-[#111] tabular-nums flex-1">
+                    {h.predicted_likes != null ? formatK(h.predicted_likes) : '—'} likes
+                    {h.predicted_views != null ? ` · ${formatK(h.predicted_views)} views` : ''}
+                  </span>
+                  {h.scored ? (
+                    <span className="tabular-nums shrink-0">
+                      <span className="text-[#999]">actual </span>
+                      <span className="text-[#111]">{h.actual_likes != null ? formatK(h.actual_likes) : '—'}</span>
+                      {h.likes_ape != null && (
+                        <span className={h.likes_ape <= 0.25 ? 'text-[#1a7f37] ml-2' : h.likes_ape <= 0.5 ? 'text-[#9a6700] ml-2' : 'text-[#cc0000] ml-2'}>
+                          {Math.round(h.likes_ape * 100)}% off
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-[#ccc] text-[12px] shrink-0">pending result</span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
