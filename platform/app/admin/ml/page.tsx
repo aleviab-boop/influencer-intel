@@ -99,6 +99,9 @@ export default function MlPage() {
   const [accuracy, setAccuracy] = useState<ForecastAccuracy | null>(null);
   const [predictions, setPredictions] = useState<LoggedPrediction[] | null>(null);
   const [lift, setLift] = useState<ModelLift | null>(null);
+  const [coverage, setCoverage] = useState<{ total_scored: number; creators_scored: number } | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
   const [training, setTraining] = useState(false);
   const [lastRun, setLastRun] = useState<TrainResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -120,6 +123,10 @@ export default function MlPage() {
       .then((r) => r.json())
       .then((d) => setLift(d as ModelLift))
       .catch(() => setLift(null));
+    fetch('/api/admin/ml/backfill-content')
+      .then((r) => r.json())
+      .then((d) => setCoverage({ total_scored: Number(d?.total_scored) || 0, creators_scored: Number(d?.creators_scored) || 0 }))
+      .catch(() => setCoverage(null));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -136,6 +143,29 @@ export default function MlPage() {
       setErr((e as Error).message);
     } finally {
       setTraining(false);
+    }
+  }, [load]);
+
+  const runBackfill = useCallback(async () => {
+    setBackfilling(true); setBackfillMsg(null);
+    try {
+      const r = await fetch('/api/admin/ml/backfill-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: 25 }),
+      });
+      const d = await r.json();
+      if (!d.ok) setBackfillMsg(d.error || 'Backfill failed.');
+      else setBackfillMsg(
+        `Scanned ${d.creators_scanned} creators, ${d.candidates} candidates — scored ${d.scored} with vision` +
+        (d.skipped_no_vision ? `, skipped ${d.skipped_no_vision} whose image couldn't be fetched` : '') +
+        `. Total coverage: ${d.total_scored}.`,
+      );
+      load();
+    } catch (e) {
+      setBackfillMsg((e as Error).message);
+    } finally {
+      setBackfilling(false);
     }
   }, [load]);
 
@@ -165,28 +195,56 @@ export default function MlPage() {
             <div className="text-[13px] text-[#777] mt-0.5">
               Last trained {ago(status?.models[0]?.trained_at)}. Retraining scans all historical posts and upserts the weights.
             </div>
+            <div className="text-[12.5px] text-[#999] mt-1">
+              Vision content coverage: <b className="text-[#555]">{coverage ? coverage.total_scored.toLocaleString() : '—'}</b> posts
+              {coverage && coverage.total_scored > 0 ? ` across ${coverage.creators_scored} creators` : ''}
+              {' '}(the content-quality feature activates at ≥40).
+            </div>
           </div>
-          <button
-            onClick={retrain}
-            disabled={training}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-semibold text-white transition-all disabled:opacity-60"
-            style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, boxShadow: '0 8px 20px rgba(108,77,246,0.28)' }}
-          >
-            {training ? (
-              <>
-                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.2-8.5" strokeLinecap="round" /></svg>
-                Training…
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
-                Retrain now
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={runBackfill}
+              disabled={backfilling || training}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-semibold text-[#6C4DF6] bg-[#f2effe] border border-[#e2dbfb] transition-all disabled:opacity-60 hover:bg-[#ece7fd]"
+            >
+              {backfilling ? (
+                <>
+                  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.2-8.5" strokeLinecap="round" /></svg>
+                  Scoring…
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg>
+                  Backfill content
+                </>
+              )}
+            </button>
+            <button
+              onClick={retrain}
+              disabled={training}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[14px] font-semibold text-white transition-all disabled:opacity-60"
+              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, boxShadow: '0 8px 20px rgba(108,77,246,0.28)' }}
+            >
+              {training ? (
+                <>
+                  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.2-8.5" strokeLinecap="round" /></svg>
+                  Training…
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" /></svg>
+                  Retrain now
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {err && <div className="mt-4 rounded-xl bg-rose-50 border border-rose-100 px-4 py-3 text-[13px] text-rose-700">{err}</div>}
+
+        {backfillMsg && (
+          <div className="mt-4 rounded-xl bg-[#f2effe] border border-[#e2dbfb] px-4 py-3 text-[13px] text-[#5b46b8]">{backfillMsg}</div>
+        )}
 
         {lastRun?.ok && (
           <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-[13px] text-emerald-800">
