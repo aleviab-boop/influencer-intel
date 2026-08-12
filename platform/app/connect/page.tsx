@@ -85,6 +85,13 @@ function ConnectContent() {
                   Set IG_APP_ID, IG_APP_SECRET, IG_REDIRECT_URI to enable.
                 </span>
               )}
+              <div className="mt-3 text-[12px] text-ink-400">
+                Prefer not to connect Instagram?{' '}
+                <a href="/creator/join" className="text-ink-900 underline underline-offset-2">
+                  Claim your profile with email instead
+                </a>
+                .
+              </div>
             </div>
 
             <h2 className="mt-10 mb-3 text-sm font-semibold text-ink-900">Connected accounts</h2>
