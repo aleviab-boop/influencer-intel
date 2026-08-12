@@ -70,6 +70,8 @@ function ConnectContent() {
           <>
             <ConfigCard config={config} />
 
+            <PermissionsCard />
+
             <div className="mt-6">
               <button
                 disabled={!config?.configured}
@@ -109,6 +111,44 @@ function ConnectContent() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+// Reviewer- and creator-facing explainer of exactly what Instagram data we
+// request and why. Mirrors the two permissions we ask for in App Review
+// (instagram_business_basic + instagram_business_manage_insights) and the
+// privacy policy — read-only, own account only, no comments/DMs.
+function PermissionsCard() {
+  const rows: { perm: string; use: string }[] = [
+    {
+      perm: 'instagram_business_basic',
+      use: 'Read your own profile (username, name, follower & media counts) and your media list to build your dashboard and media kit.',
+    },
+    {
+      perm: 'instagram_business_manage_insights',
+      use: 'Read insights for your own posts and account (reach, likes, saves, views, follower demographics) to power your analytics and share verified metrics with brands you apply to.',
+    },
+  ];
+  return (
+    <div className="mt-6 p-5 rounded-xl bg-surface border border-border">
+      <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-3">
+        What we’ll access — and why
+      </div>
+      <div className="space-y-3">
+        {rows.map((r) => (
+          <div key={r.perm}>
+            <div className="font-mono text-[12px] text-ink-900">{r.perm}</div>
+            <div className="text-[13px] text-ink-500 mt-0.5">{r.use}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 pt-3 border-t border-border text-[12px] text-ink-400">
+        Read-only, and only your own account. We never post, and never read or send comments or DMs.
+        You can disconnect anytime here or from Instagram → Settings → Apps and websites.{' '}
+        <a href="/privacy" className="underline underline-offset-2 text-ink-500">Privacy</a>{' · '}
+        <a href="/data-deletion" className="underline underline-offset-2 text-ink-500">Data deletion</a>
+      </div>
     </div>
   );
 }

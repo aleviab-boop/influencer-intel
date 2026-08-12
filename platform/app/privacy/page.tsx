@@ -11,7 +11,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      updated="August 11, 2026"
+      updated="August 12, 2026"
       intro="This policy explains what information Influencer Intel collects, how we use it, and the choices you have — including the data we access when you connect your Instagram account."
     >
       <Section heading="Who we are">
@@ -43,9 +43,13 @@ export default function PrivacyPage() {
             <><strong>Profile basics</strong> — your username, account type, follower count, and media count.</>,
             <><strong>Media &amp; insights</strong> — your posts and reels and their metrics (likes, comments, reach, plays, saves, shares) so we can show your analytics.</>,
             <><strong>Audience insights</strong> — aggregated, anonymized demographics (age ranges, gender split, top locations) about the people who follow you.</>,
-            <><strong>Comments &amp; messaging</strong> — only if you enable Comment-to-DM automations, to reply to comments and send the direct messages you configure.</>,
           ]}
         />
+        <p>
+          We request only two permissions — <strong>instagram_business_basic</strong> and{' '}
+          <strong>instagram_business_manage_insights</strong> — and our access is read-only. We do not
+          post on your behalf, and we do not read or send comments or direct messages.
+        </p>
         <p>
           We never receive your Instagram password. Access is granted by a token you can revoke at any
           time from your Instagram settings or by disconnecting in our app.
@@ -57,7 +61,7 @@ export default function PrivacyPage() {
           items={[
             'To show you your own analytics — engagement, growth, top content, audience, and estimated media value.',
             'To build your media kit and rate card, and to match you with relevant brand campaigns.',
-            'To run automations you set up (such as replying to comments with a DM).',
+            'To share verified, first-party reach and engagement metrics with brands you choose to apply to.',
             'To operate, secure, and improve the platform.',
           ]}
         />
