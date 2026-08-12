@@ -156,6 +156,8 @@ function PredictPage() {
   const [capBusy, setCapBusy] = useState(false);
   const [capDone, setCapDone] = useState(false);
   const [capErr, setCapErr] = useState<string | null>(null);
+  const [capFetching, setCapFetching] = useState(false);
+  const [capFetchMsg, setCapFetchMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const qHandle = searchParams.get('handle');
@@ -229,6 +231,35 @@ function PredictPage() {
   // the ML panel's forecast-vs-actual scoreboard can score it. predicted_er is
   // sent as-is (a fraction) — the same scale the outcomes route computes
   // actual_er in, so the two line up.
+  // Best-effort: pull the post's live numbers from its URL so they don't have
+  // to be typed in. Falls back silently to manual entry if the scrape can't
+  // resolve the post (blocked, too old, private).
+  async function fetchFromUrl() {
+    if (!creator) return;
+    const url = capUrl.trim();
+    if (!url) { setCapFetchMsg('Paste the post URL first.'); return; }
+    setCapFetching(true); setCapFetchMsg(null); setCapErr(null);
+    try {
+      const res = await fetch('/api/monitor/outcomes/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creator_id: creator.id, post_url: url }),
+      });
+      const d = await res.json();
+      if (res.ok && d.found) {
+        if (d.like_count != null) setCapLikes(String(d.like_count));
+        if (d.comment_count != null) setCapComments(String(d.comment_count));
+        if (d.view_count != null) setCapViews(String(d.view_count));
+        setCapFetchMsg('Filled from the live post — check and save.');
+      } else {
+        setCapFetchMsg("Couldn't read that post automatically — enter the numbers manually.");
+      }
+    } catch {
+      setCapFetchMsg("Couldn't reach the post — enter the numbers manually.");
+    }
+    setCapFetching(false);
+  }
+
   async function recordOutcome() {
     if (!creator || !forecast) return;
     const likes = Number(capLikes);
@@ -626,11 +657,23 @@ function PredictPage() {
                       className="px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
                     />
                   </div>
-                  <input
-                    type="url" value={capUrl} onChange={(e) => setCapUrl(e.target.value)}
-                    placeholder="Optional: post URL"
-                    className="w-full px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="url" value={capUrl} onChange={(e) => setCapUrl(e.target.value)}
+                      placeholder="Optional: post URL — fetch the numbers automatically"
+                      className="flex-1 px-3 py-2 border border-[#e5e5e5] text-[13px] text-[#111] placeholder:text-[#ccc] focus:outline-none focus:border-[#111]"
+                    />
+                    <button
+                      onClick={fetchFromUrl}
+                      disabled={capFetching || !capUrl.trim()}
+                      className="px-4 py-2 border border-[#111] text-[13px] text-[#111] hover:bg-[#111] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#111] whitespace-nowrap transition-colors"
+                    >
+                      {capFetching ? 'Reading...' : 'Fetch'}
+                    </button>
+                  </div>
+                  {capFetchMsg && (
+                    <p className="text-[12px] text-[#6b6b6b] mt-2">{capFetchMsg}</p>
+                  )}
                   <div className="flex items-center gap-2 mt-3">
                     <button
                       onClick={recordOutcome}
