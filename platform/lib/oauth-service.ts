@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { IGGraphClient } from '@influencer-intel/shared/ig-graph';
 import type { ConnectedAccount, Creator } from '@influencer-intel/shared/types';
@@ -11,11 +12,14 @@ const IG_REDIRECT_URI =
 // client (shared/ig-graph) already target this flow (api.instagram.com +
 // graph.instagram.com + ig_exchange_token), so the authorize step must too —
 // NOT the Facebook-Login (facebook.com/dialog/oauth + pages_* scopes) product.
+//
+// Scoped to ONLY what the code actually calls: profile + /me/media
+// (basic) and /{media}/insights + /me/insights (insights). We deliberately do
+// NOT request manage_comments / manage_messages — nothing reads or writes
+// comments or DMs, and App Review rejects permissions you can't demonstrate.
 const OAUTH_SCOPES = [
   'instagram_business_basic',
   'instagram_business_manage_insights',
-  'instagram_business_manage_comments',
-  'instagram_business_manage_messages',
 ].join(',');
 
 const IG_AUTHORIZE_URL = 'https://www.instagram.com/oauth/authorize';
@@ -127,6 +131,57 @@ export async function handleOAuthCallback(
     [creator.id, brandId, profile.id, profile.username, longToken.access_token, expiresAt, OAUTH_SCOPES.split(',')],
   );
   return rows[0]!;
+}
+
+// ── Meta compliance callbacks: signed_request parsing + deletion ────────────
+//
+// When a user removes the app (deauthorize) or requests deletion (data-deletion),
+// Meta POSTs a `signed_request` — base64url `signature.payload`, HMAC-SHA256
+// signed with the app secret. Both callbacks are REQUIRED to pass App Review.
+
+interface SignedRequestPayload {
+  user_id?: string; // the Instagram-scoped user id (== connected_accounts.ig_user_id)
+  algorithm?: string;
+  issued_at?: number;
+  [k: string]: unknown;
+}
+
+/**
+ * Verify + decode a Meta `signed_request`. Returns null on a missing/forged
+ * signature (so callers can reject) rather than throwing. Constant-time compare.
+ */
+export function parseSignedRequest(signedRequest: string | null | undefined): SignedRequestPayload | null {
+  if (!signedRequest || !IG_APP_SECRET) return null;
+  const dot = signedRequest.indexOf('.');
+  if (dot < 1) return null;
+  const sigPart = signedRequest.slice(0, dot);
+  const payloadPart = signedRequest.slice(dot + 1);
+  try {
+    const expected = createHmac('sha256', IG_APP_SECRET).update(payloadPart).digest();
+    const given = Buffer.from(sigPart, 'base64url');
+    if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+    const data = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8')) as SignedRequestPayload;
+    if (data.algorithm && data.algorithm.toUpperCase() !== 'HMAC-SHA256') return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete everything obtained via a user's Instagram Login: their connected
+ * account(s) and — via ON DELETE CASCADE — every post_insights row we fetched.
+ * Shared by the deauthorize and data-deletion callbacks. Idempotent; returns the
+ * number of connected accounts removed.
+ */
+export async function deleteInstagramUserData(igUserId: string): Promise<number> {
+  if (!igUserId) return 0;
+  const db = getBolticClient();
+  const rows = await db.query<{ id: string }>(
+    `DELETE FROM connected_accounts WHERE ig_user_id = $1 RETURNING id`,
+    [igUserId],
+  );
+  return rows.length;
 }
 
 /** Fetch + decrypt a connected account's IG access token for Graph API calls. */
