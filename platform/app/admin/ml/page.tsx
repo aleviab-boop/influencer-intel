@@ -43,6 +43,7 @@ interface TrainResp {
   ok: boolean;
   error?: string;
   creators_scanned?: number;
+  outcomes_used?: number;
   trained_at?: string;
   likes?: { trained: boolean; rmse: number; r2: number; n_samples: number };
   views?: { trained: boolean; rmse: number; r2: number; n_samples: number };
@@ -264,7 +265,8 @@ export default function MlPage() {
 
         {lastRun?.ok && (
           <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-[13px] text-emerald-800">
-            Retrained on {lastRun.creators_scanned?.toLocaleString()} creators —
+            Retrained on {lastRun.creators_scanned?.toLocaleString()} creators
+            {lastRun.outcomes_used ? `, folding in ${lastRun.outcomes_used.toLocaleString()} recorded outcome${lastRun.outcomes_used === 1 ? '' : 's'}` : ''} —
             {' '}likes: {lastRun.likes?.trained ? `${lastRun.likes.n_samples.toLocaleString()} samples, R² ${pct(lastRun.likes.r2)}` : 'skipped (too few samples)'};
             {' '}views: {lastRun.views?.trained ? `${lastRun.views.n_samples.toLocaleString()} samples, R² ${pct(lastRun.views.r2)}` : 'skipped (too few samples)'}.
           </div>

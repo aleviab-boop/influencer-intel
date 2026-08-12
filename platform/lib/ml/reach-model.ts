@@ -203,6 +203,8 @@ export interface TrainReport {
   likes: { trained: boolean; rmse: number; r2: number; n_samples: number };
   views: { trained: boolean; rmse: number; r2: number; n_samples: number };
   creators_scanned: number;
+  // How many recorded ground-truth outcomes were folded into the training set.
+  outcomes_used: number;
   // Vision content-score coverage over the training set.
   content: { scored_rows: number; total_rows: number; applied: boolean };
   trained_at: string;
@@ -222,6 +224,55 @@ async function loadContentScores(db: ReturnType<typeof getBolticClient>): Promis
   return map;
 }
 
+// Pull the shortcode out of an Instagram post/reel URL — the join key that
+// lets a recorded outcome be deduped against a scraped post and matched to a
+// backfilled content score.
+function shortcodeOf(url: string | null): string | null {
+  if (!url) return null;
+  const m = url.match(/\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+  return m?.[1] ?? null;
+}
+
+/**
+ * Load recorded ground-truth outcomes as training posts, grouped by creator.
+ * These are the actuals captured against forecasts — the labels the loop has
+ * been collecting. Each becomes a RawPost with its real likes/views, its format,
+ * and (via the forecast ledger) the caption it was made under, so it feeds the
+ * content features just like a scraped post. Best-effort: returns an empty map
+ * if the tables aren't there yet.
+ */
+async function loadOutcomePosts(db: ReturnType<typeof getBolticClient>): Promise<Map<string, RawPost[]>> {
+  const byCreator = new Map<string, RawPost[]>();
+  try {
+    const rows = await db.query<{
+      creator_id: string; post_url: string | null; format: string | null;
+      actual_likes: number | string | null; actual_views: number | string | null;
+      caption_preview: string | null;
+    }>(
+      `SELECT po.creator_id, po.post_url, po.format, po.actual_likes, po.actual_views,
+              rp.caption_preview
+         FROM post_outcomes po
+         LEFT JOIN reach_predictions rp ON rp.id = po.prediction_id
+        WHERE po.actual_likes IS NOT NULL`,
+    );
+    for (const r of rows) {
+      const post: RawPost = {
+        post_type: r.format,
+        caption: r.caption_preview ?? '',
+        like_count: r.actual_likes != null ? Number(r.actual_likes) : null,
+        view_count: r.actual_views != null ? Number(r.actual_views) : null,
+        key: shortcodeOf(r.post_url),
+      };
+      const list = byCreator.get(r.creator_id) ?? [];
+      list.push(post);
+      byCreator.set(r.creator_id, list);
+    }
+  } catch {
+    // post_outcomes / reach_predictions absent → no ground-truth rows to fold in.
+  }
+  return byCreator;
+}
+
 /**
  * Pull every creator's historical posts (scraped `recent_posts` + OAuth
  * `post_insights`), build the residual dataset, fit the likes & views ridge
@@ -232,8 +283,29 @@ export async function trainReachModels(): Promise<TrainReport> {
   const likesDS: Dataset = { X: [], y: [], content: [] };
   const viewsDS: Dataset = { X: [], y: [], content: [] };
   let creatorsScanned = 0;
+  let outcomesUsed = 0;
   const scores = await loadContentScores(db);
   const scoreOf: ScoreLookup = (cid, key) => (key ? scores.get(`${cid}::${key}`) ?? null : null);
+  // Recorded ground-truth outcomes, grouped by creator — the labels the loop has
+  // been collecting. Folded into each creator's history below (deduped), so the
+  // model actually LEARNS from recorded results, not just gets measured by them.
+  const outcomesByCreator = await loadOutcomePosts(db);
+
+  // Fold this creator's recorded outcomes into their post list, skipping any
+  // whose shortcode already appears (the scraped copy is kept to avoid
+  // double-counting). Consumes the creator's entry so pass 3 only sees leftovers.
+  function foldOutcomes(creatorId: string, posts: RawPost[]): void {
+    const extra = outcomesByCreator.get(creatorId);
+    if (!extra?.length) return;
+    const seen = new Set(posts.map((p) => p.key).filter((k): k is string => !!k));
+    for (const o of extra) {
+      if (o.key && seen.has(o.key)) continue;
+      posts.push(o);
+      outcomesUsed++;
+      if (o.key) seen.add(o.key);
+    }
+    outcomesByCreator.delete(creatorId);
+  }
 
   // 1) Scraped history: recent_posts JSONB on creators.
   // recent_posts is a `json` column (not jsonb) → use json_array_length.
@@ -253,6 +325,7 @@ export async function trainReachModels(): Promise<TrainReport> {
       view_count: p.view_count != null ? Number(p.view_count) : null,
       key: postKeyOf(p),
     }));
+    foldOutcomes(row.id, posts);
     addCreatorRows(row.id, posts, likesDS, viewsDS, scoreOf);
   }
 
@@ -278,8 +351,20 @@ export async function trainReachModels(): Promise<TrainReport> {
     byCreator.set(r.creator_id, list);
   }
   for (const [cid, posts] of byCreator.entries()) {
+    foldOutcomes(cid, posts);
     if (posts.length < 4) continue;
     creatorsScanned++;
+    addCreatorRows(cid, posts, likesDS, viewsDS, scoreOf);
+  }
+
+  // 2b) Creators whose ONLY history is recorded outcomes (no scraped/OAuth
+  // posts) — train them on their own outcomes if there are enough to form a
+  // stable leave-one-out baseline. Whatever's left in outcomesByCreator here was
+  // not consumed by passes 1/2.
+  for (const [cid, posts] of outcomesByCreator.entries()) {
+    if (posts.length < 4) continue;
+    creatorsScanned++;
+    outcomesUsed += posts.length;
     addCreatorRows(cid, posts, likesDS, viewsDS, scoreOf);
   }
 
@@ -292,6 +377,7 @@ export async function trainReachModels(): Promise<TrainReport> {
     likes: { trained: false, rmse: 0, r2: 0, n_samples: likesDS.y.length },
     views: { trained: false, rmse: 0, r2: 0, n_samples: viewsDS.y.length },
     creators_scanned: creatorsScanned,
+    outcomes_used: outcomesUsed,
     content: {
       scored_rows: scoredRows,
       total_rows: likesDS.y.length,
