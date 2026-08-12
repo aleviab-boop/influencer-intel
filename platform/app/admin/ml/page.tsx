@@ -48,6 +48,20 @@ interface TrainResp {
   views?: { trained: boolean; rmse: number; r2: number; n_samples: number };
 }
 
+interface LiftMetric {
+  n: number;
+  median_prediction_ape: number | null;
+  median_baseline_ape: number | null;
+  win_rate: number | null;
+  improvement: number | null;
+}
+interface ModelLift {
+  linked_outcomes: number;
+  likes: LiftMetric;
+  views: LiftMetric;
+  last_recorded_at: string | null;
+}
+
 interface LoggedPrediction {
   id: string;
   creator_handle: string | null;
@@ -84,6 +98,7 @@ export default function MlPage() {
   const [status, setStatus] = useState<StatusResp | null>(null);
   const [accuracy, setAccuracy] = useState<ForecastAccuracy | null>(null);
   const [predictions, setPredictions] = useState<LoggedPrediction[] | null>(null);
+  const [lift, setLift] = useState<ModelLift | null>(null);
   const [training, setTraining] = useState(false);
   const [lastRun, setLastRun] = useState<TrainResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -101,6 +116,10 @@ export default function MlPage() {
       .then((r) => r.json())
       .then((d) => setPredictions((d?.predictions ?? []) as LoggedPrediction[]))
       .catch(() => setPredictions([]));
+    fetch('/api/admin/ml/lift')
+      .then((r) => r.json())
+      .then((d) => setLift(d as ModelLift))
+      .catch(() => setLift(null));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -264,6 +283,43 @@ export default function MlPage() {
                 format&apos;s ≥8 recorded results; <span className="text-[#b45309] font-semibold">pooled</span> = borrowed from all formats until it has enough of its own.
               </p>
             </div>
+          </>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-[#ececf3] bg-white p-6 shadow-[0_10px_40px_rgba(108,77,246,0.06)] mb-6">
+        <div className="mb-4">
+          <div className="text-[15px] font-semibold text-[#1a1a2e]">Is the model earning its keep?</div>
+          <div className="text-[13px] text-[#777] mt-0.5">
+            On every forecast with a recorded actual, the full prediction&apos;s error vs just using the creator&apos;s raw
+            baseline — measured on the same post. {lift ? `${lift.linked_outcomes.toLocaleString()} forecasts linked to actuals.` : ''}
+          </div>
+        </div>
+        {lift && lift.likes.n === 0 && lift.views.n === 0 ? (
+          <div className="rounded-xl bg-[#faf9ff] border border-[#ececf3] px-4 py-3 text-[13px] text-[#777]">
+            No forecasts have been scored against actuals yet. Once a forecast (which now stores its baseline) has a real
+            result recorded against it, this shows whether the trend / timing / content layers actually beat the baseline —
+            <b> win-rate above 50% and a positive improvement mean the extra machinery is helping.</b>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <StatCard label="Prediction error" value={errPct(lift?.likes.median_prediction_ape ?? null)} sub={`likes · median · n=${lift?.likes.n ?? 0}`} color="#6C4DF6" />
+              <StatCard label="Baseline error" value={errPct(lift?.likes.median_baseline_ape ?? null)} sub="likes · median" color="#94a3b8" />
+              <StatCard label="Win rate" value={pct(lift?.likes.win_rate ?? null)} sub="prediction beats baseline" color="#059669" />
+              <StatCard label="Improvement" value={biasPct(lift?.likes.improvement ?? null)} sub="baseline − prediction error" color={((lift?.likes.improvement ?? 0) >= 0) ? '#059669' : '#dc2626'} />
+            </div>
+            {(lift?.views.n ?? 0) > 0 && (
+              <div className="mt-3 text-[12.5px] text-[#888]">
+                Views: prediction {errPct(lift?.views.median_prediction_ape ?? null)} vs baseline {errPct(lift?.views.median_baseline_ape ?? null)} median error;
+                {' '}wins {pct(lift?.views.win_rate ?? null)} of the time (n={lift?.views.n ?? 0}).
+              </div>
+            )}
+            <p className="mt-3 text-[12px] text-[#999]">
+              A <b>win-rate above 50%</b> and a <span className="text-[#059669] font-semibold">positive improvement</span> mean
+              the full prediction is closer than the baseline more often than not. If it dips below, the trend/timing/content
+              layers are adding noise, not signal — a signal to retune or fall back to baseline.
+            </p>
           </>
         )}
       </div>
