@@ -75,6 +75,17 @@ interface LoggedPrediction {
   likes_ape: number | null;
 }
 
+interface Staleness {
+  trained: boolean;
+  trained_at: string | null;
+  days_since_trained: number | null;
+  new_content_scores: number;
+  new_post_insights: number;
+  new_outcomes: number;
+  stale: boolean;
+  reason: string;
+}
+
 function ago(iso: string | null | undefined): string {
   if (!iso) return 'never';
   const ms = Date.now() - new Date(iso).getTime();
@@ -100,6 +111,7 @@ export default function MlPage() {
   const [predictions, setPredictions] = useState<LoggedPrediction[] | null>(null);
   const [lift, setLift] = useState<ModelLift | null>(null);
   const [coverage, setCoverage] = useState<{ total_scored: number; creators_scored: number } | null>(null);
+  const [staleness, setStaleness] = useState<Staleness | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillMsg, setBackfillMsg] = useState<string | null>(null);
   const [training, setTraining] = useState(false);
@@ -127,6 +139,10 @@ export default function MlPage() {
       .then((r) => r.json())
       .then((d) => setCoverage({ total_scored: Number(d?.total_scored) || 0, creators_scored: Number(d?.creators_scored) || 0 }))
       .catch(() => setCoverage(null));
+    fetch('/api/admin/ml/staleness')
+      .then((r) => r.json())
+      .then((d) => setStaleness(d as Staleness))
+      .catch(() => setStaleness(null));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -251,6 +267,26 @@ export default function MlPage() {
             Retrained on {lastRun.creators_scanned?.toLocaleString()} creators —
             {' '}likes: {lastRun.likes?.trained ? `${lastRun.likes.n_samples.toLocaleString()} samples, R² ${pct(lastRun.likes.r2)}` : 'skipped (too few samples)'};
             {' '}views: {lastRun.views?.trained ? `${lastRun.views.n_samples.toLocaleString()} samples, R² ${pct(lastRun.views.r2)}` : 'skipped (too few samples)'}.
+          </div>
+        )}
+
+        {staleness?.trained && !lastRun?.ok && (
+          <div
+            className={`mt-4 rounded-xl px-4 py-3 text-[13px] border ${
+              staleness.stale
+                ? 'bg-amber-50 border-amber-100 text-amber-800'
+                : 'bg-[#f6f9f7] border-[#e3ede6] text-[#4a6b57]'
+            }`}
+          >
+            <span className="font-semibold">{staleness.stale ? 'Retrain suggested — ' : 'Model is current — '}</span>
+            {staleness.reason}
+            {(staleness.new_content_scores > 0 || staleness.new_post_insights > 0 || staleness.new_outcomes > 0) && (
+              <span className="text-[#999]">
+                {' '}(since last fit: {staleness.new_content_scores.toLocaleString()} content scores,
+                {' '}{staleness.new_post_insights.toLocaleString()} insights,
+                {' '}{staleness.new_outcomes.toLocaleString()} recorded outcomes)
+              </span>
+            )}
           </div>
         )}
       </div>
