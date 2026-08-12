@@ -383,12 +383,22 @@ export default function MlPage() {
       </div>
 
       <div className="rounded-2xl border border-[#ececf3] bg-white p-6 shadow-[0_10px_40px_rgba(108,77,246,0.06)] mb-6">
-        <div className="mb-4">
-          <div className="text-[15px] font-semibold text-[#1a1a2e]">Recent forecasts</div>
-          <div className="text-[13px] text-[#777] mt-0.5">
-            The last {predictions?.length ?? 0} forecasts logged to the ledger. A recorded actual links straight
-            back to its forecast — no re-entering numbers — and shows how close it landed.
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[15px] font-semibold text-[#1a1a2e]">Recent forecasts</div>
+            <div className="text-[13px] text-[#777] mt-0.5">
+              The last {predictions?.length ?? 0} forecasts logged to the ledger. A recorded actual links straight
+              back to its forecast — no re-entering numbers — and shows how close it landed.
+            </div>
           </div>
+          {predictions && predictions.length > 0 && (
+            <a
+              href="/api/admin/ml/predictions/export"
+              className="shrink-0 rounded-lg border border-[#d6d3f0] px-3 py-1.5 text-[12.5px] font-medium text-[#6c4df6] hover:bg-[#f5f3ff] transition-colors whitespace-nowrap"
+            >
+              Export CSV
+            </a>
+          )}
         </div>
         {predictions && predictions.length === 0 ? (
           <div className="rounded-xl bg-[#faf9ff] border border-[#ececf3] px-4 py-3 text-[13px] text-[#777]">

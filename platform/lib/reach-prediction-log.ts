@@ -101,7 +101,7 @@ function mapPredictionRow(r: PredictionRow): LoggedPrediction {
  * how close they landed. Returns [] on any error.
  */
 export async function listRecentPredictions(limit = 25): Promise<LoggedPrediction[]> {
-  const lim = Math.max(1, Math.min(limit, 100));
+  const lim = Math.max(1, Math.min(limit, 2000));
   try {
     const db = getBolticClient();
     const rows = await db.query<PredictionRow>(
