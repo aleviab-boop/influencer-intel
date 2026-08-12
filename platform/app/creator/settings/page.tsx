@@ -128,6 +128,9 @@ function Settings() {
               </div>
             </div>
 
+            {/* Ownership verification */}
+            <OwnershipCard />
+
             {/* Editable form */}
             <div className="rounded-2xl bg-white border border-border shadow-card p-5 space-y-4">
               <Field label="Display name" hint="Your name as brands should see it.">
@@ -226,6 +229,86 @@ function Settings() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+/**
+ * Ownership verification card. Reads the creator session for their claim state:
+ *   • verified → a green "Verified owner" badge
+ *   • claimed but unverified → shows the bio code + a "Check my bio" button
+ *   • no claim code (OAuth-only / preview) → renders nothing
+ */
+function OwnershipCard() {
+  const [state, setState] = useState<{ verified: boolean | null; code: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/creator/session')
+      .then((r) => r.json())
+      .then((d: { claim_verified?: boolean | null; claim_code?: string | null }) => {
+        if (d.claim_verified === undefined && !d.claim_code) return;
+        setState({ verified: d.claim_verified ?? null, code: d.claim_code ?? null });
+      })
+      .catch(() => {});
+  }, []);
+
+  if (!state || (state.verified === null && !state.code)) return null;
+
+  if (state.verified) {
+    return (
+      <div className="rounded-2xl bg-white border border-border shadow-card p-5 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl grid place-items-center bg-emerald-50 text-emerald-600">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        </div>
+        <div>
+          <div className="text-[14px] font-semibold text-ink-900">Verified owner</div>
+          <div className="text-[12px] text-ink-400">You&apos;ve confirmed you own this Instagram account.</div>
+        </div>
+      </div>
+    );
+  }
+
+  async function check() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/creator/auth/verify', { method: 'POST' });
+      const d = (await res.json().catch(() => null)) as { verified?: boolean } | null;
+      if (d?.verified) {
+        setState({ verified: true, code: null });
+      } else {
+        setMsg("Not found in your bio yet — save the code, wait a moment, then check again.");
+      }
+    } catch {
+      setMsg('Something went wrong — try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-card p-5">
+      <div className="text-[14px] font-semibold text-ink-900">Verify ownership</div>
+      <div className="text-[12.5px] text-ink-500 mt-0.5">
+        Add this code to your Instagram bio, then check — it earns you a verified badge and
+        unlocks payouts.
+      </div>
+      <div className="mt-3 flex items-center gap-3 flex-wrap">
+        <code className="px-3 py-1.5 rounded-lg text-[14px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+          {state.code}
+        </code>
+        <button
+          onClick={check}
+          disabled={busy}
+          className="px-4 py-2 text-[13px] font-semibold text-white rounded-xl disabled:opacity-60"
+          style={{ background: ACCENT }}
+        >
+          {busy ? 'Checking…' : 'Check my bio'}
+        </button>
+      </div>
+      {msg && <div className="mt-2.5 text-[12px] text-amber-700">{msg}</div>}
     </div>
   );
 }

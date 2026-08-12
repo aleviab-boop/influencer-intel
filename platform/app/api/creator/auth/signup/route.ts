@@ -19,9 +19,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const handle = body?.handle ?? '';
 
   try {
-    const session = await createCreatorAccount(email, password, handle);
+    const { session, claim_code } = await createCreatorAccount(email, password, handle);
     await setCreatorSession(session);
-    return NextResponse.json({ ok: true, handle: session.handle });
+    return NextResponse.json({ ok: true, handle: session.handle, claim_code });
   } catch (err) {
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 400 });
   }

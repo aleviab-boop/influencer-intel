@@ -14,6 +14,10 @@ export default function CreatorJoinPage() {
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After a successful signup we show an optional ownership-verification step
+  // instead of redirecting immediately.
+  const [claimCode, setClaimCode] = useState<string | null>(null);
+  const [claimHandle, setClaimHandle] = useState('');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,9 +34,17 @@ export default function CreatorJoinPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: string; handle?: string; claim_code?: string }
+        | null;
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error ?? 'Something went wrong — please try again.');
+      }
+      if (tab === 'signup' && data.claim_code) {
+        // Session cookie is already set — show the optional verify step.
+        setClaimHandle(data.handle ?? handle.trim().replace(/^@/, ''));
+        setClaimCode(data.claim_code);
+        return;
       }
       router.push('/creator');
     } catch (err) {
@@ -44,6 +56,12 @@ export default function CreatorJoinPage() {
 
   const inputCls =
     'w-full px-3.5 py-2.5 text-sm rounded-lg border border-[#e5e2f0] bg-white outline-none focus:border-[#6C4DF6] transition-colors';
+
+  if (claimCode) {
+    return (
+      <VerifyStep code={claimCode} handle={claimHandle} onDone={() => router.push('/creator')} />
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#fff' }}>
@@ -165,6 +183,115 @@ export default function CreatorJoinPage() {
             </>
           )}
         </p>
+      </main>
+    </div>
+  );
+}
+
+/**
+ * Optional ownership-verification step shown right after signup. The creator's
+ * account already exists and they're signed in — this just lets them prove they
+ * own the handle by putting a code in their bio. They can skip and do it later.
+ */
+function VerifyStep({
+  code,
+  handle,
+  onDone,
+}: {
+  code: string;
+  handle: string;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'checking' | 'verified'>('idle');
+  const [copied, setCopied] = useState(false);
+
+  async function check() {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/creator/auth/verify', { method: 'POST' });
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; verified?: boolean; checking?: boolean }
+        | null;
+      if (data?.verified) {
+        setStatus('verified');
+        setTimeout(onDone, 1200);
+      } else {
+        setStatus('checking');
+      }
+    } catch {
+      setStatus('checking');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#fff' }}>
+      <MarketingNav />
+      <main className="max-w-md mx-auto px-6 py-14">
+        <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: ACCENT }}>
+          Verify ownership (optional)
+        </div>
+        <h1 className="text-2xl font-semibold text-[#1a1626] mb-1.5">
+          You&apos;re in, @{handle}
+        </h1>
+        <p className="text-sm text-[#6b6580] mb-6">
+          Want a verified badge? Add this code to your Instagram bio, then tap Check.
+          You can remove it once verified — or skip and do this later from settings.
+        </p>
+
+        <div
+          className="flex items-center justify-between px-4 py-3 rounded-lg mb-4"
+          style={{ background: ACCENT_SOFT }}
+        >
+          <code className="text-[15px] font-semibold tracking-wide" style={{ color: ACCENT }}>
+            {code}
+          </code>
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(code).then(
+                () => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                },
+                () => {},
+              );
+            }}
+            className="text-[12px] font-medium px-2.5 py-1 rounded-md border border-[#e5e2f0] bg-white"
+            style={{ color: ACCENT }}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+
+        {status === 'verified' ? (
+          <div className="px-3.5 py-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-[13px] text-emerald-700">
+            Verified — you own @{handle}. Taking you to your dashboard…
+          </div>
+        ) : (
+          <>
+            {status === 'checking' && (
+              <div className="px-3.5 py-2.5 rounded-lg border border-amber-200 bg-amber-50 text-[13px] text-amber-700 mb-3">
+                We couldn&apos;t find the code in your bio yet. Make sure it&apos;s saved, give it a
+                moment, then check again.
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={check}
+                disabled={busy}
+                className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg disabled:opacity-50"
+                style={{ background: ACCENT }}
+              >
+                {busy ? 'Checking…' : 'Check my bio'}
+              </button>
+              <button onClick={onDone} className="text-[13px] font-medium text-[#8a849c]">
+                Skip for now
+              </button>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
