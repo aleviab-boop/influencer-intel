@@ -20,6 +20,9 @@ interface Connection {
   connected: boolean;
   ig_username?: string | null;
   connection_status?: string | null;
+  last_sync_status?: string | null;
+  last_sync_at?: string | null;
+  posts_synced_count?: number | null;
   token_expires_at?: string | null;
   expiring_soon?: boolean;
   expired?: boolean;
@@ -57,6 +60,20 @@ const shortDate = (iso: string | null): string | null => {
   return `${d} ${MON[m - 1]}`;
 };
 const inr = (n: number): string => n >= 1e5 ? '₹' + (n / 1e5).toFixed(n % 1e5 === 0 ? 0 : 1) + 'L' : n >= 1e3 ? '₹' + (n / 1e3).toFixed(0) + 'K' : '₹' + n;
+// Human "time ago" for the last-synced label. Null-safe; returns null when unknown.
+const relTime = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 45) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+};
 const STATUS_META: Record<string, { t: string; c: string; b: string }> = {
   applied: { t: 'Applied', c: '#6C4DF6', b: '#f6f4ff' },
   invited: { t: 'Invited', c: '#64748b', b: '#f1f5f9' },
@@ -97,6 +114,7 @@ export default function CreatorPortal() {
   const [setup, setSetup] = useState<{ score: number; done_count: number; total_count: number; next: { label: string; href: string } | null } | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // Resolve handle from URL (?handle=) or localStorage on first load; surface
   // OAuth outcome; check whether Instagram login is set up.
@@ -140,6 +158,28 @@ export default function CreatorPortal() {
     } catch { /* ignore */ }
   }, []);
 
+  // Fetch + map the creator profile (stats card). Returns false when the handle
+  // isn't in our database. Shared by the initial load and the re-sync refresh.
+  const loadProfile = useCallback(async (h: string): Promise<boolean> => {
+    const p = await fetch(`/api/creators/${encodeURIComponent(h.replace(/^@/, ''))}`).then((x) => (x.ok ? x.json() : null));
+    const c = p?.creator ?? p;
+    if (!c || !c.handle) { setNotFound(true); setProfile(null); return false; }
+    setProfile({
+      handle: c.handle, display_name: c.display_name, profile_photo_url: c.profile_photo_url,
+      follower_count: c.follower_count, engagement_rate: c.engagement_rate, primary_category: c.primary_category,
+      primary_city: c.primary_city, is_verified: c.is_verified,
+      cred_score: c.credibility?.overall_score != null ? String(c.credibility.overall_score) : (c.cred_score ?? null),
+    });
+    return true;
+  }, []);
+
+  const loadOverview = useCallback((h: string) => {
+    fetch(`/api/creator/overview?handle=${encodeURIComponent(h.replace(/^@/, ''))}`)
+      .then((x) => x.json())
+      .then((d) => { if (d?.available) setOverview(d); })
+      .catch(() => {});
+  }, []);
+
   const disconnectIg = useCallback(async () => {
     if (!handle) return;
     if (!window.confirm('Disconnect Instagram? We’ll stop pulling live insights and delete the stored access token. Your saved profile stays.')) return;
@@ -147,36 +187,40 @@ export default function CreatorPortal() {
     await loadConnection(handle);
   }, [handle, loadConnection]);
 
+  // Manual "re-sync now" — server re-pulls IG and recomputes roll-ups, then we
+  // refresh the profile stats, connection health and overview badges in place.
+  const resync = useCallback(async () => {
+    if (!handle || syncing) return;
+    setSyncing(true);
+    try {
+      await fetch(`/api/creator/connection?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`, { method: 'POST' }).catch(() => {});
+      await Promise.all([loadProfile(handle), loadConnection(handle)]);
+      loadOverview(handle);
+    } finally {
+      setSyncing(false);
+    }
+  }, [handle, syncing, loadProfile, loadConnection, loadOverview]);
+
   useEffect(() => {
     if (!handle) return;
     setLoading(true);
     setNotFound(false);
     (async () => {
       try {
-        const p = await fetch(`/api/creators/${encodeURIComponent(handle.replace(/^@/, ''))}`).then((x) => (x.ok ? x.json() : null));
-        const c = p?.creator ?? p;
-        if (!c || !c.handle) { setNotFound(true); setProfile(null); return; }
-        setProfile({
-          handle: c.handle, display_name: c.display_name, profile_photo_url: c.profile_photo_url,
-          follower_count: c.follower_count, engagement_rate: c.engagement_rate, primary_category: c.primary_category,
-          primary_city: c.primary_city, is_verified: c.is_verified,
-          cred_score: c.credibility?.overall_score != null ? String(c.credibility.overall_score) : (c.cred_score ?? null),
-        });
+        const ok = await loadProfile(handle);
+        if (!ok) return;
         await loadApplications(handle);
         fetch(`/api/creator/setup?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
           .then((x) => x.json())
           .then((d) => { if (d?.available) setSetup(d); })
           .catch(() => {});
-        fetch(`/api/creator/overview?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
-          .then((x) => x.json())
-          .then((d) => { if (d?.available) setOverview(d); })
-          .catch(() => {});
+        loadOverview(handle);
         void loadConnection(handle);
       } finally {
         setLoading(false);
       }
     })();
-  }, [handle, loadApplications, loadConnection]);
+  }, [handle, loadApplications, loadConnection, loadProfile, loadOverview]);
 
   function signIn() {
     const h = input.trim().replace(/^@/, '');
@@ -290,7 +334,7 @@ export default function CreatorPortal() {
             </div>
 
             {/* Instagram connection status — live insights vs connect CTA */}
-            {connection && <ConnectionCard c={connection} onDisconnect={disconnectIg} />}
+            {connection && <ConnectionCard c={connection} onDisconnect={disconnectIg} onResync={resync} syncing={syncing} />}
 
             {/* Setup nudge — only while the profile is incomplete */}
             {setup && setup.score < 100 && (
@@ -391,7 +435,11 @@ const IgGlyph = ({ size = 18 }: { size?: number }) => (
   </svg>
 );
 
-function ConnectionCard({ c, onDisconnect }: { c: Connection; onDisconnect: () => void }) {
+function ConnectionCard({ c, onDisconnect, onResync, syncing }: {
+  c: Connection; onDisconnect: () => void; onResync: () => void; syncing: boolean;
+}) {
+  const isSyncing = syncing || c.last_sync_status === 'syncing';
+  const syncedLabel = relTime(c.last_sync_at ?? null);
   // Connected & healthy — quiet confirmation that live insights are on.
   if (c.connected && !c.expiring_soon) {
     return (
@@ -401,12 +449,23 @@ function ConnectionCard({ c, onDisconnect }: { c: Connection; onDisconnect: () =
           <div className="text-[14px] font-semibold text-emerald-900">
             Instagram connected{c.ig_username ? <> — <span className="font-bold">@{c.ig_username}</span></> : ''}
           </div>
-          <div className="text-[12.5px] text-emerald-700/90">Live insights are on. Your analytics update from Instagram automatically.</div>
+          <div className="text-[12.5px] text-emerald-700/90">
+            {isSyncing
+              ? 'Syncing your latest posts and insights…'
+              : <>Live insights are on{syncedLabel ? <> — last synced {syncedLabel}</> : ''}{c.posts_synced_count ? ` · ${c.posts_synced_count} posts` : ''}.</>}
+          </div>
         </div>
         <div className="shrink-0 flex items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />Live
-          </span>
+          <button
+            onClick={onResync}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700 hover:text-emerald-900 disabled:opacity-60"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={isSyncing ? 'animate-spin' : ''}>
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+            </svg>
+            {isSyncing ? 'Syncing…' : 'Re-sync'}
+          </button>
           <button onClick={onDisconnect} className="text-[12px] font-medium text-emerald-700/70 hover:text-emerald-900 hover:underline">Disconnect</button>
         </div>
       </div>

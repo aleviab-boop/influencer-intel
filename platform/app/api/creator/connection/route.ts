@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { resolveCreatorId } from '@/lib/creator-identity';
+import { syncConnectedAccount } from '@/lib/sync-worker';
 
 export const runtime = 'nodejs';
 
@@ -90,6 +91,47 @@ export async function GET(request: Request): Promise<NextResponse> {
   } catch (err) {
     console.error('[creator/connection] failed:', err);
     return NextResponse.json({ connected: false, reason: 'error' }, { status: 200 });
+  }
+}
+
+/**
+ * POST /api/creator/connection?handle=|account=
+ *
+ * Manual "re-sync now" for the resolved creator's active Instagram account —
+ * re-pulls profile, posts, insights and demographics, then recomputes the
+ * follower/engagement/quality roll-ups. Awaited so the caller can refresh the
+ * dashboard once it lands; the sync worker itself marks last_sync_status.
+ * Always 200 with { ok, synced?, error? }.
+ */
+export async function POST(request: Request): Promise<NextResponse> {
+  try {
+    const creatorId = await resolveCreatorId(request);
+    if (!creatorId) {
+      return NextResponse.json({ ok: false, reason: 'no_creator' }, { status: 200 });
+    }
+
+    const db = getBolticClient();
+    const rows = await db.query<{ id: string; last_sync_status: string | null }>(
+      `SELECT id, last_sync_status FROM connected_accounts
+       WHERE creator_id = $1 AND connection_status = 'active'
+       ORDER BY connected_at DESC LIMIT 1`,
+      [creatorId],
+    );
+    const acc = rows[0];
+    if (!acc) return NextResponse.json({ ok: false, reason: 'no_account' }, { status: 200 });
+    if (acc.last_sync_status === 'syncing') {
+      return NextResponse.json({ ok: true, already_syncing: true }, { status: 200 });
+    }
+
+    try {
+      const result = await syncConnectedAccount(acc.id);
+      return NextResponse.json({ ok: true, synced: result }, { status: 200 });
+    } catch (err) {
+      return NextResponse.json({ ok: false, reason: 'sync_failed', error: (err as Error).message }, { status: 200 });
+    }
+  } catch (err) {
+    console.error('[creator/connection] resync failed:', err);
+    return NextResponse.json({ ok: false, reason: 'error' }, { status: 200 });
   }
 }
 
