@@ -10,6 +10,16 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// creators.engagement_rate is stored as a FRACTION by the OAuth sync worker and
+// most scrapers (0.032 = 3.2%), but one scraper path stores whole percent (3.2).
+// buildRateCard expects whole percent (benchmark 2.5), so normalize here:
+// values <= 1 are fractions → ×100; anything larger is already a percent.
+const erToPercent = (v: unknown): number => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n <= 1 ? n * 100 : n;
+};
+
 function safeParse(s: string): unknown {
   try { return JSON.parse(s); } catch { return null; }
 }
@@ -33,7 +43,7 @@ async function cardFor(db: ReturnType<typeof getBolticClient>, creatorId: string
   const stored = (prefs.rate_card ?? null) as RateCardStored | null;
   return buildRateCard({
     follower_count: num(row?.follower_count),
-    engagement_rate: num(row?.engagement_rate),
+    engagement_rate: erToPercent(row?.engagement_rate),
     stored,
   });
 }
