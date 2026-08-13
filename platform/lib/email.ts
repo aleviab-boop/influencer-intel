@@ -13,6 +13,7 @@
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';
+import { creatorWantsEmail } from './creator-email-prefs';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -100,6 +101,10 @@ export async function sendEmail({ to, subject, html }: SendArgs, meta?: EmailLog
   const key = process.env.RESEND_API_KEY;
   if (!key) return false;                 // unconfigured → silent no-op (nothing attempted)
   if (!to || !EMAIL_RE.test(to)) return false;
+  // Respect the recipient's opt-out for this category (invite/payment/review/
+  // deadline). Unknown creator or unmapped kind always sends. This one gate
+  // covers every notify path, since they all flow through here with meta.
+  if (meta && !(await creatorWantsEmail(meta.creator_id, meta.kind))) return false;
   try {
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',

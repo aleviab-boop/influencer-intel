@@ -223,6 +223,9 @@ function Settings() {
               <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
             </Link>
 
+            {/* Email notifications */}
+            <EmailPrefsCard qs={qs} />
+
             <p className="text-[12px] text-ink-400 rounded-xl p-3" style={{ background: ACCENT_SOFT }}>
               Changes here update your public media kit and how you appear in brand searches.
             </p>
@@ -309,6 +312,88 @@ function OwnershipCard() {
         </button>
       </div>
       {msg && <div className="mt-2.5 text-[12px] text-amber-700">{msg}</div>}
+    </div>
+  );
+}
+
+/**
+ * Email notification preferences — four opt-out toggles (invite / payment /
+ * review / deadline). Loads from /api/creator/email-prefs, saves each flip
+ * optimistically (reverts if the PATCH fails). Renders nothing until the
+ * creator resolves, so a preview with no creator stays clean.
+ */
+type EmailPrefKey = 'invite' | 'payment' | 'review' | 'deadline';
+const EMAIL_PREF_META: { key: EmailPrefKey; label: string; hint: string }[] = [
+  { key: 'invite', label: 'Campaign invites', hint: 'When a brand invites you to a collab.' },
+  { key: 'payment', label: 'Payment receipts', hint: 'When a brand marks your deal as paid.' },
+  { key: 'review', label: 'Submission reviews', hint: 'When your work is approved or sent back for changes.' },
+  { key: 'deadline', label: 'Deadline reminders', hint: 'The day before a deliverable is due.' },
+];
+
+function EmailPrefsCard({ qs }: { qs: string }) {
+  const [prefs, setPrefs] = useState<Record<EmailPrefKey, boolean> | null>(null);
+  const [saving, setSaving] = useState<EmailPrefKey | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/creator/email-prefs${qs}`)
+      .then((r) => r.json())
+      .then((d: { available?: boolean; prefs?: Record<EmailPrefKey, boolean> }) => {
+        if (d.available && d.prefs) setPrefs(d.prefs);
+      })
+      .catch(() => {});
+  }, [qs]);
+
+  if (!prefs) return null;
+
+  const toggle = async (key: EmailPrefKey): Promise<void> => {
+    const next = !prefs[key];
+    setPrefs((p) => (p ? { ...p, [key]: next } : p));
+    setSaving(key);
+    try {
+      const res = await fetch(`/api/creator/email-prefs${qs}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: next }),
+      });
+      const d = (await res.json()) as { saved?: boolean; prefs?: Record<EmailPrefKey, boolean> };
+      if (d.saved && d.prefs) setPrefs(d.prefs);
+      else setPrefs((p) => (p ? { ...p, [key]: !next } : p)); // revert on non-save
+    } catch {
+      setPrefs((p) => (p ? { ...p, [key]: !next } : p)); // revert on error
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-white border border-border shadow-card p-5">
+      <div className="text-[14px] font-semibold text-ink-900">Email notifications</div>
+      <div className="text-[12.5px] text-ink-500 mt-0.5">Choose which emails we send you. You can turn any off.</div>
+      <div className="mt-4 divide-y divide-border-soft">
+        {EMAIL_PREF_META.map((m) => (
+          <div key={m.key} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13.5px] font-medium text-ink-900">{m.label}</div>
+              <div className="text-[12px] text-ink-400">{m.hint}</div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={prefs[m.key]}
+              aria-label={m.label}
+              disabled={saving === m.key}
+              onClick={() => toggle(m.key)}
+              className="relative shrink-0 w-11 h-6 rounded-full transition-colors duration-200 disabled:opacity-60"
+              style={{ background: prefs[m.key] ? ACCENT : '#d8d6e3' }}
+            >
+              <span
+                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200"
+                style={{ transform: prefs[m.key] ? 'translateX(20px)' : 'translateX(0)' }}
+              />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
