@@ -7,6 +7,7 @@ import {
 } from '@/lib/deliverable-submission';
 import { buildProgramReview, type ReviewRecruitInput } from '@/lib/submission-review';
 import { guardBrandProgram } from '@/lib/programs-service';
+import { notifyReview } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -148,6 +149,12 @@ export async function PATCH(
       { program_id: id, creator_id: body.creator_id },
       { submissions: JSON.stringify(next) },
     );
+
+    // Fire-and-forget: tell the creator their work needs changes or was approved.
+    // A cleared verdict (state === null) sends nothing.
+    if (state === 'changes' || state === 'approved') {
+      void notifyReview(id, body.creator_id, state, review?.comment ?? null).catch(() => {});
+    }
 
     const name = (await loadProgramName(db, id)) ?? 'Campaign';
     const recruits = await loadRecruits(db, id);

@@ -87,6 +87,7 @@ export async function sendEmail({ to, subject, html }: SendArgs): Promise<boolea
 }
 
 interface RecruitContext {
+  recruit_id: string;
   email: string | null;
   creator_name: string;
   brand: string;
@@ -94,15 +95,17 @@ interface RecruitContext {
   rate: number;
 }
 
-// One query to gather everything an invite/payment email needs. Prefers the
-// claimed-account email, falls back to the OAuth-verified one.
+// One query to gather everything an invite/payment/review email needs. Prefers
+// the claimed-account email, falls back to the OAuth-verified one.
 async function loadRecruitContext(programId: string, creatorId: string): Promise<RecruitContext | null> {
   const db = getBolticClient();
   const rows = await db.query<{
+    recruit_id: string;
     email: string | null; creator_name: string | null;
     brand: string | null; program: string | null; rate: string | number | null;
   }>(
-    `SELECT COALESCE(NULLIF(c.email, ''), c.verified_oauth_data->>'email') AS email,
+    `SELECT pr.id AS recruit_id,
+            COALESCE(NULLIF(c.email, ''), c.verified_oauth_data->>'email') AS email,
             COALESCE(NULLIF(c.display_name, ''), c.handle)                 AS creator_name,
             b.name  AS brand,
             p.name  AS program,
@@ -119,6 +122,7 @@ async function loadRecruitContext(programId: string, creatorId: string): Promise
   if (!r) return null;
   const rate = Number(r.rate);
   return {
+    recruit_id: r.recruit_id,
     email: r.email,
     creator_name: r.creator_name ?? 'there',
     brand: r.brand ?? 'A brand',
@@ -162,6 +166,80 @@ export async function notifyPayment(programId: string, creatorId: string): Promi
       `<p style="margin:0 0 12px;">Hi ${ctx.creator_name},</p>
        <p style="margin:0;">${ctx.brand} has marked your payment for <strong>${ctx.program}</strong> as paid${rateStr ? ` — <strong>${rateStr}</strong>` : ''}. It'll show up in your earnings statement.</p>`,
       'View statement',
+      href,
+    ),
+  });
+}
+
+const escapeHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** A brand recorded a verdict on a submitted link: 'changes' (revise) or 'approved'. */
+export async function notifyReview(
+  programId: string,
+  creatorId: string,
+  state: 'changes' | 'approved',
+  comment?: string | null,
+): Promise<void> {
+  if (!emailEnabled()) return;
+  const ctx = await loadRecruitContext(programId, creatorId);
+  if (!ctx?.email) return;
+  const rateStr = money(ctx.rate);
+  const href = `${appBaseUrl()}/creator/deals/${ctx.recruit_id}/submit`;
+
+  if (state === 'changes') {
+    const note = comment ? `<p style="margin:0 0 12px;padding:12px 14px;background:#faf5ff;border-radius:9px;color:#4c1d95;">“${escapeHtml(comment)}”</p>` : '';
+    await sendEmail({
+      to: ctx.email,
+      subject: `${ctx.brand} requested changes on ${ctx.program}`,
+      html: shell(
+        `Changes requested on ${ctx.program}`,
+        `<p style="margin:0 0 12px;">Hi ${ctx.creator_name},</p>
+         ${note}<p style="margin:0;">${ctx.brand} sent your submission back for changes. Revise your link and re-submit to keep the deal moving.</p>`,
+        'Revise & re-submit',
+        href,
+      ),
+    });
+  } else {
+    await sendEmail({
+      to: ctx.email,
+      subject: `${ctx.brand} approved your work on ${ctx.program}`,
+      html: shell(
+        `Your work was approved ✅`,
+        `<p style="margin:0 0 12px;">Hi ${ctx.creator_name},</p>
+         <p style="margin:0;">${ctx.brand} approved your submission for <strong>${ctx.program}</strong>${rateStr ? ` — <strong>${rateStr}</strong> due` : ''}. Nice work.</p>`,
+        'View deal',
+        href,
+      ),
+    });
+  }
+}
+
+// Deadline reminder — driven by the daily cron, which loads the rows once and
+// passes each creator's context in (no per-row re-query). Fires the day before
+// a deliverable is due, so it lands exactly once per deal.
+export interface DeadlineReminder {
+  email: string | null;
+  creator_name: string;
+  brand: string;
+  program: string;
+  recruit_id: string;
+  due_label: string; // e.g. "tomorrow, 18 Aug"
+  rate: number;
+}
+
+export async function sendDeadlineReminder(r: DeadlineReminder): Promise<boolean> {
+  if (!emailEnabled() || !r.email) return false;
+  const rateStr = money(r.rate);
+  const href = `${appBaseUrl()}/creator/deals/${r.recruit_id}`;
+  return sendEmail({
+    to: r.email,
+    subject: `Due ${r.due_label}: ${r.program}`,
+    html: shell(
+      `${r.program} is due ${r.due_label}`,
+      `<p style="margin:0 0 12px;">Hi ${r.creator_name},</p>
+       <p style="margin:0;">Your deliverable for <strong>${r.brand}</strong> is due <strong>${r.due_label}</strong>${rateStr ? ` — ${rateStr}` : ''}. Get it over the line to stay on track.</p>`,
+      'Open deal',
       href,
     ),
   });
