@@ -25,6 +25,19 @@ interface Connection {
   expired?: boolean;
   days_until_expiry?: number | null;
 }
+interface Overview {
+  available: boolean;
+  notifications: { action_count: number; total: number };
+  deals: { active: number; awaiting_payment: number; overdue: number; next_due: string | null };
+  applications: { total: number; counts: { pending: number; advanced: number; accepted: number; closed: number } };
+  calendar: { next_due: string | null; overdue: number };
+  goal: { has_goal: boolean; progress_pct: number; status: string };
+  statement: { fy_earned: number };
+  rate_card: { set: boolean };
+  payout: { set: boolean };
+  analytics: { followers: number; engagement_rate: number | null };
+  media_kit: { ready: boolean };
+}
 
 const fmt = (v: number | string | null): string => {
   const n = Number(v) || 0;
@@ -34,6 +47,16 @@ const erPct = (v: number | string | null): string => {
   const n = Number(v);
   return Number.isFinite(n) && n !== 0 ? (n * 100).toFixed(1) + '%' : '—';
 };
+// "2026-08-12" -> "12 Aug"
+const shortDate = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const parts = iso.slice(0, 10).split('-');
+  const y = Number(parts[0]); const m = Number(parts[1]); const d = Number(parts[2]);
+  if (!y || !m || !d) return null;
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${d} ${MON[m - 1]}`;
+};
+const inr = (n: number): string => n >= 1e5 ? '₹' + (n / 1e5).toFixed(n % 1e5 === 0 ? 0 : 1) + 'L' : n >= 1e3 ? '₹' + (n / 1e3).toFixed(0) + 'K' : '₹' + n;
 const STATUS_META: Record<string, { t: string; c: string; b: string }> = {
   applied: { t: 'Applied', c: '#6C4DF6', b: '#f6f4ff' },
   invited: { t: 'Invited', c: '#64748b', b: '#f1f5f9' },
@@ -73,6 +96,7 @@ export default function CreatorPortal() {
   const [banner, setBanner] = useState<string | null>(null);
   const [setup, setSetup] = useState<{ score: number; done_count: number; total_count: number; next: { label: string; href: string } | null } | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
 
   // Resolve handle from URL (?handle=) or localStorage on first load; surface
   // OAuth outcome; check whether Instagram login is set up.
@@ -142,6 +166,10 @@ export default function CreatorPortal() {
         fetch(`/api/creator/setup?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
           .then((x) => x.json())
           .then((d) => { if (d?.available) setSetup(d); })
+          .catch(() => {});
+        fetch(`/api/creator/overview?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
+          .then((x) => x.json())
+          .then((d) => { if (d?.available) setOverview(d); })
           .catch(() => {});
         void loadConnection(handle);
       } finally {
@@ -292,16 +320,26 @@ export default function CreatorPortal() {
 
             {/* Quick links to the creator's own workspaces */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-8">
-              <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" icon={ICONS.notifications} />
-              <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" icon={ICONS.deals} />
-              <QuickLink href={`/creator/applications?handle=${encodeURIComponent(profile.handle)}`} label="Applications" desc="Campaigns you applied to" icon={ICONS.applications} />
-              <QuickLink href={`/creator/calendar?handle=${encodeURIComponent(profile.handle)}`} label="Calendar" desc="Deadlines by month" icon={ICONS.calendar} />
-              <QuickLink href={`/creator/goal?handle=${encodeURIComponent(profile.handle)}`} label="Monthly goal" desc="Track your target" icon={ICONS.goal} />
-              <QuickLink href={`/creator/statement?handle=${encodeURIComponent(profile.handle)}`} label="Earnings statement" desc="FY totals & TDS" icon={ICONS.statement} />
-              <QuickLink href={`/creator/rate-card?handle=${encodeURIComponent(profile.handle)}`} label="Rate card" desc="Set your prices" icon={ICONS.rate} />
-              <QuickLink href={`/creator/payout?handle=${encodeURIComponent(profile.handle)}`} label="Payout details" desc="Where you get paid" icon={ICONS.payout} />
-              <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" icon={ICONS.analytics} />
-              <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" icon={ICONS.mediakit} />
+              <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" icon={ICONS.notifications}
+                badge={overview && overview.notifications.action_count > 0 ? String(overview.notifications.action_count) : null} alert />
+              <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" icon={ICONS.deals}
+                badge={overview && overview.deals.active > 0 ? `${overview.deals.active} active` : null} />
+              <QuickLink href={`/creator/applications?handle=${encodeURIComponent(profile.handle)}`} label="Applications" desc="Campaigns you applied to" icon={ICONS.applications}
+                badge={overview && overview.applications.total > 0 ? String(overview.applications.total) : null} />
+              <QuickLink href={`/creator/calendar?handle=${encodeURIComponent(profile.handle)}`} label="Calendar" desc="Deadlines by month" icon={ICONS.calendar}
+                badge={overview?.calendar.next_due ? shortDate(overview.calendar.next_due) : null} alert={!!overview && overview.calendar.overdue > 0} />
+              <QuickLink href={`/creator/goal?handle=${encodeURIComponent(profile.handle)}`} label="Monthly goal" desc="Track your target" icon={ICONS.goal}
+                badge={overview ? (overview.goal.has_goal ? `${overview.goal.progress_pct}%` : 'Set') : null} />
+              <QuickLink href={`/creator/statement?handle=${encodeURIComponent(profile.handle)}`} label="Earnings statement" desc="FY totals & TDS" icon={ICONS.statement}
+                badge={overview && overview.statement.fy_earned > 0 ? inr(overview.statement.fy_earned) : null} />
+              <QuickLink href={`/creator/rate-card?handle=${encodeURIComponent(profile.handle)}`} label="Rate card" desc="Set your prices" icon={ICONS.rate}
+                badge={overview ? (overview.rate_card.set ? 'Set' : 'Add') : null} />
+              <QuickLink href={`/creator/payout?handle=${encodeURIComponent(profile.handle)}`} label="Payout details" desc="Where you get paid" icon={ICONS.payout}
+                badge={overview ? (overview.payout.set ? 'Added' : 'Add') : null} />
+              <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" icon={ICONS.analytics}
+                badge={overview && overview.analytics.followers > 0 ? fmt(overview.analytics.followers) : null} />
+              <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" icon={ICONS.mediakit}
+                badge={overview ? (overview.media_kit.ready ? 'Ready' : 'Finish') : null} />
               <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" icon={ICONS.settings} />
               <QuickLink href={`/creator/campaigns?handle=${encodeURIComponent(profile.handle)}`} label="Campaigns" desc="Browse & apply" icon={ICONS.campaigns} />
             </div>
@@ -419,7 +457,9 @@ function ConnectionCard({ c, onDisconnect }: { c: Connection; onDisconnect: () =
   );
 }
 
-function QuickLink({ href, label, desc, icon }: { href: string; label: string; desc: string; icon?: ReactNode }) {
+function QuickLink({ href, label, desc, icon, badge, alert }: {
+  href: string; label: string; desc: string; icon?: ReactNode; badge?: string | null; alert?: boolean;
+}) {
   return (
     <Link
       href={href}
@@ -446,6 +486,14 @@ function QuickLink({ href, label, desc, icon }: { href: string; label: string; d
         </div>
         <div className="text-[11.5px] text-ink-400 mt-0.5 truncate">{desc}</div>
       </div>
+      {badge && (
+        <span
+          className={`shrink-0 self-start rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${alert ? 'text-white' : ''}`}
+          style={alert ? { background: '#f43f5e' } : { background: ACCENT_SOFT, color: ACCENT }}
+        >
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
