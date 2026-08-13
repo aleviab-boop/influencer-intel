@@ -64,10 +64,41 @@ interface SendArgs {
   html: string;
 }
 
+// Denormalised send context, recorded in email_log to power the agency-side
+// "Email Activity" page. Every field but `kind` is best-effort.
+export interface EmailLogMeta {
+  kind: string; // invite | payment | review_changes | review_approved | deadline
+  creator_id?: string | null;
+  program_id?: string | null;
+  brand_id?: string | null;
+}
+
+// Best-effort audit row — never throws, never blocks the send it records.
+async function logEmail(
+  meta: EmailLogMeta,
+  recipient: string,
+  subject: string,
+  status: 'sent' | 'failed',
+  error?: string | null,
+): Promise<void> {
+  try {
+    await getBolticClient().query(
+      `INSERT INTO email_log (creator_id, program_id, brand_id, kind, recipient, subject, status, error)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        meta.creator_id ?? null, meta.program_id ?? null, meta.brand_id ?? null,
+        meta.kind, recipient, subject.slice(0, 300), status, error ? error.slice(0, 500) : null,
+      ],
+    );
+  } catch (err) {
+    console.error('[email] log write failed:', (err as Error).message);
+  }
+}
+
 /** Low-level send. Returns true on accept, false on any no-op/failure. Never throws. */
-export async function sendEmail({ to, subject, html }: SendArgs): Promise<boolean> {
+export async function sendEmail({ to, subject, html }: SendArgs, meta?: EmailLogMeta): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) return false;                 // unconfigured → silent no-op
+  if (!key) return false;                 // unconfigured → silent no-op (nothing attempted)
   if (!to || !EMAIL_RE.test(to)) return false;
   try {
     const res = await fetch(RESEND_ENDPOINT, {
@@ -76,14 +107,56 @@ export async function sendEmail({ to, subject, html }: SendArgs): Promise<boolea
       body: JSON.stringify({ from: fromAddress(), to, subject, html }),
     });
     if (!res.ok) {
-      console.error('[email] send failed:', res.status, await res.text().catch(() => ''));
+      const detail = await res.text().catch(() => '');
+      console.error('[email] send failed:', res.status, detail);
+      if (meta) await logEmail(meta, to, subject, 'failed', `HTTP ${res.status} ${detail}`);
       return false;
     }
+    if (meta) await logEmail(meta, to, subject, 'sent');
     return true;
   } catch (err) {
     console.error('[email] send error:', (err as Error).message);
+    if (meta) await logEmail(meta, to, subject, 'failed', (err as Error).message);
     return false;
   }
+}
+
+// One row of the agency-side "Email Activity" feed. Joins the denormalised
+// email_log back to live creator/program rows for display (both may be null if
+// the underlying row was deleted — the log survives regardless).
+export interface EmailLogRow {
+  id: string;
+  kind: string;
+  recipient: string;
+  subject: string;
+  status: string;
+  error: string | null;
+  created_at: string;
+  creator_handle: string | null;
+  creator_name: string | null;
+  program_name: string | null;
+}
+
+// Brand-scoped email history. Mirrors listPrograms' scoping: a signed-in brand
+// sees its own sends PLUS unassigned/legacy ones (brand_id IS NULL) so the
+// shared demo data stays visible; called with no id it returns everything.
+export async function listEmailLog(brandId?: string | null, limit = 200): Promise<EmailLogRow[]> {
+  const db = getBolticClient();
+  const where = brandId ? `WHERE (e.brand_id = $1 OR e.brand_id IS NULL)` : '';
+  return db.query<EmailLogRow>(
+    `SELECT e.id, e.kind, e.recipient, e.subject, e.status, e.error,
+            e.created_at::text AS created_at,
+            c.handle       AS creator_handle,
+            COALESCE(NULLIF(c.display_name, ''), c.handle) AS creator_name,
+            p.name         AS program_name
+     FROM email_log e
+     LEFT JOIN creators c ON c.id = e.creator_id
+     LEFT JOIN programs p ON p.id = e.program_id
+     ${where}
+     ORDER BY e.created_at DESC
+     LIMIT ${Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 500) : 200}`,
+    brandId ? [brandId] : undefined,
+  );
 }
 
 interface RecruitContext {
@@ -93,6 +166,7 @@ interface RecruitContext {
   brand: string;
   program: string;
   rate: number;
+  brand_id: string | null;
 }
 
 // One query to gather everything an invite/payment/review email needs. Prefers
@@ -103,13 +177,15 @@ async function loadRecruitContext(programId: string, creatorId: string): Promise
     recruit_id: string;
     email: string | null; creator_name: string | null;
     brand: string | null; program: string | null; rate: string | number | null;
+    brand_id: string | null;
   }>(
     `SELECT pr.id AS recruit_id,
             COALESCE(NULLIF(c.email, ''), c.verified_oauth_data->>'email') AS email,
             COALESCE(NULLIF(c.display_name, ''), c.handle)                 AS creator_name,
             b.name  AS brand,
             p.name  AS program,
-            pr.rate AS rate
+            pr.rate AS rate,
+            p.brand_id AS brand_id
      FROM program_recruits pr
      JOIN programs p ON p.id = pr.program_id
      LEFT JOIN brands b ON b.id = p.brand_id
@@ -128,6 +204,7 @@ async function loadRecruitContext(programId: string, creatorId: string): Promise
     brand: r.brand ?? 'A brand',
     program: r.program ?? 'a campaign',
     rate: Number.isFinite(rate) ? rate : 0,
+    brand_id: r.brand_id ?? null,
   };
 }
 
@@ -148,7 +225,7 @@ export async function notifyInvite(programId: string, creatorId: string): Promis
       'Review invite',
       href,
     ),
-  });
+  }, { kind: 'invite', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
 }
 
 /** A brand just marked this creator's deal as paid. */
@@ -168,7 +245,7 @@ export async function notifyPayment(programId: string, creatorId: string): Promi
       'View statement',
       href,
     ),
-  });
+  }, { kind: 'payment', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
 }
 
 const escapeHtml = (s: string): string =>
@@ -199,7 +276,7 @@ export async function notifyReview(
         'Revise & re-submit',
         href,
       ),
-    });
+    }, { kind: 'review_changes', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
   } else {
     await sendEmail({
       to: ctx.email,
@@ -211,7 +288,7 @@ export async function notifyReview(
         'View deal',
         href,
       ),
-    });
+    }, { kind: 'review_approved', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
   }
 }
 
@@ -226,6 +303,9 @@ export interface DeadlineReminder {
   recruit_id: string;
   due_label: string; // e.g. "tomorrow, 18 Aug"
   rate: number;
+  creator_id?: string | null;
+  program_id?: string | null;
+  brand_id?: string | null;
 }
 
 export async function sendDeadlineReminder(r: DeadlineReminder): Promise<boolean> {
@@ -242,5 +322,5 @@ export async function sendDeadlineReminder(r: DeadlineReminder): Promise<boolean
       'Open deal',
       href,
     ),
-  });
+  }, { kind: 'deadline', creator_id: r.creator_id ?? null, program_id: r.program_id ?? null, brand_id: r.brand_id ?? null });
 }

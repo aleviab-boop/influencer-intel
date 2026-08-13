@@ -27,6 +27,8 @@ interface DueRow {
   program: string | null;
   rate: string | number | null;
   due_date: string;
+  program_id: string;
+  brand_id: string | null;
 }
 
 /**
@@ -56,7 +58,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
               COALESCE(NULLIF(c.email, ''), c.verified_oauth_data->>'email') AS email,
               COALESCE(NULLIF(c.display_name, ''), c.handle)                 AS creator_name,
               b.name AS brand, p.name AS program, pr.rate,
-              pr.due_date::text AS due_date
+              pr.due_date::text AS due_date,
+              pr.program_id, p.brand_id
        FROM program_recruits pr
        JOIN programs p ON p.id = pr.program_id
        LEFT JOIN brands b ON b.id = p.brand_id
@@ -83,6 +86,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         recruit_id: r.recruit_id,
         due_label: dueLabel,
         rate: num(r.rate),
+        creator_id: r.creator_id,
+        program_id: r.program_id,
+        brand_id: r.brand_id,
       };
       const ok = await sendDeadlineReminder(reminder);
       if (ok) sent++; else skipped++;

@@ -26,6 +26,7 @@ const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Campaign Analytics', href: '/campaign-analytics', icon: 'clock' },
   { label: 'Media Management', href: '/media-management', icon: 'video' },
   { label: 'Influencer Payouts', href: '/influencer-payouts', icon: 'payout' },
+  { label: 'Email Activity', href: '/email-activity', icon: 'mail' },
   { label: 'Authenticity Score', href: '/tools/fake-follower-checker', icon: 'shield' },
   { label: 'Engagement Rate (ER)', href: '/tools/er-calculator', icon: 'gauge' },
 ];
@@ -68,6 +69,8 @@ function FeatureIcon({ name }: { name: string }) {
       return (<svg {...common}><path d="M12 3l1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3z" /></svg>);
     case 'bookmark':
       return (<svg {...common}><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" /></svg>);
+    case 'mail':
+      return (<svg {...common}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 7l9 6 9-6" /></svg>);
     default:
       return null;
   }
