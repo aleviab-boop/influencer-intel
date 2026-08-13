@@ -89,7 +89,8 @@ interface PeerBenchmark {
 }
 interface Analytics {
   connected: boolean;
-  source?: 'live' | 'db';
+  source?: 'live' | 'synced' | 'db';
+  posts_source?: 'synced' | 'stored';
   reason?: string;
   error?: string;
   account?: { id: string; ig_username: string; connected_at: string; token_expires_at: string | null; connection_status: string };
@@ -705,6 +706,23 @@ function AnalyticsPreview() {
 
   return (
     <Shell backHref={backHref}>
+      {/* Synced-data notice — the creator IS connected, but this request served
+          the last successful sync instead of a fresh live pull (transient Graph
+          hiccup / rate limit). Real reach & plays are shown; no connect CTA. */}
+      {data.source === 'synced' && (
+        <div className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-5 py-3.5">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-emerald-600 shadow-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg>
+          </span>
+          <div className="min-w-0">
+            <div className="text-[14px] font-semibold text-emerald-900">Showing your latest synced insights</div>
+            <p className="text-[12.5px] text-emerald-700/90 leading-relaxed">
+              Real reach &amp; plays from your most recent Instagram sync. Re-sync from your dashboard to refresh.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Stored-data notice — shown when analytics came from our saved profile
           (creator hasn't connected Instagram, or the live pull couldn't reach
           insights). Everything below is real, measured data; connecting just

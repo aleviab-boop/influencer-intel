@@ -304,6 +304,79 @@ function mediaTypeFor(t: string | null | undefined): string {
   return 'IMAGE';
 }
 
+// How many synced posts to feed the analytics assembler from post_insights.
+// They're already stored, so this is cheap — bound only to keep the payload sane.
+const SYNCED_POST_CAP = 60;
+
+// Stored row from the sync worker's post_insights table. This is the RICH
+// source (real reach/plays/saved/shares/ER per post) — far better than the
+// sparse recent_posts JSONB, and it's what the live Graph pull persists.
+interface SyncedPostRow {
+  ig_media_id: string;
+  ig_shortcode: string | null;
+  permalink: string | null;
+  media_type: string | null;
+  thumbnail_url: string | null;
+  media_url: string | null;
+  caption: string | null;
+  posted_at: string | null;
+  like_count: number | string | null;
+  comment_count: number | string | null;
+  reach: number | string | null;
+  plays: number | string | null;
+  saved: number | string | null;
+  shares: number | string | null;
+  engagement_rate: number | string | null;
+}
+
+/**
+ * Load the creator's synced posts straight from post_insights (populated by the
+ * sync worker on connect + every re-sync). These carry real per-post
+ * reach/plays/saved/shares/ER, so the reel-performance, reach and content
+ * sections light up even when the LIVE Graph pull is unavailable (expired
+ * token, rate limit). Returns [] when nothing has been synced yet.
+ */
+async function loadSyncedPosts(
+  db: ReturnType<typeof getBolticClient>,
+  creatorId: string,
+  followers: number,
+  handle: string,
+): Promise<AnalyticsPost[]> {
+  const rows = await db.query<SyncedPostRow>(
+    `SELECT ig_media_id, ig_shortcode, permalink, media_type, thumbnail_url,
+            media_url, caption, posted_at::text AS posted_at,
+            like_count, comment_count, reach, plays, saved, shares, engagement_rate
+     FROM post_insights
+     WHERE creator_id = $1
+     ORDER BY posted_at DESC NULLS LAST
+     LIMIT $2`,
+    [creatorId, SYNCED_POST_CAP],
+  );
+  return rows.map((p): AnalyticsPost => {
+    const likes = num(p.like_count);
+    const comments = num(p.comment_count);
+    const storedEr = numOrNull(p.engagement_rate);
+    const er = storedEr ?? (followers > 0 ? (likes + comments) / followers : null);
+    return {
+      id: p.ig_media_id,
+      shortcode: p.ig_shortcode ?? '',
+      permalink: p.permalink ?? `https://instagram.com/${handle}`,
+      media_type: (p.media_type ?? 'IMAGE').toUpperCase(),
+      thumbnail_url: p.thumbnail_url ?? null,
+      media_url: p.media_url ?? null,
+      caption: p.caption ?? null,
+      timestamp: p.posted_at ?? '',
+      like_count: likes,
+      comments_count: comments,
+      er,
+      reach: numOrNull(p.reach),
+      plays: numOrNull(p.plays),
+      saved: numOrNull(p.saved),
+      shares: numOrNull(p.shares),
+    };
+  });
+}
+
 // Map stored age-band keys → the "18-24" form analyzeAudience() parses.
 const AGE_LABELS: Record<string, string> = {
   '18_24': '18-24', '25_34': '25-34', '35_44': '35-44', '45_64': '45-64', '65_plus': '65+',
@@ -366,35 +439,53 @@ async function buildDbAnalytics(
   const followers = num(row.follower_count);
   if (followers <= 0) return null; // nothing measurable without an audience size
 
+  // Prefer the RICH synced posts (post_insights) — they carry real per-post
+  // reach/plays/saved/shares/ER from the sync worker, so the reel/reach/content
+  // sections stay live even when the Graph pull is down. Fall back to the sparse
+  // recent_posts JSONB (no reach/saves/shares) only when nothing's been synced.
+  let posts: AnalyticsPost[] = [];
+  let postsSource: 'synced' | 'stored' = 'stored';
+  try {
+    const synced = await loadSyncedPosts(db, creatorId, followers, row.handle);
+    if (synced.length > 0) {
+      posts = synced.filter((p) => p.like_count > 0 || p.comments_count > 0 || p.plays != null || p.reach != null);
+      if (posts.length > 0) postsSource = 'synced';
+    }
+  } catch {
+    posts = [];
+  }
+
   // Normalise stored recent_posts → the shared AnalyticsPost shape. ER is
   // derived the same way as the live path ((likes+comments)/followers). We have
   // no per-post reach/saves/shares stored, so those stay null (the sections
   // that need them degrade gracefully). `plays` comes from view_count.
-  const posts: AnalyticsPost[] = (row.recent_posts ?? [])
-    .map((p, i): AnalyticsPost => {
-      const likes = num(p.like_count);
-      const comments = num(p.comment_count);
-      const plays = numOrNull(p.view_count);
-      const er = followers > 0 ? (likes + comments) / followers : null;
-      return {
-        id: p.platform_post_id ?? `db-${i}`,
-        shortcode: '',
-        permalink: p.post_url ?? `https://instagram.com/${row.handle}`,
-        media_type: mediaTypeFor(p.post_type),
-        thumbnail_url: p.thumbnail_url ?? null,
-        media_url: p.media_url ?? null,
-        caption: p.caption ?? null,
-        timestamp: p.posted_at ?? '',
-        like_count: likes,
-        comments_count: comments,
-        er,
-        reach: null,
-        plays,
-        saved: null,
-        shares: null,
-      };
-    })
-    .filter((p) => p.like_count > 0 || p.comments_count > 0 || p.plays != null);
+  if (posts.length === 0) {
+    posts = (row.recent_posts ?? [])
+      .map((p, i): AnalyticsPost => {
+        const likes = num(p.like_count);
+        const comments = num(p.comment_count);
+        const plays = numOrNull(p.view_count);
+        const er = followers > 0 ? (likes + comments) / followers : null;
+        return {
+          id: p.platform_post_id ?? `db-${i}`,
+          shortcode: '',
+          permalink: p.post_url ?? `https://instagram.com/${row.handle}`,
+          media_type: mediaTypeFor(p.post_type),
+          thumbnail_url: p.thumbnail_url ?? null,
+          media_url: p.media_url ?? null,
+          caption: p.caption ?? null,
+          timestamp: p.posted_at ?? '',
+          like_count: likes,
+          comments_count: comments,
+          er,
+          reach: null,
+          plays,
+          saved: null,
+          shares: null,
+        };
+      })
+      .filter((p) => p.like_count > 0 || p.comments_count > 0 || p.plays != null);
+  }
 
   const demographics = reshapeDbDemographics(row.audience_demographics);
 
@@ -409,12 +500,28 @@ async function buildDbAnalytics(
   // couldn't derive one.
   const niche = cohorts.niche_label ?? (row.primary_category?.trim().toLowerCase() || null);
 
+  // Follower-growth history — accrues from the daily snapshots the live path
+  // records. A connected creator whose live pull just failed still has these,
+  // so the growth chart keeps working on the fallback path. Best-effort.
+  let growth: { date: string; followers: number }[] = [];
+  try {
+    const snaps = await db.query<{ captured_on: string; followers_count: number | string }>(
+      `SELECT captured_on::text AS captured_on, followers_count FROM follower_snapshots
+       WHERE creator_id = $1 AND followers_count IS NOT NULL
+       ORDER BY captured_on ASC LIMIT 90`,
+      [creatorId],
+    );
+    growth = snaps.map((s) => ({ date: s.captured_on.slice(0, 10), followers: Number(s.followers_count) }));
+  } catch {
+    growth = [];
+  }
+
   const body = assembleCreatorAnalytics({
     followers,
     media_count: numOrNull(row.posts_count),
     niche,
     posts,
-    growth: [], // no follower-snapshot history for unconnected creators
+    growth,
     demographics,
     profile: {
       name: row.display_name,
@@ -434,7 +541,10 @@ async function buildDbAnalytics(
 
   return {
     connected: true,
-    source: 'db',
+    // 'synced' when built from freshly-synced post_insights (rich reach/plays),
+    // 'db' when we fell back to the sparse stored recent_posts.
+    source: postsSource === 'synced' ? 'synced' : 'db',
+    posts_source: postsSource,
     account: null,
     profile: {
       username: row.handle,
