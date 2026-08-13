@@ -69,7 +69,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   try {
     const rows = await db.query<Row>(
       `SELECT pr.id, pr.creator_id, pr.rate, pr.deliverables, pr.due_date::text AS due_date,
-              pr.paid, pr.paid_at,
+              pr.paid, pr.paid_at::text AS paid_at,
               p.name AS program_name, b.name AS brand_name,
               c.handle, c.display_name, c.primary_city,
               c.verified_oauth_data->>'email' AS email,

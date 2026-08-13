@@ -41,9 +41,12 @@ export async function GET(request: Request): Promise<NextResponse> {
       return NextResponse.json({ available: false, reason: 'no_creator' }, { status: 200 });
     }
 
+    // Cast DATE/TIMESTAMP columns to text — node-postgres returns them as JS
+    // Date objects otherwise, which breaks the string 'YYYY-MM-DD' comparisons
+    // below (Date >= string coerces to NaN, so next_due would never be set).
     const deals = await db.query<DealRow>(
-      `SELECT pr.id, pr.rate, pr.paid, pr.paid_at, pr.status, pr.deliverables,
-              pr.due_date, pr.created_at,
+      `SELECT pr.id, pr.rate, pr.paid, pr.paid_at::text AS paid_at, pr.status, pr.deliverables,
+              pr.due_date::text AS due_date, pr.created_at::text AS created_at,
               p.name AS program_name, b.name AS brand_name
        FROM program_recruits pr
        JOIN programs p ON p.id = pr.program_id

@@ -86,7 +86,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const [recruits, creatorRows] = await Promise.all([
       db.query<RecruitRow>(
-        `SELECT pr.id, pr.program_id, pr.rate, pr.paid, pr.paid_at,
+        `SELECT pr.id, pr.program_id, pr.rate, pr.paid, pr.paid_at::text AS paid_at,
                 pr.status, pr.due_date::text AS due_date, pr.created_at::text AS created_at,
                 pr.submissions, pr.deliverables,
                 p.name AS program_name, b.name AS brand_name

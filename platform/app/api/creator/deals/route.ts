@@ -43,7 +43,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     const rows = await db.query<DealRow>(
-      `SELECT pr.id, pr.rate, pr.paid, pr.paid_at, pr.status, pr.deliverables,
+      `SELECT pr.id, pr.rate, pr.paid, pr.paid_at::text AS paid_at, pr.status, pr.deliverables,
               pr.due_date::text AS due_date,
               p.name AS program_name, b.name AS brand_name
        FROM program_recruits pr
