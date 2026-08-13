@@ -1,7 +1,11 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { IGGraphClient } from '@influencer-intel/shared/ig-graph';
 import { getAccessToken } from './oauth-service';
-import type { ConnectedAccount, PostInsight, Creator, AudienceDemographics } from '@influencer-intel/shared/types';
+import { audienceQuality, type QualityPost } from './audience-quality';
+import type {
+  ConnectedAccount, PostInsight, Creator, AudienceDemographics,
+  CredibilityData, CredibilityBadge,
+} from '@influencer-intel/shared/types';
 
 export async function syncConnectedAccount(accountId: string): Promise<{
   postsAdded: number;
@@ -49,6 +53,8 @@ export async function syncConnectedAccount(accountId: string): Promise<{
     let insightsUpdated = 0;
     // Accumulators for the creator-level engagement roll-up.
     let sumLikes = 0, sumComments = 0, sumInteractions = 0, engCount = 0;
+    // Per-post signals fed into the audience-quality / credibility score.
+    const qualityPosts: QualityPost[] = [];
 
     for (const post of media) {
       const row: Record<string, unknown> = {
@@ -95,6 +101,13 @@ export async function syncConnectedAccount(accountId: string): Promise<{
       sumComments += row.comment_count as number;
       sumInteractions += interactions;
       engCount++;
+      qualityPosts.push({
+        media_type: post.media_type,
+        like_count: row.like_count as number,
+        comments_count: row.comment_count as number,
+        er: (row.engagement_rate as number | undefined) ?? null,
+        reach: (row.reach as number | undefined) ?? null,
+      });
 
       await db.upsert('post_insights', row, ['connected_account_id', 'ig_media_id']);
       postsAdded++;
@@ -113,6 +126,40 @@ export async function syncConnectedAccount(accountId: string): Promise<{
         creatorRollup.engagement_rate = avgInteractions / liveFollowers;
       }
       await db.update('creators', { id: account.creator_id }, creatorRollup);
+    }
+
+    // Verified credibility / quality score — derived from the freshly-synced
+    // posts + live follower count, then persisted to creators.credibility so the
+    // dashboard's QUALITY stat and brand-facing credibility badges go live.
+    const aq = audienceQuality(liveFollowers, qualityPosts);
+    if (aq.available && aq.score != null) {
+      const totalLikes = qualityPosts.reduce((s, p) => s + (p.like_count || 0), 0);
+      const totalComments = qualityPosts.reduce((s, p) => s + (p.comments_count || 0), 0);
+      const ers = qualityPosts.map((p) => p.er).filter((v): v is number => v != null && v > 0);
+      const avgEr = ers.length ? ers.reduce((s, v) => s + v, 0) / ers.length : null;
+      const badge: CredibilityBadge = aq.score >= 70 ? 'green' : aq.score >= 45 ? 'amber' : 'red';
+      const credibility: CredibilityData = {
+        overall_score: aq.score,
+        badge,
+        signals: {
+          follower_engagement_ratio: avgEr,
+          engagement_velocity: null,
+          comment_to_like_ratio: totalLikes > 0 ? totalComments / totalLikes : null,
+          follower_growth_pattern: null,
+          audience_geo_authenticity: null,
+          brand_safety: null,
+          comment_text_quality: null,
+          audience_account_age: null,
+          story_engagement_parity: null,
+          hashtag_engagement_match: null,
+        },
+        flags: aq.signals.filter((s) => s.status === 'concern').map((s) => s.label),
+        computed_at: new Date().toISOString(),
+      };
+      await db.update('creators', { id: account.creator_id }, {
+        credibility,
+        updated_at: new Date().toISOString(),
+      });
     }
 
     try {
