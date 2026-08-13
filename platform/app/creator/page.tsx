@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
@@ -221,6 +221,33 @@ export default function CreatorPortal() {
       }
     })();
   }, [handle, loadApplications, loadConnection, loadProfile, loadOverview]);
+
+  // Keep the dashboard fresh without a manual reload: whenever the creator
+  // returns to this tab (focus / visibility) we re-pull the light read-only
+  // feeds — profile stats, connection health, overview badges, applications —
+  // so a deal that got paid, an application that advanced, or a sync that
+  // finished elsewhere shows up here. Throttled so rapid focus flaps don't
+  // hammer the API.
+  const lastRefreshRef = useRef<number>(Date.now());
+  useEffect(() => {
+    if (!handle) return;
+    const refresh = (): void => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastRefreshRef.current < 15_000) return; // throttle: 15s
+      lastRefreshRef.current = now;
+      void loadProfile(handle).catch(() => {});
+      void loadConnection(handle);
+      void loadApplications(handle).catch(() => {});
+      loadOverview(handle);
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [handle, loadProfile, loadConnection, loadApplications, loadOverview]);
 
   function signIn() {
     const h = input.trim().replace(/^@/, '');
