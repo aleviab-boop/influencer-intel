@@ -18,7 +18,7 @@ interface MKPost {
 }
 interface MK {
   connected: boolean;
-  source?: 'db';
+  source?: 'live' | 'synced' | 'db';
   profile?: {
     username: string; name: string | null; biography: string | null;
     followers_count: number | null; follows_count: number | null;
@@ -289,7 +289,7 @@ function MediaKit() {
         {/* Footer */}
         <div className="px-7 py-4 border-t border-border text-center">
           <p className="text-[11px] text-ink-400">
-            {data.source === 'db' ? 'From saved profile stats' : 'Live Instagram stats'} · media kit auto-generated for @{profile.username}
+            {data.source === 'db' ? 'From saved profile stats' : data.source === 'synced' ? 'From your latest Instagram sync' : 'Live Instagram stats'} · media kit auto-generated for @{profile.username}
           </p>
         </div>
       </div>
