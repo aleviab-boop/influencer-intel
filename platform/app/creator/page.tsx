@@ -15,7 +15,6 @@ interface Profile {
   is_verified: boolean | null;
   cred_score: string | null;
 }
-interface Campaign { id: string; name: string; description: string | null; budget: number | string | null; recruit_count: number }
 interface Application { program_id: string; program_name: string; description: string | null; status: string; created_at: string }
 interface Connection {
   connected: boolean;
@@ -69,9 +68,7 @@ export default function CreatorPortal() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
-  const [applying, setApplying] = useState<string | null>(null);
   const [igConfigured, setIgConfigured] = useState<boolean | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
   const [setup, setSetup] = useState<{ score: number; done_count: number; total_count: number; next: { label: string; href: string } | null } | null>(null);
@@ -141,11 +138,7 @@ export default function CreatorPortal() {
           primary_city: c.primary_city, is_verified: c.is_verified,
           cred_score: c.credibility?.overall_score != null ? String(c.credibility.overall_score) : (c.cred_score ?? null),
         });
-        const [camps] = await Promise.all([
-          fetch('/api/creator/campaigns').then((x) => x.json()),
-          loadApplications(handle),
-        ]);
-        setCampaigns(camps.campaigns ?? []);
+        await loadApplications(handle);
         fetch(`/api/creator/setup?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`)
           .then((x) => x.json())
           .then((d) => { if (d?.available) setSetup(d); })
@@ -173,19 +166,6 @@ export default function CreatorPortal() {
     setProfile(null);
     setInput('');
   }
-
-  async function apply(programId: string) {
-    if (!handle) return;
-    setApplying(programId);
-    try {
-      await fetch('/api/creator/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handle, program_id: programId }) });
-      await loadApplications(handle);
-    } finally {
-      setApplying(null);
-    }
-  }
-
-  const appliedIds = new Set(applications.map((a) => a.program_id));
 
   // ---- Sign-in screen ----
   if (!handle) {
@@ -323,7 +303,7 @@ export default function CreatorPortal() {
               <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" icon={ICONS.analytics} />
               <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" icon={ICONS.mediakit} />
               <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" icon={ICONS.settings} />
-              <QuickLink href="/creator" label="Campaigns" desc="Browse & apply" icon={ICONS.campaigns} />
+              <QuickLink href={`/creator/campaigns?handle=${encodeURIComponent(profile.handle)}`} label="Campaigns" desc="Browse & apply" icon={ICONS.campaigns} />
             </div>
 
             {/* My applications */}
@@ -347,47 +327,18 @@ export default function CreatorPortal() {
               </section>
             )}
 
-            {/* Open campaigns */}
-            <section>
-              <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-400 mb-3">Open campaigns</h2>
-              {campaigns.length === 0 ? (
-                <div className="text-sm text-ink-400 py-16 text-center rounded-2xl border border-dashed border-border bg-white">No open campaigns right now. Check back soon.</div>
-              ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {campaigns.map((c) => {
-                    const applied = appliedIds.has(c.id);
-                    const hasBudget = c.budget != null && Number(c.budget) > 0;
-                    return (
-                      <div key={c.id} className="group rounded-2xl bg-white border border-border shadow-card p-5 flex flex-col transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_48px_rgba(108,77,246,0.16)]">
-                        <Link href={`/creator/campaigns/${c.id}`} className="font-semibold text-ink-900 text-[15px] hover:underline" style={{ textDecorationColor: ACCENT }}>{c.name}</Link>
-                        <p className="mt-1 text-[13px] text-ink-500 leading-relaxed line-clamp-3 flex-1">{c.description || 'A brand campaign looking for creators like you.'}</p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
-                          {hasBudget && (
-                            <span className="px-2 py-1 rounded-md font-medium" style={{ background: ACCENT_SOFT, color: ACCENT }}>
-                              ₹{Number(c.budget).toLocaleString('en-IN')}
-                            </span>
-                          )}
-                          <span className="px-2 py-1 rounded-md bg-[#f4f4f6] text-ink-500">{c.recruit_count} creators</span>
-                        </div>
-                        <div className="mt-4 flex items-center gap-2">
-                          <button
-                            onClick={() => apply(c.id)}
-                            disabled={applied || applying === c.id}
-                            className={`flex-1 px-4 py-2.5 rounded-xl text-[14px] font-semibold transition-all ${applied ? 'bg-emerald-50 text-emerald-700 cursor-default' : 'text-white hover:brightness-105'}`}
-                            style={applied ? undefined : { background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
-                          >
-                            {applied ? 'Applied ✓' : applying === c.id ? 'Applying…' : 'Apply now'}
-                          </button>
-                          <Link href={`/creator/campaigns/${c.id}`} className="px-4 py-2.5 rounded-xl text-[14px] font-semibold border border-border hover:bg-[#faf9ff]" style={{ color: ACCENT }}>
-                            Details
-                          </Link>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
+            {/* Browse open campaigns — lives on its own page now */}
+            <Link href={`/creator/campaigns?handle=${encodeURIComponent(profile.handle)}`}
+              className="group flex items-center gap-4 rounded-2xl bg-white border border-border shadow-card px-5 py-4 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]">
+              <span className="shrink-0 grid place-items-center w-10 h-10 rounded-xl" style={{ background: ACCENT_SOFT, color: ACCENT }}>{ICONS.campaigns}</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] font-semibold text-ink-900">Open campaigns</div>
+                <div className="text-[12.5px] text-ink-500">Browse brand campaigns and apply.</div>
+              </div>
+              <span className="shrink-0 text-[13px] font-semibold inline-flex items-center gap-1" style={{ color: ACCENT }}>
+                Browse<span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
+              </span>
+            </Link>
           </>
         ) : null}
       </main>

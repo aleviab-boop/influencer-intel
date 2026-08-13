@@ -20,12 +20,35 @@ export async function syncConnectedAccount(accountId: string): Promise<{
   try {
     const token = await getAccessToken(accountId);
     const client = new IGGraphClient(token);
+
+    // Pull the live profile FIRST so follower count / bio / photo land on the
+    // creator row — the dashboard reads these fields, and without this the
+    // stats stay at whatever was seeded (often 0).
+    const creator = await db.findById<Creator>('creators', account.creator_id);
+    const profile = await client.getProfile().catch((err) => {
+      console.warn(`[sync] profile fetch failed:`, (err as Error).message);
+      return null;
+    });
+
+    const liveFollowers = profile?.followers_count ?? creator?.follower_count ?? null;
+
+    if (profile) {
+      const creatorPatch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (profile.followers_count != null) creatorPatch.follower_count = profile.followers_count;
+      if (profile.follows_count != null) creatorPatch.following_count = profile.follows_count;
+      if (profile.media_count != null) creatorPatch.posts_count = profile.media_count;
+      if (profile.profile_picture_url) creatorPatch.profile_photo_url = profile.profile_picture_url;
+      // Don't clobber creator-edited display fields — only fill if empty.
+      if (profile.name && !creator?.display_name?.trim()) creatorPatch.display_name = profile.name;
+      if (profile.biography && !creator?.bio?.trim()) creatorPatch.bio = profile.biography;
+      await db.update('creators', { id: account.creator_id }, creatorPatch);
+    }
+
     const media = await client.getAllMedia(200);
     let postsAdded = 0;
     let insightsUpdated = 0;
-
-    const creator = await db.findById<Creator>('creators', account.creator_id);
-    const followerCount = creator?.follower_count ?? null;
+    // Accumulators for the creator-level engagement roll-up.
+    let sumLikes = 0, sumComments = 0, sumInteractions = 0, engCount = 0;
 
     for (const post of media) {
       const row: Record<string, unknown> = {
@@ -63,14 +86,33 @@ export async function syncConnectedAccount(accountId: string): Promise<{
         console.warn(`[sync] insights failed for ${post.id}:`, (err as Error).message);
       }
 
-      if (followerCount && followerCount > 0) {
-        const interactions = (row.like_count as number) + (row.comment_count as number)
-          + ((row.saved as number | undefined) ?? 0) + ((row.shares as number | undefined) ?? 0);
-        row.engagement_rate = interactions / followerCount;
+      const interactions = (row.like_count as number) + (row.comment_count as number)
+        + ((row.saved as number | undefined) ?? 0) + ((row.shares as number | undefined) ?? 0);
+      if (liveFollowers && liveFollowers > 0) {
+        row.engagement_rate = interactions / liveFollowers;
       }
+      sumLikes += row.like_count as number;
+      sumComments += row.comment_count as number;
+      sumInteractions += interactions;
+      engCount++;
 
       await db.upsert('post_insights', row, ['connected_account_id', 'ig_media_id']);
       postsAdded++;
+    }
+
+    // Roll up post-level numbers to the creator row so the dashboard's
+    // Engagement / averages reflect real, freshly-synced content.
+    if (engCount > 0) {
+      const avgInteractions = sumInteractions / engCount;
+      const creatorRollup: Record<string, unknown> = {
+        avg_likes: Math.round(sumLikes / engCount),
+        avg_comments: Math.round(sumComments / engCount),
+        updated_at: new Date().toISOString(),
+      };
+      if (liveFollowers && liveFollowers > 0) {
+        creatorRollup.engagement_rate = avgInteractions / liveFollowers;
+      }
+      await db.update('creators', { id: account.creator_id }, creatorRollup);
     }
 
     try {

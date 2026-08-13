@@ -895,13 +895,6 @@ function AnalyticsPreview() {
         </div>
       )}
 
-      {/* Brands to pitch */}
-      {brandMatches?.available && brandMatches.matches.length > 0 && (
-        <div className="mt-3">
-          <BrandMatchCard m={brandMatches} kitHref={kitHref} demographics={demographics ?? null} />
-        </div>
-      )}
-
       <SectionLabel>Growth &amp; predictions</SectionLabel>
 
       {/* Engagement trend over time */}
