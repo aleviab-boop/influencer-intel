@@ -9,6 +9,7 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import type { Program, ProgramRecruit, ProgramStatus, RecruitStatus } from '@influencer-intel/shared/types';
 import { getSession } from './auth';
+import { notifyInvite, notifyPayment } from './email';
 
 export interface ProgramSummary extends Program {
   recruit_count: number;
@@ -190,7 +191,10 @@ export async function recruitToProgram(input: {
   note?: string | null;
 }): Promise<ProgramRecruit> {
   const db = getBolticClient();
-  const rows = await db.query<ProgramRecruit>(
+  // `(xmax = 0)` is true only on a genuine INSERT — an ON CONFLICT UPDATE
+  // (re-recruiting someone already in the pipeline) leaves xmax non-zero, so we
+  // email the creator on the FIRST invite only and never on a repeat recruit.
+  const rows = await db.query<ProgramRecruit & { inserted?: boolean }>(
     `INSERT INTO program_recruits
        (program_id, creator_id, status, source_prompt, relevance_score, confidence_score, note)
      VALUES ($1, $2, 'invited', $3, $4, $5, $6)
@@ -199,7 +203,7 @@ export async function recruitToProgram(input: {
        relevance_score  = EXCLUDED.relevance_score,
        confidence_score = EXCLUDED.confidence_score,
        updated_at       = NOW()
-     RETURNING *`,
+     RETURNING *, (xmax = 0) AS inserted`,
     [
       input.program_id,
       input.creator_id,
@@ -209,7 +213,10 @@ export async function recruitToProgram(input: {
       input.note ?? null,
     ],
   );
-  return rows[0]!;
+  const { inserted, ...recruit } = rows[0]!;
+  // Fire-and-forget: a mail failure must never fail the recruit.
+  if (inserted) void notifyInvite(input.program_id, input.creator_id).catch(() => {});
+  return recruit as ProgramRecruit;
 }
 
 // Remove a creator from a program. The creator itself stays in the `creators`
@@ -239,6 +246,18 @@ export async function updateRecruit(input: {
   payout_upi?: string | null;
 }): Promise<ProgramRecruit | null> {
   const db = getBolticClient();
+
+  // Detect a genuine unpaid→paid transition so the "payment received" email
+  // fires once, not on every repeat PATCH that re-asserts paid:true.
+  let wasPaid = false;
+  if (input.paid === true) {
+    const prior = await db.query<{ paid: boolean }>(
+      `SELECT paid FROM program_recruits WHERE program_id = $1 AND creator_id = $2 LIMIT 1`,
+      [input.program_id, input.creator_id],
+    );
+    wasPaid = !!prior[0]?.paid;
+  }
+
   const set: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (input.status !== undefined) set.status = input.status;
   if (input.note !== undefined) set.note = input.note;
@@ -255,7 +274,13 @@ export async function updateRecruit(input: {
     { program_id: input.program_id, creator_id: input.creator_id },
     set,
   );
-  return rows[0] ?? null;
+  const updated = rows[0] ?? null;
+
+  // Fire-and-forget once the row is safely persisted.
+  if (updated && input.paid === true && !wasPaid) {
+    void notifyPayment(input.program_id, input.creator_id).catch(() => {});
+  }
+  return updated;
 }
 
 export interface PayoutRow {
