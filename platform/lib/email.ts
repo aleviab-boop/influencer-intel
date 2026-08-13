@@ -37,7 +37,13 @@ function appBaseUrl(): string {
 const money = (n: number): string => (n > 0 ? '₹' + Number(n).toLocaleString('en-IN') : '');
 
 /** Minimal, client-safe HTML shell — inline styles only (email clients strip <style>). */
-function shell(heading: string, bodyHtml: string, ctaLabel: string, ctaHref: string): string {
+function shell(
+  heading: string,
+  bodyHtml: string,
+  ctaLabel: string,
+  ctaHref: string,
+  footerNote = "You're receiving this because you have a creator account on Influencer Intel.",
+): string {
   return `<!doctype html><html><body style="margin:0;background:#f5f5f7;padding:24px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
     <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:14px;overflow:hidden;">
@@ -54,7 +60,7 @@ function shell(heading: string, bodyHtml: string, ctaLabel: string, ctaHref: str
         <a href="${ctaHref}" style="display:inline-block;background:#6d28d9;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 20px;border-radius:9px;">${ctaLabel}</a>
       </td></tr>
     </table>
-    <div style="color:#9ca3af;font-size:12px;padding:16px 0;">You're receiving this because you have a creator account on Influencer Intel.</div>
+    <div style="color:#9ca3af;font-size:12px;padding:16px 0;">${footerNote}</div>
   </td></tr></table>
 </body></html>`;
 }
@@ -68,7 +74,7 @@ interface SendArgs {
 // Denormalised send context, recorded in email_log to power the agency-side
 // "Email Activity" page. Every field but `kind` is best-effort.
 export interface EmailLogMeta {
-  kind: string; // invite | payment | review_changes | review_approved | deadline
+  kind: string; // invite | invite_accepted | invite_declined | payment | review_changes | review_approved | deadline
   creator_id?: string | null;
   program_id?: string | null;
   brand_id?: string | null;
@@ -172,6 +178,7 @@ interface RecruitContext {
   program: string;
   rate: number;
   brand_id: string | null;
+  brand_email: string | null;
 }
 
 // One query to gather everything an invite/payment/review email needs. Prefers
@@ -182,7 +189,7 @@ async function loadRecruitContext(programId: string, creatorId: string): Promise
     recruit_id: string;
     email: string | null; creator_name: string | null;
     brand: string | null; program: string | null; rate: string | number | null;
-    brand_id: string | null;
+    brand_id: string | null; brand_email: string | null;
   }>(
     `SELECT pr.id AS recruit_id,
             COALESCE(NULLIF(c.email, ''), c.verified_oauth_data->>'email') AS email,
@@ -190,7 +197,8 @@ async function loadRecruitContext(programId: string, creatorId: string): Promise
             b.name  AS brand,
             p.name  AS program,
             pr.rate AS rate,
-            p.brand_id AS brand_id
+            p.brand_id AS brand_id,
+            b.email AS brand_email
      FROM program_recruits pr
      JOIN programs p ON p.id = pr.program_id
      LEFT JOIN brands b ON b.id = p.brand_id
@@ -210,6 +218,7 @@ async function loadRecruitContext(programId: string, creatorId: string): Promise
     program: r.program ?? 'a campaign',
     rate: Number.isFinite(rate) ? rate : 0,
     brand_id: r.brand_id ?? null,
+    brand_email: r.brand_email ?? null,
   };
 }
 
@@ -251,6 +260,44 @@ export async function notifyPayment(programId: string, creatorId: string): Promi
       href,
     ),
   }, { kind: 'payment', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
+}
+
+const BRAND_FOOTER = "You're receiving this because you manage campaigns on Influencer Intel.";
+
+/**
+ * A creator responded to a campaign invite — tell the BRAND (recipient is the
+ * brand's contact email, not the creator). No-ops silently if the brand has no
+ * email on file (older accounts backfill theirs on next sign-in).
+ */
+export async function notifyInviteResponse(
+  programId: string,
+  creatorId: string,
+  response: 'accepted' | 'declined',
+): Promise<void> {
+  if (!emailEnabled()) return;
+  const ctx = await loadRecruitContext(programId, creatorId);
+  if (!ctx?.brand_email) return;
+  const rateStr = money(ctx.rate);
+  const href = `${appBaseUrl()}/campaign-management`;
+  const accepted = response === 'accepted';
+  const kind = accepted ? 'invite_accepted' : 'invite_declined';
+  await sendEmail({
+    to: ctx.brand_email,
+    subject: accepted
+      ? `${ctx.creator_name} accepted ${ctx.program}`
+      : `${ctx.creator_name} declined ${ctx.program}`,
+    html: shell(
+      accepted ? `${ctx.creator_name} is in ✅` : `${ctx.creator_name} passed on ${ctx.program}`,
+      accepted
+        ? `<p style="margin:0 0 12px;">Good news —</p>
+           <p style="margin:0;"><strong>${ctx.creator_name}</strong> accepted your invite to <strong>${ctx.program}</strong>${rateStr ? ` at <strong>${rateStr}</strong>` : ''}. Line up the brief and deliverables to get them started.</p>`
+        : `<p style="margin:0 0 12px;">Heads up —</p>
+           <p style="margin:0;"><strong>${ctx.creator_name}</strong> declined your invite to <strong>${ctx.program}</strong>. No action needed — you may want to recruit another creator to fill the slot.</p>`,
+      'Open campaign',
+      href,
+      BRAND_FOOTER,
+    ),
+  }, { kind, creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
 }
 
 const escapeHtml = (s: string): string =>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { buildDealBrief, type DealBriefInput } from '@/lib/deal-brief';
 import { creatorMayAccess } from '@/lib/creator-identity';
+import { notifyInviteResponse } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -81,6 +82,57 @@ export async function GET(
     };
 
     return NextResponse.json(buildDealBrief(input, new Date().toISOString()));
+  } catch (err) {
+    return NextResponse.json(
+      { available: false, reason: 'db_error', error: (err as Error).message },
+      { status: 200 },
+    );
+  }
+}
+
+/**
+ * PATCH /api/creator/deals/:id  { action: 'accept' | 'decline' }
+ *
+ * The creator's own response to an invite — accept moves the recruit to
+ * 'recruited', decline to 'declined'. Guarded to the owning creator. Only a
+ * genuine status change emails the brand (fire-and-forget), so a repeat tap is
+ * a clean no-op. Always 200 with { available } like the GET.
+ */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<NextResponse> {
+  const { id } = await params;
+  const db = getBolticClient();
+
+  try {
+    const body = (await request.json().catch(() => ({}))) as { action?: string };
+    const action = body.action;
+    if (action !== 'accept' && action !== 'decline') {
+      return NextResponse.json({ available: true, saved: false, error: "action must be 'accept' or 'decline'" }, { status: 200 });
+    }
+
+    const rows = await db.query<{ creator_id: string; program_id: string; status: string }>(
+      `SELECT creator_id, program_id, status FROM program_recruits WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    const r = rows[0];
+    if (!r) return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    if (!(await creatorMayAccess(r.creator_id))) {
+      return NextResponse.json({ available: false, reason: 'not_found' }, { status: 200 });
+    }
+
+    const nextStatus = action === 'accept' ? 'recruited' : 'declined';
+    if (r.status === nextStatus) {
+      return NextResponse.json({ available: true, saved: true, status: nextStatus, changed: false });
+    }
+
+    await db.update('program_recruits', { id }, { status: nextStatus, updated_at: new Date().toISOString() });
+
+    // Fire-and-forget: tell the brand their invite was accepted/declined.
+    void notifyInviteResponse(r.program_id, r.creator_id, action === 'accept' ? 'accepted' : 'declined').catch(() => {});
+
+    return NextResponse.json({ available: true, saved: true, status: nextStatus, changed: true });
   } catch (err) {
     return NextResponse.json(
       { available: false, reason: 'db_error', error: (err as Error).message },

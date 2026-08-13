@@ -47,6 +47,8 @@ function Brief({ id }: { id: string }) {
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<Draft['key']>('accept');
   const [copied, setCopied] = useState(false);
+  const [responding, setResponding] = useState<null | 'accept' | 'decline'>(null);
+  const [responded, setResponded] = useState<null | 'accepted' | 'declined'>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -71,6 +73,28 @@ function Brief({ id }: { id: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     }).catch(() => {});
+  };
+
+  const respond = async (action: 'accept' | 'decline'): Promise<void> => {
+    setResponding(action);
+    try {
+      const res = await fetch(`/api/creator/deals/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const d = (await res.json()) as { saved?: boolean };
+      if (d?.saved) {
+        setResponded(action === 'accept' ? 'accepted' : 'declined');
+        // Refresh so accepting reveals the next-step actions (submit / invoice).
+        const fresh = await fetch(`/api/creator/deals/${encodeURIComponent(id)}`).then((r) => r.json());
+        if (fresh?.available) setData(fresh);
+      }
+    } catch {
+      /* leave the buttons; the creator can retry */
+    } finally {
+      setResponding(null);
+    }
   };
 
   return (
@@ -174,6 +198,53 @@ function Brief({ id }: { id: string }) {
                 </ul>
               </section>
             )}
+
+            {/* Accept / decline the invite */}
+            {responded ? (
+              <section
+                className="mt-4 rounded-2xl border p-4 flex items-center gap-3"
+                style={responded === 'accepted'
+                  ? { background: '#ecfdf5', borderColor: '#a7f3d0' }
+                  : { background: '#f8fafc', borderColor: '#e2e8f0' }}
+              >
+                <span
+                  className="w-8 h-8 rounded-full grid place-items-center text-white shrink-0"
+                  style={{ background: responded === 'accepted' ? '#16a34a' : '#94a3b8' }}
+                >
+                  {responded === 'accepted' ? '✓' : '–'}
+                </span>
+                <div className="text-[13.5px] text-ink-700">
+                  {responded === 'accepted'
+                    ? <>You accepted this deal — <strong>{data.brand}</strong> has been notified. Submit your deliverables when they’re live.</>
+                    : <>You declined this deal — <strong>{data.brand}</strong> has been notified.</>}
+                </div>
+              </section>
+            ) : data.can_respond ? (
+              <section className="mt-4 rounded-2xl bg-white border border-border shadow-card p-5">
+                <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-400">Respond to this invite</h2>
+                <p className="mt-1 text-[12.5px] text-ink-500">
+                  Accept to lock in the deal, or decline to pass. {data.brand} is notified either way.
+                </p>
+                <div className="mt-3 flex gap-2.5">
+                  <button
+                    onClick={() => respond('accept')}
+                    disabled={!!responding}
+                    className="text-[13.5px] font-semibold px-5 py-2.5 rounded-xl text-white disabled:opacity-60 transition-all hover:brightness-105"
+                    style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                  >
+                    {responding === 'accept' ? 'Accepting…' : 'Accept invite'}
+                  </button>
+                  <button
+                    onClick={() => respond('decline')}
+                    disabled={!!responding}
+                    className="text-[13.5px] font-semibold px-5 py-2.5 rounded-xl border text-ink-600 disabled:opacity-60 hover:bg-[#faf9ff] transition-colors"
+                    style={{ borderColor: '#e6e4f0' }}
+                  >
+                    {responding === 'decline' ? 'Declining…' : 'Decline'}
+                  </button>
+                </div>
+              </section>
+            ) : null}
 
             {/* Response drafts */}
             <section className="mt-4 rounded-2xl bg-white border border-border shadow-card p-5">

@@ -19,6 +19,8 @@ interface EmailRow {
 // Human labels + accent colours for each transactional email type.
 const KIND_META: Record<string, { label: string; color: string; bg: string }> = {
   invite: { label: 'Invite', color: '#6C4DF6', bg: '#f1eefe' },
+  invite_accepted: { label: 'Accepted', color: '#047857', bg: '#ecfdf5' },
+  invite_declined: { label: 'Declined', color: '#64748b', bg: '#f1f5f9' },
   payment: { label: 'Payment', color: '#047857', bg: '#ecfdf5' },
   review_approved: { label: 'Approved', color: '#047857', bg: '#ecfdf5' },
   review_changes: { label: 'Changes', color: '#b45309', bg: '#fef3c7' },

@@ -65,7 +65,7 @@ export function verifyPassword(password: string, stored: string | null | undefin
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const slugFor = (email: string) => email.replace(/[^a-z0-9]/g, '_');
 
-type BrandRow = Brand & { ig_handle?: string | null; password_hash?: string | null };
+type BrandRow = Brand & { ig_handle?: string | null; password_hash?: string | null; email?: string | null };
 
 function payloadFor(brand: BrandRow, email: string): SessionPayload {
   return {
@@ -133,21 +133,29 @@ export async function signIn(email: string, brandName?: string, igHandle?: strin
   const cleanHandle = igHandle?.trim().replace(/^@/, '') || null;
 
   const existing = await db.query<Brand & { ig_handle?: string }>(`SELECT * FROM brands WHERE slug = $1 LIMIT 1`, [slug]);
-  let brand = existing[0];
+  let brand = existing[0] as (Brand & { ig_handle?: string; email?: string | null }) | undefined;
   if (!brand) {
     brand = await db.insert<Brand & { ig_handle?: string }>('brands', {
       name: display,
       slug,
       category: null,
       ig_handle: cleanHandle,
+      email: cleanEmail,
       plan: 'design_partner',
       research_quota_used: 0,
       research_quota_max: 50,
       onboarded_at: new Date().toISOString(),
     });
-  } else if (cleanHandle && brand.ig_handle !== cleanHandle) {
-    await db.query(`UPDATE brands SET ig_handle = $1, updated_at = NOW() WHERE id = $2`, [cleanHandle, brand.id]);
-    brand.ig_handle = cleanHandle;
+  } else {
+    if (cleanHandle && brand.ig_handle !== cleanHandle) {
+      await db.query(`UPDATE brands SET ig_handle = $1, updated_at = NOW() WHERE id = $2`, [cleanHandle, brand.id]);
+      brand.ig_handle = cleanHandle;
+    }
+    // Backfill the contact email so brand-facing mail (invite responses) can reach them.
+    if (brand.email !== cleanEmail) {
+      await db.query(`UPDATE brands SET email = $1, updated_at = NOW() WHERE id = $2`, [cleanEmail, brand.id]);
+      brand.email = cleanEmail;
+    }
   }
 
   const payload: SessionPayload = {
@@ -186,13 +194,14 @@ export async function createAccount(email: string, password: string, brandName?:
   const password_hash = hashPassword(password);
   if (brand) {
     if (brand.password_hash) throw new Error('An account with this email already exists — please log in.');
-    await db.query(`UPDATE brands SET password_hash = $1, name = $2, updated_at = NOW() WHERE id = $3`, [password_hash, display, brand.id]);
+    await db.query(`UPDATE brands SET password_hash = $1, name = $2, email = $3, updated_at = NOW() WHERE id = $4`, [password_hash, display, cleanEmail, brand.id]);
     brand.name = display;
   } else {
     brand = await db.insert<BrandRow>('brands', {
       name: display,
       slug,
       category: null,
+      email: cleanEmail,
       plan: 'design_partner',
       research_quota_used: 0,
       research_quota_max: 50,
@@ -223,6 +232,11 @@ export async function signInWithPassword(email: string, password: string, name?:
   if (cleanName && cleanName !== brand.name) {
     await db.query(`UPDATE brands SET name = $1, updated_at = NOW() WHERE id = $2`, [cleanName, brand.id]);
     brand.name = cleanName;
+  }
+  // Backfill contact email for brands created before the email column existed.
+  if (brand.email !== cleanEmail) {
+    await db.query(`UPDATE brands SET email = $1, updated_at = NOW() WHERE id = $2`, [cleanEmail, brand.id]);
+    brand.email = cleanEmail;
   }
   const payload = payloadFor(brand, cleanEmail);
   await setSessionCookie(payload);
