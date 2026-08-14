@@ -74,7 +74,7 @@ interface SendArgs {
 // Denormalised send context, recorded in email_log to power the agency-side
 // "Email Activity" page. Every field but `kind` is best-effort.
 export interface EmailLogMeta {
-  kind: string; // invite | invite_accepted | invite_declined | payment | review_changes | review_approved | deadline
+  kind: string; // invite | invite_accepted | invite_declined | payment | review_changes | review_approved | deadline | digest
   creator_id?: string | null;
   program_id?: string | null;
   brand_id?: string | null;
@@ -375,4 +375,61 @@ export async function sendDeadlineReminder(r: DeadlineReminder): Promise<boolean
       href,
     ),
   }, { kind: 'deadline', creator_id: r.creator_id ?? null, program_id: r.program_id ?? null, brand_id: r.brand_id ?? null });
+}
+
+// Weekly brand digest — driven by the weekly cron, which builds each brand's
+// notification feed (via buildBrandNotifications) and passes the top items in.
+// A roll-up of what needs the brand across every campaign, so they don't have
+// to open the app to know. Recipient is the brand's contact email; uses the
+// BRAND_FOOTER. Only meaningful items are passed in, so an empty week sends
+// nothing (the cron decides that, not this function).
+export interface BrandDigestItem {
+  title: string;
+  body: string;
+  when_label: string;
+  severity: 'action' | 'info';
+}
+export interface BrandDigest {
+  to: string;
+  brand_id: string | null;
+  brand_name: string;
+  action_count: number;
+  total: number;
+  items: BrandDigestItem[]; // already trimmed + ordered by the caller
+}
+
+export async function sendBrandDigest(d: BrandDigest): Promise<boolean> {
+  if (!emailEnabled() || !d.to) return false;
+  const href = `${appBaseUrl()}/notifications`;
+
+  const rows = d.items.map((it) => {
+    const dot = it.severity === 'action' ? '#dc2626' : '#9ca3af';
+    return `<tr><td style="padding:11px 0;border-bottom:1px solid #f0f0f3;">
+        <div style="font-size:14px;font-weight:600;color:#111827;line-height:1.35;">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dot};margin-right:8px;vertical-align:middle;"></span>${escapeHtml(it.title)}${it.when_label ? `<span style="font-weight:400;color:#9ca3af;font-size:12px;"> &middot; ${escapeHtml(it.when_label)}</span>` : ''}
+        </div>
+        <div style="font-size:13px;color:#4b5563;margin-top:3px;padding-left:15px;line-height:1.45;">${escapeHtml(it.body)}</div>
+      </td></tr>`;
+  }).join('');
+
+  const hasAction = d.action_count > 0;
+  const heading = hasAction
+    ? `${d.action_count} thing${d.action_count === 1 ? '' : 's'} need${d.action_count === 1 ? 's' : ''} you`
+    : 'Your weekly campaign digest';
+  const intro = hasAction
+    ? `<strong>${d.action_count} thing${d.action_count === 1 ? '' : 's'}</strong> need${d.action_count === 1 ? 's' : ''} your attention across your campaigns this week.`
+    : `Here\u2019s what moved across your campaigns this week.`;
+  const more = d.total > d.items.length ? `<p style="margin:14px 0 0;font-size:13px;color:#9ca3af;">+ ${d.total - d.items.length} more in the app.</p>` : '';
+
+  const body = `<p style="margin:0 0 14px;">Hi ${escapeHtml(d.brand_name)},</p>
+    <p style="margin:0 0 6px;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">${rows}</table>${more}`;
+
+  return sendEmail({
+    to: d.to,
+    subject: hasAction
+      ? `${d.action_count} thing${d.action_count === 1 ? '' : 's'} need you on Influencer Intel`
+      : 'Your weekly campaign digest',
+    html: shell(heading, body, 'Open notifications', href, BRAND_FOOTER),
+  }, { kind: 'digest', brand_id: d.brand_id });
 }

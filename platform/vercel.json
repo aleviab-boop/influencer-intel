@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/deadline-reminders",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/brand-digest",
+      "schedule": "30 3 * * 1"
     }
   ]
 }
