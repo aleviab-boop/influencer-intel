@@ -5,6 +5,20 @@ import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface ChecklistItem { key: string; label: string; hint: string; done: boolean; weight: number; href: string }
+interface DataExportSummary {
+  username: string | null;
+  display_name: string | null;
+  bio: string | null;
+  followers: number | null;
+  following: number | null;
+  posts: number | null;
+  posts_last_30d: number | null;
+  posts_last_90d: number | null;
+  avg_gap_days: number | null;
+  first_post_at: string | null;
+  last_post_at: string | null;
+  imported_at: string;
+}
 interface Verification {
   tier: 'oauth' | 'screenshot' | 'public' | 'self_reported' | 'none';
   label: string;
@@ -51,6 +65,10 @@ function Setup() {
   const [ownOpen, setOwnOpen] = useState(false);
   const [ownChecking, setOwnChecking] = useState(false);
   const [ownMsg, setOwnMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [exportSummary, setExportSummary] = useState<DataExportSummary | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -62,6 +80,13 @@ function Setup() {
       .then((d: Completeness) => setData(d))
       .catch(() => setData({ available: false } as Completeness))
       .finally(() => setLoading(false));
+    // Prefill any prior data-export import so we can show "last imported …".
+    fetch(`/api/creator/data-export${qs}`)
+      .then((r) => r.json())
+      .then((d: { available?: boolean; summary?: DataExportSummary | null }) => {
+        if (d?.available && d.summary) setExportSummary(d.summary);
+      })
+      .catch(() => {});
   }, []);
 
   // Public auto-fill: pulls the creator's own public IG profile (login-free, no
@@ -134,6 +159,44 @@ function Setup() {
       setOwnMsg({ ok: false, text: 'Something went wrong. Please try again.' });
     } finally {
       setOwnChecking(false);
+    }
+  };
+
+  // DYI export upload: creator hands us their own Instagram data ZIP; we parse
+  // it server-side for exact follower/following counts + posting cadence. No Meta.
+  const uploadExport = async (file: File) => {
+    if (exportBusy) return;
+    setExportBusy(true);
+    setExportMsg(null);
+    const qs = handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch(`/api/creator/data-export${qs}`, { method: 'POST', body: fd }).then((res) => res.json());
+      if (r?.ok && r.summary) {
+        const s = r.summary as DataExportSummary;
+        setExportSummary(s);
+        const f = Number(s.followers) || 0;
+        setExportMsg({ ok: true, text: `Imported your Instagram data — ${f.toLocaleString('en-IN')} followers and ${s.posts ?? 0} posts on file.` });
+        const d = await fetch(`/api/creator/setup${qs}`).then((res) => res.json());
+        setData(d);
+      } else {
+        const reason = r?.reason as string | undefined;
+        setExportMsg({
+          ok: false,
+          text: reason === 'not_zip'
+            ? 'That’s not a ZIP file — upload the .zip Instagram emailed you.'
+            : reason === 'unparseable'
+            ? 'We couldn’t read that export. Make sure you chose JSON (not HTML) format when downloading.'
+            : reason === 'too_large'
+            ? 'That file is too large. Request a media-free export, or contact us to import it.'
+            : 'Couldn’t import that file — please try again.',
+        });
+      }
+    } catch {
+      setExportMsg({ ok: false, text: 'Something went wrong during import. Please try again.' });
+    } finally {
+      setExportBusy(false);
     }
   };
 
@@ -301,6 +364,65 @@ function Setup() {
                 )}
               </div>
             )}
+
+            {/* Upload your Instagram data export — self-sourced reach, no Meta */}
+            <div className="mt-5 rounded-2xl bg-white border border-border shadow-card p-5">
+              <div className="flex items-start gap-3">
+                <span className="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14px] font-semibold text-ink-900">Upload your Instagram data export</div>
+                  <p className="mt-1 text-[12.5px] text-ink-500 leading-relaxed">Hand us your own Instagram data for exact follower counts and posting history — no login, no permissions.</p>
+                </div>
+              </div>
+
+              {exportSummary && (
+                <div className="mt-3.5 grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Followers', value: exportSummary.followers },
+                    { label: 'Posts', value: exportSummary.posts },
+                    { label: 'Posts / 30d', value: exportSummary.posts_last_30d },
+                  ].map((m) => (
+                    <div key={m.label} className="rounded-xl bg-[#faf9ff] border border-[#eee9fb] px-3 py-2.5 text-center">
+                      <div className="text-[16px] font-bold tabular-nums text-ink-900">{m.value != null ? Number(m.value).toLocaleString('en-IN') : '—'}</div>
+                      <div className="text-[10.5px] uppercase tracking-wide text-ink-400 mt-0.5">{m.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!exportOpen && !exportSummary ? (
+                <button onClick={() => setExportOpen(true)} className="mt-3.5 text-[12.5px] font-semibold" style={{ color: ACCENT }}>
+                  How do I get my data? →
+                </button>
+              ) : null}
+
+              {(exportOpen || exportSummary) && (
+                <ol className="mt-3.5 space-y-1.5 text-[12px] text-ink-500 list-decimal pl-4">
+                  <li>On Instagram: <span className="text-ink-700 font-medium">Settings → Accounts Centre → Your information and permissions → Download your information</span>.</li>
+                  <li>Choose <span className="text-ink-700 font-medium">JSON</span> format (not HTML), all date ranges.</li>
+                  <li>Instagram emails you a ZIP — upload it below.</li>
+                </ol>
+              )}
+
+              <div className="mt-3.5 flex flex-wrap items-center gap-3">
+                <label className="inline-flex items-center gap-2 px-4 py-2 text-[13px] font-semibold text-white rounded-xl cursor-pointer transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5 disabled:opacity-60"
+                  style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)`, opacity: exportBusy ? 0.6 : 1, pointerEvents: exportBusy ? 'none' : 'auto' }}>
+                  {exportBusy && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                  {exportBusy ? 'Importing…' : exportSummary ? 'Re-upload export' : 'Upload export (.zip)'}
+                  <input type="file" accept=".zip,application/zip" className="hidden" disabled={exportBusy}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadExport(f); e.target.value = ''; }} />
+                </label>
+                {exportSummary?.imported_at && (
+                  <span className="text-[11.5px] text-ink-400">Imported {new Date(exportSummary.imported_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                )}
+              </div>
+
+              {exportMsg && (
+                <p className="mt-3 text-[12.5px] font-medium" style={{ color: exportMsg.ok ? '#16a34a' : '#dc2626' }}>{exportMsg.text}</p>
+              )}
+            </div>
 
             {/* Checklist */}
             <div className="mt-5 space-y-2.5">
