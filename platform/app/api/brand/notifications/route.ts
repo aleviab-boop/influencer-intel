@@ -14,6 +14,7 @@ interface Row {
   recruit_id: string;
   program_id: string;
   program_name: string | null;
+  creator_id: string;
   handle: string | null;
   display_name: string | null;
   status: string;
@@ -23,6 +24,8 @@ interface Row {
   updated_at: string | null;
   created_at: string | null;
   submissions: unknown;
+  unread_messages: string | number | null;
+  last_message_at: string | null;
 }
 
 /**
@@ -44,14 +47,18 @@ export async function GET(): Promise<NextResponse> {
     const where = brandId ? `AND (p.brand_id = $1 OR p.brand_id IS NULL)` : '';
 
     const rows = await db.query<Row>(
-      `SELECT pr.id AS recruit_id, pr.program_id,
+      `SELECT pr.id AS recruit_id, pr.program_id, pr.creator_id,
               p.name AS program_name,
               c.handle, c.display_name,
               pr.status, pr.rate, pr.paid,
               pr.due_date::text AS due_date,
               pr.updated_at::text AS updated_at,
               pr.created_at::text AS created_at,
-              pr.submissions
+              pr.submissions,
+              (SELECT count(*) FROM deal_messages dm
+                WHERE dm.recruit_id = pr.id AND dm.sender = 'creator' AND dm.read_at IS NULL) AS unread_messages,
+              (SELECT max(dm.created_at)::text FROM deal_messages dm
+                WHERE dm.recruit_id = pr.id AND dm.sender = 'creator') AS last_message_at
        FROM program_recruits pr
        JOIN programs p ON p.id = pr.program_id
        JOIN creators c ON c.id = pr.creator_id
@@ -64,6 +71,7 @@ export async function GET(): Promise<NextResponse> {
       program_id: r.program_id,
       program: r.program_name ?? 'Campaign',
       creator: r.display_name || (r.handle ? `@${r.handle}` : 'A creator'),
+      creator_id: r.creator_id,
       status: r.status,
       rate: num(r.rate),
       paid: !!r.paid,
@@ -71,6 +79,8 @@ export async function GET(): Promise<NextResponse> {
       updated_at: r.updated_at,
       created_at: r.created_at,
       submissions: r.submissions,
+      unread_messages: num(r.unread_messages),
+      last_message_at: r.last_message_at,
     }));
 
     return NextResponse.json(buildBrandNotifications(items, new Date().toISOString()));

@@ -5,6 +5,7 @@ import { brandMayAccessProgram } from '@/lib/programs-service';
 import {
   buildMessageThread, normalizeMessageBody, type MessageRow,
 } from '@/lib/deal-messages';
+import { notifyDealMessage } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -105,6 +106,9 @@ export async function POST(request: Request): Promise<NextResponse> {
        RETURNING id, sender, body, read_at::text AS read_at, created_at::text AS created_at`,
       [res.row.recruit_id, body],
     );
+
+    // Notify the creator out-of-app (gated + anti-spam inside). Never blocks POST.
+    void notifyDealMessage(res.row.recruit_id, 'brand', body).catch(() => {});
 
     return NextResponse.json({ available: true, saved: true, message: inserted[0] });
   } catch (err) {

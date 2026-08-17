@@ -21,6 +21,7 @@ interface BrandRow {
 interface RecruitRow {
   recruit_id: string;
   program_id: string;
+  creator_id: string;
   program_name: string | null;
   handle: string | null;
   display_name: string | null;
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     for (const brand of brands) {
       const rows = await db.query<RecruitRow>(
-        `SELECT pr.id AS recruit_id, pr.program_id,
+        `SELECT pr.id AS recruit_id, pr.program_id, pr.creator_id,
                 p.name AS program_name,
                 c.handle, c.display_name,
                 pr.status, pr.rate, pr.paid,
@@ -89,6 +90,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         program_id: r.program_id,
         program: r.program_name ?? 'Campaign',
         creator: r.display_name || (r.handle ? `@${r.handle}` : 'A creator'),
+        creator_id: r.creator_id,
         status: r.status,
         rate: num(r.rate),
         paid: !!r.paid,

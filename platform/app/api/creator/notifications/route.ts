@@ -21,6 +21,8 @@ interface Row {
   submissions: unknown;
   program_name: string | null;
   brand_name: string | null;
+  unread_messages: string | number | null;
+  last_message_at: string | null;
 }
 
 /**
@@ -45,7 +47,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       `SELECT pr.id, pr.rate, pr.paid, pr.paid_at::text AS paid_at, pr.status,
               pr.due_date::text AS due_date, pr.created_at::text AS created_at,
               pr.submissions,
-              p.name AS program_name, b.name AS brand_name
+              p.name AS program_name, b.name AS brand_name,
+              (SELECT count(*) FROM deal_messages dm
+                WHERE dm.recruit_id = pr.id AND dm.sender = 'brand' AND dm.read_at IS NULL) AS unread_messages,
+              (SELECT max(dm.created_at)::text FROM deal_messages dm
+                WHERE dm.recruit_id = pr.id AND dm.sender = 'brand') AS last_message_at
        FROM program_recruits pr
        JOIN programs p ON p.id = pr.program_id
        LEFT JOIN brands b ON b.id = p.brand_id
@@ -64,6 +70,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       due_date: r.due_date ? r.due_date.slice(0, 10) : null,
       created_at: r.created_at,
       submissions: r.submissions,
+      unread_messages: num(r.unread_messages),
+      last_message_at: r.last_message_at,
     }));
 
     return NextResponse.json(buildNotifications(items, new Date().toISOString()));

@@ -25,6 +25,8 @@ export interface NotificationInput {
   due_date: string | null;  // YYYY-MM-DD
   created_at: string | null; // ISO
   submissions?: unknown;     // raw JSONB — carries the brand's per-link verdicts
+  unread_messages?: number;      // brand messages the creator hasn't opened yet
+  last_message_at?: string | null; // ISO of the latest brand message
 }
 
 export type NotificationKind =
@@ -35,7 +37,8 @@ export type NotificationKind =
   | 'payment_pending' // delivered, due passed, still unpaid a while
   | 'new_deal'        // recently recruited
   | 'changes_requested' // brand sent a submitted link back for changes
-  | 'submission_approved'; // brand approved submitted work
+  | 'submission_approved' // brand approved submitted work
+  | 'new_message';      // unread message(s) from the brand on this deal
 
 export interface NotificationView {
   id: string;
@@ -98,6 +101,24 @@ export function buildNotifications(items: NotificationInput[], todayISO: string)
     const rateStr = money(rate);
     const daysToDue = d.due_date ? daysBetween(today, d.due_date) : null;
     const createdDays = d.created_at ? daysBetween(d.created_at.slice(0, 10), today) : null;
+
+    // 0. Unread message(s) from the brand — surfaced on any deal (even paid),
+    // since a conversation can outlive the payout. Loud action signal.
+    if (d.unread_messages && d.unread_messages > 0) {
+      const n = d.unread_messages;
+      const when = d.last_message_at ?? d.created_at ?? todayISO;
+      out.push({
+        id: `${d.id}:message`,
+        kind: 'new_message',
+        severity: 'action',
+        title: `New message from ${d.brand}`,
+        body: `${n} unread message${n === 1 ? '' : 's'} about ${d.program}. Open the thread to reply.`,
+        brand: d.brand,
+        when,
+        when_label: relLabel(daysBetween(when.slice(0, 10), today)),
+        href: `${dealsHref}/${d.id}/messages`,
+      });
+    }
 
     // 1. Brand invite awaiting a reply — highest priority.
     if (INVITE_STATUSES.has(status) && !d.paid) {

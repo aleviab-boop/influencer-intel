@@ -18,6 +18,7 @@ export interface BrandNotificationInput {
   program_id: string;
   program: string;
   creator: string;          // display name or @handle
+  creator_id: string;       // for deep-linking into the deal thread
   status: string;
   rate: number;
   paid: boolean;
@@ -25,6 +26,8 @@ export interface BrandNotificationInput {
   updated_at: string | null; // ISO
   created_at: string | null; // ISO
   submissions?: unknown;     // raw JSONB
+  unread_messages?: number;      // creator messages the brand hasn't opened yet
+  last_message_at?: string | null; // ISO of the latest creator message
 }
 
 export type BrandNotificationKind =
@@ -33,7 +36,8 @@ export type BrandNotificationKind =
   | 'accepted'          // creator accepted the invite
   | 'declined'          // creator declined — slot to backfill
   | 'awaiting_response' // invite sent a while ago, no reply yet
-  | 'overdue';          // unpaid deliverable past its due date, nothing approved
+  | 'overdue'           // unpaid deliverable past its due date, nothing approved
+  | 'new_message';      // unread message(s) from the creator on this deal
 
 export interface BrandNotificationView {
   id: string;
@@ -95,6 +99,24 @@ export function buildBrandNotifications(
     const reviewHref = `/campaigns/${d.program_id}/submissions`;
     const payHref = '/payouts';
     const campaignHref = '/campaign-management';
+
+    // 0. Unread message(s) from the creator — surfaced on any deal (even paid),
+    // since a conversation can outlive the payout. Loud action signal.
+    if (d.unread_messages && d.unread_messages > 0) {
+      const n = d.unread_messages;
+      const when = d.last_message_at ?? d.updated_at ?? todayISO;
+      out.push({
+        id: `${d.recruit_id}:message`,
+        kind: 'new_message',
+        severity: 'action',
+        title: `New message from ${d.creator}`,
+        body: `${n} unread message${n === 1 ? '' : 's'} about ${d.program}. Open the thread to reply.`,
+        program: d.program,
+        when,
+        when_label: relLabel(daysBetween(when.slice(0, 10), today)),
+        href: `/campaigns/${d.program_id}/messages?creator=${d.creator_id}`,
+      });
+    }
 
     // Classify submitted links: pending (no verdict) vs approved vs changes.
     const records = normalizeStored(d.submissions).filter((s) => !!s.url);

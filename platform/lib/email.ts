@@ -74,7 +74,7 @@ interface SendArgs {
 // Denormalised send context, recorded in email_log to power the agency-side
 // "Email Activity" page. Every field but `kind` is best-effort.
 export interface EmailLogMeta {
-  kind: string; // invite | invite_accepted | invite_declined | payment | review_changes | review_approved | deadline | digest
+  kind: string; // invite | invite_accepted | invite_declined | payment | review_changes | review_approved | deadline | digest | message
   creator_id?: string | null;
   program_id?: string | null;
   brand_id?: string | null;
@@ -432,4 +432,121 @@ export async function sendBrandDigest(d: BrandDigest): Promise<boolean> {
       : 'Your weekly campaign digest',
     html: shell(heading, body, 'Open notifications', href, BRAND_FOOTER),
   }, { kind: 'digest', brand_id: d.brand_id });
+}
+
+// A short, single-line preview of a message body for the email teaser.
+function messagePreview(body: string, max = 140): string {
+  const one = body.replace(/\s+/g, ' ').trim();
+  return one.length > max ? `${one.slice(0, max - 1)}\u2026` : one;
+}
+
+interface DealMessageContext {
+  recruit_id: string;
+  program_id: string;
+  creator_id: string;
+  brand_id: string | null;
+  creator_email: string | null;
+  creator_name: string;
+  brand: string;
+  brand_email: string | null;
+  program: string;
+}
+
+// Everything a new-message email needs, keyed by the recruit (deal) id — the id
+// both message routes already hold. Prefers the claimed-account email, falls
+// back to the OAuth-verified one, same as loadRecruitContext.
+async function loadDealMessageContext(recruitId: string): Promise<DealMessageContext | null> {
+  const rows = await getBolticClient().query<{
+    recruit_id: string; program_id: string; creator_id: string; brand_id: string | null;
+    creator_email: string | null; creator_name: string | null;
+    brand: string | null; brand_email: string | null; program: string | null;
+  }>(
+    `SELECT pr.id AS recruit_id, pr.program_id, pr.creator_id, p.brand_id,
+            COALESCE(NULLIF(c.email, ''), c.verified_oauth_data->>'email') AS creator_email,
+            COALESCE(NULLIF(c.display_name, ''), c.handle)                 AS creator_name,
+            b.name  AS brand,
+            b.email AS brand_email,
+            p.name  AS program
+     FROM program_recruits pr
+     JOIN programs p ON p.id = pr.program_id
+     LEFT JOIN brands b ON b.id = p.brand_id
+     JOIN creators c ON c.id = pr.creator_id
+     WHERE pr.id = $1 LIMIT 1`,
+    [recruitId],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    recruit_id: r.recruit_id,
+    program_id: r.program_id,
+    creator_id: r.creator_id,
+    brand_id: r.brand_id ?? null,
+    creator_email: r.creator_email,
+    creator_name: r.creator_name ?? 'there',
+    brand: r.brand ?? 'A brand',
+    brand_email: r.brand_email ?? null,
+    program: r.program ?? 'a campaign',
+  };
+}
+
+/**
+ * A new message landed on a deal thread — email the OTHER party. `sender` is who
+ * spoke, so the recipient is the counterpart. Anti-spam: only sends when the
+ * just-inserted message is the SOLE unread one from that sender (i.e. the
+ * counterpart had caught up) — rapid follow-ups while a thread is still unread
+ * don't re-notify. Fire-and-forget from the POST routes.
+ */
+export async function notifyDealMessage(
+  recruitId: string,
+  sender: 'brand' | 'creator',
+  body: string,
+): Promise<void> {
+  if (!emailEnabled()) return;
+  const db = getBolticClient();
+
+  // Only the first unread message from this sender triggers a mail.
+  const guard = await db.query<{ n: string | number }>(
+    `SELECT count(*) AS n FROM deal_messages
+     WHERE recruit_id = $1 AND sender = $2 AND read_at IS NULL`,
+    [recruitId, sender],
+  );
+  if (Number(guard[0]?.n) !== 1) return;
+
+  const ctx = await loadDealMessageContext(recruitId);
+  if (!ctx) return;
+
+  const previewHtml = `<p style="margin:0 0 12px;padding:12px 14px;background:#faf5ff;border-radius:9px;color:#4c1d95;">\u201c${escapeHtml(messagePreview(body))}\u201d</p>`;
+
+  if (sender === 'brand') {
+    // Recipient is the creator.
+    if (!ctx.creator_email) return;
+    const href = `${appBaseUrl()}/creator/deals/${ctx.recruit_id}/messages`;
+    await sendEmail({
+      to: ctx.creator_email,
+      subject: `New message from ${ctx.brand}`,
+      html: shell(
+        `${ctx.brand} sent you a message`,
+        `<p style="margin:0 0 12px;">Hi ${ctx.creator_name},</p>
+         ${previewHtml}<p style="margin:0;">About <strong>${escapeHtml(ctx.program)}</strong>. Open the thread to reply.</p>`,
+        'Open conversation',
+        href,
+      ),
+    }, { kind: 'message', creator_id: ctx.creator_id, program_id: ctx.program_id, brand_id: ctx.brand_id });
+  } else {
+    // Recipient is the brand.
+    if (!ctx.brand_email) return;
+    const href = `${appBaseUrl()}/campaigns/${ctx.program_id}/messages?creator=${ctx.creator_id}`;
+    await sendEmail({
+      to: ctx.brand_email,
+      subject: `New message from ${ctx.creator_name}`,
+      html: shell(
+        `${ctx.creator_name} sent you a message`,
+        `<p style="margin:0 0 12px;">Hi there,</p>
+         ${previewHtml}<p style="margin:0;">About <strong>${escapeHtml(ctx.program)}</strong>. Open the thread to reply.</p>`,
+        'Open conversation',
+        href,
+        BRAND_FOOTER,
+      ),
+    }, { kind: 'message', creator_id: ctx.creator_id, program_id: ctx.program_id, brand_id: ctx.brand_id });
+  }
 }
