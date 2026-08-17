@@ -31,11 +31,22 @@ interface Prediction {
   baseline_likes: number;
   baseline_er: number;
   factors: { trend: number; timing: number; format: number; content?: number };
+  content?: {
+    scored: boolean;
+    vision: boolean;
+    overall: number;
+    multiplier: number;
+    top_dimensions: Array<{ name: string; score: number }>;
+    weak_dimensions: Array<{ name: string; score: number }>;
+    suggestions: string[];
+  } | null;
   trend_score: number;
   matched_trends: MatchedTrend[];
   posts_analyzed: number;
   notes: string[];
 }
+
+const prettyDim = (s: string): string => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const FORMATS: { key: Format; label: string; icon: string }[] = [
   { key: 'reel', label: 'Reel', icon: 'M8 5v14l11-7z' },
@@ -74,6 +85,7 @@ function ReelPredictor() {
   const [handle, setHandle] = useState<string | null>(null);
   const [format, setFormat] = useState<Format>('reel');
   const [caption, setCaption] = useState('');
+  const [mediaUrl, setMediaUrl] = useState('');
   const [postTime, setPostTime] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +105,7 @@ function ReelPredictor() {
     setError(null);
     try {
       const body: Record<string, unknown> = { handle, format, caption: caption.trim() };
+      if (mediaUrl.trim()) body[format === 'reel' ? 'thumbnail_url' : 'media_url'] = mediaUrl.trim();
       if (postTime) body.post_time = new Date(postTime).toISOString();
       const res = await fetch('/api/predict/reach', {
         method: 'POST',
@@ -163,6 +176,11 @@ function ReelPredictor() {
                 placeholder="Paste your caption + hashtags. We match them against what's trending right now."
                 className="w-full text-[13.5px] text-ink-800 rounded-xl border border-[#eee9fb] p-3 outline-none focus:border-[#c9bcfb] transition-colors resize-none" />
 
+              <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400 mt-4 mb-2">{isVideo ? 'Cover-frame' : 'Draft image'} URL <span className="normal-case font-normal text-ink-400">(optional — we’ll score the visual)</span></div>
+              <input type="url" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)}
+                placeholder="https://… link to your draft cover or image"
+                className="w-full text-[13.5px] text-ink-800 rounded-xl border border-[#eee9fb] p-2.5 outline-none focus:border-[#c9bcfb] transition-colors" />
+
               <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400 mt-4 mb-2">Planned post time <span className="normal-case font-normal text-ink-400">(optional)</span></div>
               <input type="datetime-local" value={postTime} onChange={(e) => setPostTime(e.target.value)}
                 className="w-full text-[13.5px] text-ink-800 rounded-xl border border-[#eee9fb] p-2.5 outline-none focus:border-[#c9bcfb] transition-colors" />
@@ -210,6 +228,41 @@ function ReelPredictor() {
                     <Factor label="Format" value={factorPct(result.factors.format)} up={result.factors.format >= 1} />
                   </div>
                 </div>
+
+                {/* Content quality (vision) */}
+                {result.content?.scored && (
+                  <div className="mt-5 pt-5 border-t border-[#f0edfa]">
+                    <div className="flex items-center justify-between gap-3 mb-2.5">
+                      <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400">
+                        Visual quality {result.content.vision ? '' : <span className="normal-case font-normal">(heuristic)</span>}
+                      </div>
+                      <span className="text-[13px] font-bold tabular-nums" style={{ color: ACCENT }}>{Math.round(result.content.overall * 100)}/100</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-[#eee9fb] overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${Math.round(result.content.overall * 100)}%`, background: `linear-gradient(90deg, ${ACCENT}, #9b7bff)` }} />
+                    </div>
+                    {(result.content.top_dimensions.length > 0 || result.content.weak_dimensions.length > 0) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {result.content.top_dimensions.slice(0, 3).map((d, i) => (
+                          <span key={`t${i}`} className="text-[12px] font-medium px-2.5 py-1 rounded-full" style={{ background: '#ecfdf3', color: '#16a34a' }}>↑ {prettyDim(d.name)}</span>
+                        ))}
+                        {result.content.weak_dimensions.slice(0, 3).map((d, i) => (
+                          <span key={`w${i}`} className="text-[12px] font-medium px-2.5 py-1 rounded-full" style={{ background: '#fff4ed', color: '#c2410c' }}>↓ {prettyDim(d.name)}</span>
+                        ))}
+                      </div>
+                    )}
+                    {result.content.suggestions.length > 0 && (
+                      <ul className="mt-3 space-y-1.5">
+                        {result.content.suggestions.slice(0, 4).map((s, i) => (
+                          <li key={i} className="flex gap-2 text-[13px] text-ink-600 leading-relaxed">
+                            <span className="mt-1.5 w-1.5 h-1.5 shrink-0 rounded-full" style={{ background: '#9b7bff' }} />
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
 
                 {/* Trend match */}
                 {result.matched_trends.length > 0 && (

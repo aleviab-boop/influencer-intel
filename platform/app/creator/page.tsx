@@ -100,6 +100,7 @@ const ICONS: Record<string, ReactNode> = {
   mediakit: <Svg><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8" cy="12" r="2" /><path d="M13 10h5M13 14h3" /></Svg>,
   settings: <Svg><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.1V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-1.1 2.7V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" /></Svg>,
   campaigns: <Svg><path d="m3 11 18-5v12L3 14z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" /></Svg>,
+  predictor: <Svg><path d="M8 5v14l11-7z" /></Svg>,
 };
 
 export default function CreatorPortal() {
@@ -407,6 +408,7 @@ export default function CreatorPortal() {
                 badge={overview ? (overview.rate_card.set ? 'Set' : 'Add') : null} />
               <QuickLink href={`/creator/payout?handle=${encodeURIComponent(profile.handle)}`} label="Payout details" desc="Where you get paid" icon={ICONS.payout}
                 badge={overview ? (overview.payout.set ? 'Added' : 'Add') : null} />
+              <QuickLink href={`/creator/reel-predictor?handle=${encodeURIComponent(profile.handle)}`} label="Reel predictor" desc="Forecast your next post" icon={ICONS.predictor} />
               <QuickLink href={`/creator/analytics-preview?handle=${encodeURIComponent(profile.handle)}`} label="Analytics" desc="Your growth & content" icon={ICONS.analytics}
                 badge={overview && overview.analytics.followers > 0 ? fmt(overview.analytics.followers) : null} />
               <QuickLink href={`/creator/media-kit?handle=${encodeURIComponent(profile.handle)}`} label="Media kit" desc="Rates & audience" icon={ICONS.mediakit}
