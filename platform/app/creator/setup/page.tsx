@@ -24,6 +24,7 @@ interface Completeness {
   next: { label: string; hint: string; href: string } | null;
   items: ChecklistItem[];
   verification?: Verification | null;
+  handle_verified?: boolean;
 }
 
 const withHandle = (href: string, handle: string | null): string => {
@@ -46,6 +47,10 @@ function Setup() {
   const [loading, setLoading] = useState(true);
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [ownCode, setOwnCode] = useState<string | null>(null);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const [ownChecking, setOwnChecking] = useState(false);
+  const [ownMsg, setOwnMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -85,6 +90,50 @@ function Setup() {
       setEnrichMsg({ ok: false, text: 'Something went wrong. Please try again.' });
     } finally {
       setEnriching(false);
+    }
+  };
+
+  // Bio-code ownership check: prove the creator controls the IG handle by
+  // dropping a one-time code in their public bio — no Meta, no OAuth.
+  const startOwnership = async () => {
+    setOwnOpen(true);
+    setOwnMsg(null);
+    if (ownCode) return;
+    const qs = handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '';
+    try {
+      const r = await fetch(`/api/creator/verify-handle${qs}`).then((res) => res.json());
+      if (r?.available && r.code) setOwnCode(r.code);
+      else setOwnMsg({ ok: false, text: 'Add your Instagram handle in Settings first.' });
+    } catch {
+      setOwnMsg({ ok: false, text: 'Couldn’t start verification. Please try again.' });
+    }
+  };
+
+  const confirmOwnership = async () => {
+    if (ownChecking) return;
+    setOwnChecking(true);
+    setOwnMsg(null);
+    const qs = handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '';
+    try {
+      const r = await fetch(`/api/creator/verify-handle${qs}`, { method: 'POST' }).then((res) => res.json());
+      if (r?.ok) {
+        setOwnMsg({ ok: true, text: 'Ownership confirmed — brands can see you control this handle.' });
+        const d = await fetch(`/api/creator/setup${qs}`).then((res) => res.json());
+        setData(d);
+      } else {
+        setOwnMsg({
+          ok: false,
+          text: r?.reason === 'code_not_found'
+            ? 'We couldn’t find the code in your bio yet. Save it on Instagram, then check again.'
+            : r?.reason === 'no_handle'
+            ? 'Add your Instagram handle in Settings first.'
+            : 'Couldn’t reach Instagram just now — try again in a moment.',
+        });
+      }
+    } catch {
+      setOwnMsg({ ok: false, text: 'Something went wrong. Please try again.' });
+    } finally {
+      setOwnChecking(false);
     }
   };
 
@@ -185,6 +234,41 @@ function Setup() {
                 {enrichMsg && (
                   <p className="mt-3 text-[12.5px] font-medium" style={{ color: enrichMsg.ok ? '#16a34a' : '#dc2626' }}>{enrichMsg.text}</p>
                 )}
+
+                {/* Handle ownership — prove you control the account, no login needed */}
+                <div className="mt-4 pt-4 border-t border-[#f0edfa]">
+                  {data.handle_verified ? (
+                    <div className="flex items-center gap-2 text-[12.5px] font-medium" style={{ color: '#16a34a' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                      Handle ownership verified — brands can see this account is really yours.
+                    </div>
+                  ) : !ownOpen ? (
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="text-[12.5px] text-ink-600">Prove you own this handle — no Instagram login needed.</div>
+                      <button onClick={startOwnership} className="text-[12.5px] font-semibold" style={{ color: ACCENT }}>Verify ownership →</button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="text-[12.5px] text-ink-600 mb-2">Add this code anywhere in your Instagram bio, save it, then check:</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <code className="text-[13px] font-bold tracking-wide px-3 py-1.5 rounded-lg select-all" style={{ background: ACCENT_SOFT, color: ACCENT }}>{ownCode ?? '…'}</code>
+                        {ownCode && (
+                          <button onClick={() => navigator.clipboard?.writeText(ownCode).catch(() => {})} className="text-[12px] font-medium text-ink-500 hover:text-ink-900 transition-colors">Copy</button>
+                        )}
+                        <button onClick={confirmOwnership} disabled={ownChecking || !ownCode}
+                          className="inline-flex items-center gap-2 px-3.5 py-1.5 text-[12.5px] font-semibold text-white rounded-lg transition-all duration-200 hover:brightness-105 disabled:opacity-60"
+                          style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                          {ownChecking && <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                          {ownChecking ? 'Checking…' : 'I’ve added it — check'}
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[11.5px] text-ink-400">You can remove the code from your bio once it’s verified.</p>
+                    </div>
+                  )}
+                  {ownMsg && (
+                    <p className="mt-2.5 text-[12.5px] font-medium" style={{ color: ownMsg.ok ? '#16a34a' : '#dc2626' }}>{ownMsg.text}</p>
+                  )}
+                </div>
 
                 {/* ML insights unlock — once public reels are on file, the creator's
                     own reel-view predictions + content insights are ready. No IG

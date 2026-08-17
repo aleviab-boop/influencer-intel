@@ -17,6 +17,7 @@ interface CreatorRow {
   payout_details: unknown;
   verification_tier: string | null;
   last_scraped_at: string | null;
+  handle_verified_at: string | null;
   has_oauth: boolean;
 }
 
@@ -51,6 +52,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       `SELECT id, display_name, bio, primary_category, primary_city, profile_photo_url,
               follower_count, payout_details, verification_tier,
               last_scraped_at::text AS last_scraped_at,
+              handle_verified_at::text AS handle_verified_at,
               EXISTS (SELECT 1 FROM connected_accounts ca
                       WHERE ca.creator_id = creators.id AND ca.connection_status = 'active') AS has_oauth
        FROM creators WHERE id = $1 LIMIT 1`,
@@ -82,7 +84,12 @@ export async function GET(request: Request): Promise<NextResponse> {
       has_self_reported: followerCount > 0,
     });
 
-    return NextResponse.json({ available: true, verification, ...computeCompleteness(input) });
+    return NextResponse.json({
+      available: true,
+      verification,
+      handle_verified: !!c.handle_verified_at,
+      ...computeCompleteness(input),
+    });
   } catch (err) {
     return NextResponse.json({ available: false, reason: 'db_error', error: (err as Error).message }, { status: 200 });
   }
