@@ -25,6 +25,28 @@ interface PostingSchedule {
   tip: string | null;
 }
 
+interface LoggedPrediction {
+  id: string;
+  format: string | null;
+  predicted_likes: number | null;
+  predicted_views: number | null;
+  bucket: string | null;
+  confidence: string | null;
+  caption_preview: string | null;
+  created_at: string;
+  scored: boolean;
+  actual_likes: number | null;
+  actual_views: number | null;
+  likes_ape: number | null;
+}
+interface ForecastHistory {
+  available: boolean;
+  predictions: LoggedPrediction[];
+  total: number;
+  scored: number;
+  median_likes_ape: number | null;
+}
+
 interface MatchedTrend {
   trend_type: 'audio' | 'format' | 'hashtag' | 'topic';
   display_name: string;
@@ -131,6 +153,14 @@ function ReelPredictor() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Prediction | null>(null);
   const [schedule, setSchedule] = useState<PostingSchedule | null>(null);
+  const [history, setHistory] = useState<ForecastHistory | null>(null);
+
+  const loadHistory = (h: string) => {
+    fetch(`/api/creator/forecast-history?handle=${encodeURIComponent(h)}`)
+      .then((r) => r.json())
+      .then((d: ForecastHistory) => setHistory(d?.available ? d : null))
+      .catch(() => setHistory(null));
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -143,6 +173,7 @@ function ReelPredictor() {
         .then((r) => r.json())
         .then((d) => setSchedule(d?.posting_schedule ?? null))
         .catch(() => setSchedule(null));
+      loadHistory(clean);
     }
   }, []);
 
@@ -171,6 +202,7 @@ function ReelPredictor() {
         );
       } else {
         setResult(d as Prediction);
+        if (handle) loadHistory(handle);
       }
     } catch {
       setResult(null);
@@ -356,6 +388,45 @@ function ReelPredictor() {
                     ))}
                   </ul>
                 )}
+              </div>
+            )}
+
+            {/* Forecast track record */}
+            {history && history.total > 0 && (
+              <div className="mt-5 rounded-2xl bg-white border border-border shadow-card p-5">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="text-[14px] font-bold text-ink-900">Your forecast track record</div>
+                  <div className="flex items-center gap-4 text-[12px] text-ink-500">
+                    <span><span className="font-semibold text-ink-800 tabular-nums">{history.total}</span> forecast{history.total === 1 ? '' : 's'}</span>
+                    <span><span className="font-semibold text-ink-800 tabular-nums">{history.scored}</span> with results</span>
+                    {history.median_likes_ape != null && (
+                      <span>~<span className="font-semibold text-ink-800 tabular-nums">{Math.round((1 - history.median_likes_ape) * 100)}%</span> accurate on likes</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-3 divide-y divide-[#f2f0fb]">
+                  {history.predictions.map((p) => (
+                    <div key={p.id} className="py-2.5 flex items-center gap-3">
+                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 capitalize" style={{ background: ACCENT_SOFT, color: ACCENT }}>{p.format ?? 'post'}</span>
+                      <span className="min-w-0 flex-1 text-[12.5px] text-ink-600 truncate">{p.caption_preview || 'No caption'}</span>
+                      <span className="shrink-0 text-right tabular-nums">
+                        {p.scored ? (
+                          <>
+                            <span className="block text-[12.5px] text-ink-800">{fmtNum(p.predicted_likes)} <span className="text-ink-400">→</span> {fmtNum(p.actual_likes)} likes</span>
+                            {p.likes_ape != null && (
+                              <span className="block text-[11px] font-semibold" style={{ color: p.likes_ape <= 0.25 ? '#16a34a' : p.likes_ape <= 0.5 ? '#d97706' : '#dc2626' }}>
+                                {Math.round((1 - Math.min(p.likes_ape, 1)) * 100)}% accurate
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="block text-[12px] text-ink-400">predicted {fmtNum(p.predicted_likes)} likes · awaiting result</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </>
