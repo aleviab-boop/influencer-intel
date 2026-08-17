@@ -8,6 +8,23 @@ type Format = 'reel' | 'photo' | 'carousel';
 type Bucket = 'breakout' | 'above_average' | 'average' | 'below_average';
 type Confidence = 'high' | 'medium' | 'low' | 'very_low';
 
+interface ScheduleSlot {
+  day: number | null;
+  day_label: string;
+  part_key: string;
+  part_label: string;
+  range: string;
+  avg_er: number | null;
+  count: number;
+  lift_pct: number | null;
+}
+interface PostingSchedule {
+  available: boolean;
+  slots: ScheduleSlot[];
+  headline: string | null;
+  tip: string | null;
+}
+
 interface MatchedTrend {
   trend_type: 'audio' | 'format' | 'hashtag' | 'topic';
   display_name: string;
@@ -67,6 +84,29 @@ const PHASE_COPY: Record<MatchedTrend['phase'], string> = {
   emerging: 'Emerging', growing: 'Growing', peak: 'Peaking', saturated: 'Saturated', declining: 'Declining',
 };
 
+// Slot start hour in IST, mirroring the PARTS table in lib/posting-schedule.
+const PART_LO: Record<string, number> = { morning: 6, midday: 11, afternoon: 15, evening: 18, night: 21, latenight: 0 };
+const IST_OFFSET_MIN = 5 * 60 + 30;
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+// Next future date-time (as a datetime-local string) that lands in a slot's IST
+// window. Product is IST-first, so we build the value directly in IST.
+function nextSlotLocal(slot: ScheduleSlot): string {
+  const hour = PART_LO[slot.part_key] ?? 18;
+  const nowIst = new Date(Date.now() + IST_OFFSET_MIN * 60_000);
+  for (let add = 0; add < 14; add++) {
+    const d = new Date(nowIst);
+    d.setUTCDate(d.getUTCDate() + add);
+    d.setUTCHours(hour, 0, 0, 0);
+    const dayOk = slot.day == null || d.getUTCDay() === slot.day;
+    const future = d.getTime() > nowIst.getTime();
+    if (dayOk && future) {
+      return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}T${pad2(hour)}:00`;
+    }
+  }
+  return '';
+}
+
 const fmtNum = (n: number | null): string => (n == null ? '—' : Math.round(n).toLocaleString('en-IN'));
 const factorPct = (m: number): string => {
   const pct = Math.round((m - 1) * 100);
@@ -90,11 +130,20 @@ function ReelPredictor() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Prediction | null>(null);
+  const [schedule, setSchedule] = useState<PostingSchedule | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const h = (params.get('handle') || (typeof localStorage !== 'undefined' ? localStorage.getItem('creator_handle') : null) || '').trim();
-    setHandle(h ? h.replace(/^@/, '') : null);
+    const clean = h ? h.replace(/^@/, '') : null;
+    setHandle(clean);
+    if (clean) {
+      const qs = `?handle=${encodeURIComponent(clean)}`;
+      fetch(`/api/creator/analytics${qs}`)
+        .then((r) => r.json())
+        .then((d) => setSchedule(d?.posting_schedule ?? null))
+        .catch(() => setSchedule(null));
+    }
   }, []);
 
   const backHref = handle ? `/creator?handle=${encodeURIComponent(handle)}` : '/creator';
@@ -184,6 +233,22 @@ function ReelPredictor() {
               <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-400 mt-4 mb-2">Planned post time <span className="normal-case font-normal text-ink-400">(optional)</span></div>
               <input type="datetime-local" value={postTime} onChange={(e) => setPostTime(e.target.value)}
                 className="w-full text-[13.5px] text-ink-800 rounded-xl border border-[#eee9fb] p-2.5 outline-none focus:border-[#c9bcfb] transition-colors" />
+
+              {schedule?.available && schedule.slots.length > 0 && (
+                <div className="mt-2.5">
+                  <div className="text-[12px] text-ink-500 mb-1.5">{schedule.headline ? schedule.headline : 'Your best posting windows'} — tap to use:</div>
+                  <div className="flex flex-wrap gap-2">
+                    {schedule.slots.slice(0, 3).map((s, i) => (
+                      <button key={i} type="button" onClick={() => setPostTime(nextSlotLocal(s))}
+                        className="inline-flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-[#e3def9] bg-[#faf9ff] transition-all duration-200 hover:-translate-y-0.5"
+                        style={{ color: ACCENT }}>
+                        {s.day_label !== 'Most days' ? `${s.day_label} ` : ''}{s.range}
+                        {s.lift_pct != null && s.lift_pct > 0 && <span className="text-[#16a34a] font-semibold">+{Math.round(s.lift_pct)}%</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button onClick={predict} disabled={busy}
                 className="mt-5 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
