@@ -616,6 +616,7 @@ function AnalyticsPreview() {
   const [brandMatches, setBrandMatches] = useState<BrandMatches | null>(null);
   const [loading, setLoading] = useState(true);
   const [kitHref, setKitHref] = useState('/creator/media-kit');
+  const [predictorHref, setPredictorHref] = useState('/creator/reel-predictor');
   const [backHref, setBackHref] = useState('/creator');
   const [tab, setTab] = useState<'all' | 'reels' | 'posts'>('all');
   const [sort, setSort] = useState<'recent' | 'top'>('recent');
@@ -629,6 +630,7 @@ function AnalyticsPreview() {
     else if (handle) q.set('handle', handle);
     const qs = q.toString() ? `?${q}` : '';
     setKitHref(`/creator/media-kit${qs}`);
+    setPredictorHref(`/creator/reel-predictor${qs}`);
     setBackHref(handle ? `/creator?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator');
 
     fetch(`/api/creator/analytics${qs}`)
@@ -943,7 +945,7 @@ function AnalyticsPreview() {
 
       {/* Reel forecast (prediction) + content-format depth */}
       <div className="mt-3 grid lg:grid-cols-2 gap-3">
-        <ReelForecastCard f={data.reel_forecast} />
+        <ReelForecastCard f={data.reel_forecast} predictorHref={predictorHref} />
         <ContentBreakdownCard b={data.content_breakdown} />
       </div>
 
@@ -1352,7 +1354,7 @@ function EngagementTrendCard({ t }: { t: EngagementTrend }) {
   );
 }
 
-function ReelForecastCard({ f }: { f?: ReelForecast }) {
+function ReelForecastCard({ f, predictorHref }: { f?: ReelForecast; predictorHref: string }) {
   if (!f || f.sample_size < 3 || !f.next_reel) {
     return (
       <div className="rounded-xl bg-white border border-border shadow-card p-4">
@@ -1416,6 +1418,11 @@ function ReelForecastCard({ f }: { f?: ReelForecast }) {
           <span>Last reel: <span className="font-semibold capitalize" style={{ color: bandColor[f.last_reel_band] }}>{f.last_reel_band}</span></span>
         )}
       </div>
+
+      <Link href={predictorHref} className="group mt-3 flex items-center justify-between gap-2 rounded-lg border border-[#e3def9] bg-[#faf9ff] px-3 py-2 text-[12.5px] font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(108,77,246,0.14)]" style={{ color: ACCENT }}>
+        Plan a specific reel — caption, timing & visual
+        <svg className="transition-transform duration-200 group-hover:translate-x-0.5" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+      </Link>
     </div>
   );
 }
