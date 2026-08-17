@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { computeCompleteness, type CompletenessInput } from '@/lib/profile-completeness';
+import { computeVerification } from '@/lib/creator-verification';
 import { resolveCreatorId } from '@/lib/creator-identity';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,9 @@ interface CreatorRow {
   profile_photo_url: string | null;
   follower_count: number | string | null;
   payout_details: unknown;
+  verification_tier: string | null;
+  last_scraped_at: string | null;
+  has_oauth: boolean;
 }
 
 function payoutComplete(v: unknown): boolean {
@@ -45,7 +49,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const [c] = await db.query<CreatorRow>(
       `SELECT id, display_name, bio, primary_category, primary_city, profile_photo_url,
-              follower_count, payout_details
+              follower_count, payout_details, verification_tier,
+              last_scraped_at::text AS last_scraped_at,
+              EXISTS (SELECT 1 FROM connected_accounts ca
+                      WHERE ca.creator_id = creators.id AND ca.connection_status = 'active') AS has_oauth
        FROM creators WHERE id = $1 LIMIT 1`,
       [creatorId],
     );
@@ -67,7 +74,15 @@ export async function GET(request: Request): Promise<NextResponse> {
       has_activity: Number(activityCount) > 0,
     };
 
-    return NextResponse.json({ available: true, ...computeCompleteness(input) });
+    const followerCount = Number(c.follower_count) || 0;
+    const verification = computeVerification({
+      has_oauth: !!c.has_oauth,
+      has_screenshot: false, // screenshot-proof upload is a later rung
+      has_public_data: c.verification_tier === 'public' || (followerCount > 0 && !!c.last_scraped_at),
+      has_self_reported: followerCount > 0,
+    });
+
+    return NextResponse.json({ available: true, verification, ...computeCompleteness(input) });
   } catch (err) {
     return NextResponse.json({ available: false, reason: 'db_error', error: (err as Error).message }, { status: 200 });
   }
