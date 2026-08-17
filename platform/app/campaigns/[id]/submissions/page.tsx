@@ -178,14 +178,24 @@ function CreatorCard({
           <div className="text-[11.5px] text-ink-400 mt-0.5">
             {c.approved}/{c.required} approved{c.rate > 0 ? ` \u00b7 ${inr(c.rate)}` : ''}
           </div>
-          <Link
-            href={`/campaigns/${encodeURIComponent(programId)}/contract?creator=${encodeURIComponent(c.creator_id)}`}
-            className="mt-1 inline-flex items-center gap-1 text-[11.5px] font-semibold hover:underline"
-            style={{ color: ACCENT }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 15l2 2 4-4" /></svg>
-            View agreement
-          </Link>
+          <div className="mt-1 flex items-center gap-3">
+            <Link
+              href={`/campaigns/${encodeURIComponent(programId)}/contract?creator=${encodeURIComponent(c.creator_id)}`}
+              className="inline-flex items-center gap-1 text-[11.5px] font-semibold hover:underline"
+              style={{ color: ACCENT }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 15l2 2 4-4" /></svg>
+              View agreement
+            </Link>
+            <Link
+              href={`/campaigns/${encodeURIComponent(programId)}/messages?creator=${encodeURIComponent(c.creator_id)}`}
+              className="inline-flex items-center gap-1 text-[11.5px] font-semibold hover:underline"
+              style={{ color: ACCENT }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>
+              Message
+            </Link>
+          </div>
         </div>
       </div>
 

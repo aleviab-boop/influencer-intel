@@ -175,6 +175,23 @@ function Brief({ id }: { id: string }) {
               <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
             </Link>
 
+            {/* Messages */}
+            <Link
+              href={`/creator/deals/${encodeURIComponent(data.id)}/messages${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`}
+              className="group mt-3 flex items-center justify-between gap-3 rounded-2xl bg-white border border-border shadow-card px-5 py-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z" /></svg>
+                </div>
+                <div>
+                  <div className="text-[14px] font-semibold text-ink-900">Messages</div>
+                  <div className="text-[12px] text-ink-400">Chat with the brand about this deal</div>
+                </div>
+              </div>
+              <svg className="text-ink-300" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+            </Link>
+
             {/* Submit deliverables */}
             {data.stage !== 'invited' && (
               <Link
