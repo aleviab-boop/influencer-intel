@@ -46,8 +46,6 @@ function Setup() {
   const [loading, setLoading] = useState(true);
   const [enriching, setEnriching] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -87,59 +85,6 @@ function Setup() {
       setEnrichMsg({ ok: false, text: 'Something went wrong. Please try again.' });
     } finally {
       setEnriching(false);
-    }
-  };
-
-  // Screenshot-proof upload: reads an Insights screenshot as a base64 data-URL
-  // (no object storage in this app), posts it, and lifts the creator to the
-  // 'screenshot' rung — one above the login-free public auto-fill.
-  const MAX_UPLOAD = 3 * 1024 * 1024;
-  const readAsDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(String(fr.result));
-      fr.onerror = () => reject(new Error('read_failed'));
-      fr.readAsDataURL(file);
-    });
-
-  const uploadProof = async (file: File | null) => {
-    if (!file || uploading) return;
-    setUploadMsg(null);
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      setUploadMsg({ ok: false, text: 'Please upload a PNG, JPG or WebP screenshot.' });
-      return;
-    }
-    if (file.size > MAX_UPLOAD) {
-      setUploadMsg({ ok: false, text: 'That image is over 3 MB — please upload a smaller screenshot.' });
-      return;
-    }
-    setUploading(true);
-    const qs = handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '';
-    try {
-      const image = await readAsDataUrl(file);
-      const r = await fetch(`/api/creator/profile/insights-proof${qs}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ image }),
-      }).then((res) => res.json());
-      if (r?.ok) {
-        setUploadMsg({ ok: true, text: 'Screenshot received — your profile is now Insights-verified.' });
-        const d = await fetch(`/api/creator/setup${qs}`).then((res) => res.json());
-        setData(d);
-      } else {
-        setUploadMsg({
-          ok: false,
-          text: r?.reason === 'too_large'
-            ? 'That image is too large — please upload a smaller screenshot.'
-            : r?.reason === 'bad_format'
-            ? 'That file type isn’t supported — use a PNG, JPG or WebP.'
-            : 'Couldn’t save that upload — please try again.',
-        });
-      }
-    } catch {
-      setUploadMsg({ ok: false, text: 'Something went wrong. Please try again.' });
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -232,13 +177,6 @@ function Setup() {
                     {enriching && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                     {enriching ? 'Checking…' : 'Fetch my public stats'}
                   </button>
-                  <label className={`inline-flex items-center gap-2 px-4 py-2 text-[13px] font-semibold rounded-xl border border-border cursor-pointer transition-all duration-200 hover:border-[#e3def9] hover:-translate-y-0.5 ${uploading ? 'opacity-60 pointer-events-none' : ''}`}
-                    style={{ color: ACCENT, background: ACCENT_SOFT }}>
-                    {uploading && <span className="w-3.5 h-3.5 rounded-full border-2 border-current/30 border-t-current animate-spin" />}
-                    {uploading ? 'Uploading…' : 'Upload Insights screenshot'}
-                    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
-                      onChange={(e) => { void uploadProof(e.target.files?.[0] ?? null); e.target.value = ''; }} />
-                  </label>
                   <Link href={withHandle('/connect', handle)} className="text-[12.5px] font-medium text-ink-500 hover:text-ink-900 transition-colors">
                     Connect Instagram for live insights <span className="text-ink-400">(optional)</span>
                   </Link>
@@ -246,9 +184,6 @@ function Setup() {
 
                 {enrichMsg && (
                   <p className="mt-3 text-[12.5px] font-medium" style={{ color: enrichMsg.ok ? '#16a34a' : '#dc2626' }}>{enrichMsg.text}</p>
-                )}
-                {uploadMsg && (
-                  <p className="mt-2 text-[12.5px] font-medium" style={{ color: uploadMsg.ok ? '#16a34a' : '#dc2626' }}>{uploadMsg.text}</p>
                 )}
               </div>
             )}
