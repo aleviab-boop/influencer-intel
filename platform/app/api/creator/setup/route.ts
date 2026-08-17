@@ -63,6 +63,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
     const activityCount = activityRows[0]?.n ?? 0;
 
+    // Screenshot-proof rung: an Insights screenshot on file (any non-rejected row).
+    const proofRows = await db.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM creator_insight_proofs
+       WHERE creator_id = $1 AND status <> 'rejected'`, [creatorId],
+    );
+    const hasScreenshot = (proofRows[0]?.n ?? 0) > 0;
+
     const input: CompletenessInput = {
       has_name: !!(c.display_name && c.display_name.trim()),
       has_bio: !!(c.bio && c.bio.trim().length >= 20),
@@ -77,7 +84,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const followerCount = Number(c.follower_count) || 0;
     const verification = computeVerification({
       has_oauth: !!c.has_oauth,
-      has_screenshot: false, // screenshot-proof upload is a later rung
+      has_screenshot: hasScreenshot || c.verification_tier === 'screenshot',
       has_public_data: c.verification_tier === 'public' || (followerCount > 0 && !!c.last_scraped_at),
       has_self_reported: followerCount > 0,
     });
