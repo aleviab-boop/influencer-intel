@@ -144,7 +144,7 @@ function Review({ id }: { id: string }) {
 
           <div className="mt-6 space-y-4">
             {data.creators.map((c) => (
-              <CreatorCard key={c.creator_id} c={c} busy={busy} onVerdict={setVerdict} />
+              <CreatorCard key={c.creator_id} c={c} programId={id} busy={busy} onVerdict={setVerdict} />
             ))}
           </div>
         </>
@@ -155,10 +155,12 @@ function Review({ id }: { id: string }) {
 
 function CreatorCard({
   c,
+  programId,
   busy,
   onVerdict,
 }: {
   c: ReviewCreator;
+  programId: string;
   busy: string | null;
   onVerdict: (creatorId: string, submissionId: string, state: 'approved' | 'changes' | null, comment?: string) => void;
 }) {
@@ -176,6 +178,14 @@ function CreatorCard({
           <div className="text-[11.5px] text-ink-400 mt-0.5">
             {c.approved}/{c.required} approved{c.rate > 0 ? ` \u00b7 ${inr(c.rate)}` : ''}
           </div>
+          <Link
+            href={`/campaigns/${encodeURIComponent(programId)}/contract?creator=${encodeURIComponent(c.creator_id)}`}
+            className="mt-1 inline-flex items-center gap-1 text-[11.5px] font-semibold hover:underline"
+            style={{ color: ACCENT }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6M9 15l2 2 4-4" /></svg>
+            View agreement
+          </Link>
         </div>
       </div>
 
