@@ -151,6 +151,9 @@ function ReelPredictor() {
   const [postTime, setPostTime] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needData, setNeedData] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchMsg, setFetchMsg] = useState<string | null>(null);
   const [result, setResult] = useState<Prediction | null>(null);
   const [schedule, setSchedule] = useState<PostingSchedule | null>(null);
   const [history, setHistory] = useState<ForecastHistory | null>(null);
@@ -183,6 +186,7 @@ function ReelPredictor() {
     if (busy || !handle) return;
     setBusy(true);
     setError(null);
+    setNeedData(false);
     try {
       const body: Record<string, unknown> = { handle, format, caption: caption.trim() };
       if (mediaUrl.trim()) body[format === 'reel' ? 'thumbnail_url' : 'media_url'] = mediaUrl.trim();
@@ -195,13 +199,16 @@ function ReelPredictor() {
       const d = await res.json();
       if (!res.ok || d?.error) {
         setResult(null);
-        setError(
-          d?.error === 'not_enough_data'
-            ? "We don't have enough of your recent reels yet. Fetch your public stats on the Get brand-ready page first."
-            : 'Couldn’t run the forecast just now. Please try again.',
-        );
+        if (d?.error === 'not_enough_data') {
+          // Actionable empty-state: we can pull their public reels right here.
+          setNeedData(true);
+          setError(null);
+        } else {
+          setError('Couldn’t run the forecast just now. Please try again.');
+        }
       } else {
         setResult(d as Prediction);
+        setNeedData(false);
         if (handle) loadHistory(handle);
       }
     } catch {
@@ -209,6 +216,34 @@ function ReelPredictor() {
       setError('Something went wrong. Please try again.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Empty-state recovery: pull the creator's PUBLIC reels (login-free scrape via
+  // enrich → ig-profile, which persists recent_posts) then retry the forecast in
+  // one tap — no leaving the page, no Instagram login.
+  const fetchAndRetry = async () => {
+    if (fetching || !handle) return;
+    setFetching(true);
+    setFetchMsg(null);
+    const qs = `?handle=${encodeURIComponent(handle)}`;
+    try {
+      const r = await fetch(`/api/creator/profile/enrich${qs}`, { method: 'POST' }).then((res) => res.json());
+      if (r?.ok) {
+        setNeedData(false);
+        setFetchMsg(null);
+        await predict();
+      } else {
+        setFetchMsg(
+          r?.reason === 'no_handle'
+            ? 'Add your Instagram handle in Settings first.'
+            : 'Couldn’t reach Instagram just now — try again, or upload your data export below.',
+        );
+      }
+    } catch {
+      setFetchMsg('Something went wrong. Please try again.');
+    } finally {
+      setFetching(false);
     }
   };
 
@@ -291,6 +326,40 @@ function ReelPredictor() {
 
               {error && <p className="mt-3 text-[12.5px] font-medium text-[#dc2626]">{error}</p>}
             </div>
+
+            {/* Empty-state: no recent reels on file yet — guide the public fetch */}
+            {needData && (
+              <div className="mt-5 rounded-2xl bg-white border border-border shadow-card p-6">
+                <div className="flex items-start gap-3.5">
+                  <span className="grid place-items-center w-10 h-10 shrink-0 rounded-xl text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" /></svg>
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-[16px] font-bold text-ink-900">Let’s pull your recent reels first</h2>
+                    <p className="mt-1.5 text-[13px] text-ink-600 leading-relaxed">
+                      The forecast learns from your own recent posts, and we don’t have enough on file yet. We can pull them from your <span className="font-medium text-ink-800">public</span> Instagram profile now — no login, no permissions. It takes a few seconds.
+                    </p>
+                  </div>
+                </div>
+
+                <button onClick={fetchAndRetry} disabled={fetching}
+                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-semibold text-white rounded-xl transition-all duration-200 hover:brightness-105 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
+                  style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                  {fetching && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                  {fetching ? 'Fetching your reels…' : 'Fetch my public reels & forecast'}
+                </button>
+
+                {fetchMsg && <p className="mt-3 text-[12.5px] font-medium text-[#dc2626]">{fetchMsg}</p>}
+
+                <div className="mt-4 pt-4 border-t border-[#f0edfa] flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-[12.5px] text-ink-500">Prefer to hand us your own data?</span>
+                  <Link href={handle ? `/creator/setup?handle=${encodeURIComponent(handle)}` : '/creator/setup'}
+                    className="text-[12.5px] font-semibold" style={{ color: ACCENT }}>
+                    Upload your Instagram data export →
+                  </Link>
+                </div>
+              </div>
+            )}
 
             {/* Result */}
             {result && bucket && (
