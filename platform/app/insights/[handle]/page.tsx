@@ -139,27 +139,58 @@ export default function InsightsPage({ params }: { params: Promise<{ handle: str
   const [auth, setAuth] = useState<AuthScore | null>(null);
   const [prediction, setPrediction] = useState<PredictionData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState<'overview' | 'content' | 'brand_work' | 'predict' | 'monitor'>('overview');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    params.then((p) => { setHandle(p.handle); loadData(p.handle); });
+    params.then((p) => {
+      setHandle(p.handle);
+      // A just-completed OAuth connect redirects here with ?connected=true. The
+      // initial Graph-API sync runs fire-and-forget, so post_insights (and thus
+      // the "connected" insights payload) can lag the redirect by a few seconds.
+      // In that window we poll instead of flashing stale/"scraped" data — this is
+      // what a reviewer sees immediately after granting permissions.
+      const justConnected =
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).get('connected') === 'true';
+      loadData(p.handle, justConnected ? 0 : -1);
+    });
   }, [params]);
 
-  async function loadData(h: string) {
-    setLoading(true);
+  // ~45s of polling (15 × 3s) covers a normal initial sync; after that we fall
+  // back to whatever data exists so the page never hangs on the sync screen.
+  const MAX_SYNC_POLLS = 15;
+
+  async function loadData(h: string, pollAttempt: number) {
+    if (pollAttempt <= 0) setLoading(true);
     setError(null);
     try {
       const cr = await fetch(`/api/creators/${h}`);
-      if (!cr.ok) { setError('Creator not found'); setLoading(false); return; }
+      if (!cr.ok) { setError('Creator not found'); setLoading(false); setSyncing(false); return; }
       const cd = await cr.json();
       setCreator(cd);
-      fetch(`/api/tools/authenticity?handle=${encodeURIComponent(h)}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (d && !d.error) setAuth(d); })
-        .catch(() => {});
+      // Authenticity is independent of the sync — fetch it once, on first load.
+      if (pollAttempt <= 0) {
+        fetch(`/api/tools/authenticity?handle=${encodeURIComponent(h)}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d && !d.error) setAuth(d); })
+          .catch(() => {});
+      }
       const ir = await fetch(`/api/insights/${cd.id}`);
-      if (ir.ok) setInsights(await ir.json());
+      const data = ir.ok ? await ir.json() : null;
+      const isConnected = !!data && data.source === 'connected';
+
+      // Fresh connect but the connected payload isn't ready yet → keep polling.
+      if (pollAttempt >= 0 && !isConnected && pollAttempt < MAX_SYNC_POLLS) {
+        setSyncing(true);
+        setLoading(false);
+        setTimeout(() => { void loadData(h, pollAttempt + 1); }, 3000);
+        return;
+      }
+
+      setSyncing(false);
+      if (data && !data.error) setInsights(data);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -182,6 +213,7 @@ export default function InsightsPage({ params }: { params: Promise<{ handle: str
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><span className="text-[#ccc] text-sm">Loading...</span></div>;
   if (error) return <div className="flex items-center justify-center min-h-screen"><span className="text-[#cc0000] text-sm">{error}</span></div>;
+  if (syncing) return <SyncingScreen handle={handle} />;
 
   const isScraped = insights?.source === 'scraped';
   const isConnected = insights?.source === 'connected';
@@ -740,6 +772,25 @@ function MonitorTab({ creator }: { creator: CreatorBasic | null }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SyncingScreen({ handle }: { handle: string }) {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-white">
+      <div className="text-center px-6 max-w-sm">
+        <div className="flex items-center justify-center gap-1.5 mb-5">
+          <span className="w-2 h-2 rounded-full bg-[#111] animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-[#111] animate-pulse" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 rounded-full bg-[#111] animate-pulse" style={{ animationDelay: '300ms' }} />
+        </div>
+        <h2 className="text-lg font-medium text-[#111] mb-2">Connecting @{handle}</h2>
+        <p className="text-[13px] text-[#999] leading-relaxed">
+          Syncing your Instagram insights — reach, saves, video views and audience
+          demographics. This usually takes a few seconds.
+        </p>
       </div>
     </div>
   );
