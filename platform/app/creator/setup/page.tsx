@@ -185,6 +185,23 @@ function Setup() {
                 {enrichMsg && (
                   <p className="mt-3 text-[12.5px] font-medium" style={{ color: enrichMsg.ok ? '#16a34a' : '#dc2626' }}>{enrichMsg.text}</p>
                 )}
+
+                {/* ML insights unlock — once public reels are on file, the creator's
+                    own reel-view predictions + content insights are ready. No IG
+                    login, no App Review: it all runs off the login-free fetch. */}
+                {data.verification.verified && (
+                  <Link href={withHandle('/creator/analytics-preview', handle)}
+                    className="group mt-4 flex items-center gap-3 rounded-xl border border-[#e3def9] bg-[#faf9ff] p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(108,77,246,0.14)]">
+                    <span className="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" /></svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13.5px] font-semibold text-ink-900">See my reel predictions & insights</span>
+                      <span className="block text-[12px] text-ink-500">AI forecast of your next reel’s views, trend and best-performing format — from your public reels.</span>
+                    </span>
+                    <svg className="shrink-0 text-ink-300 transition-transform duration-200 group-hover:translate-x-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                  </Link>
+                )}
               </div>
             )}
 
