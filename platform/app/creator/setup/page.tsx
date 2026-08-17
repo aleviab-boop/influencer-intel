@@ -202,6 +202,19 @@ function Setup() {
                     <svg className="shrink-0 text-ink-300 transition-transform duration-200 group-hover:translate-x-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
                   </Link>
                 )}
+                {data.verification.verified && (
+                  <Link href={withHandle('/creator/reel-predictor', handle)}
+                    className="group mt-2.5 flex items-center gap-3 rounded-xl border border-[#e3def9] bg-[#faf9ff] p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(108,77,246,0.14)]">
+                    <span className="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 5v14l11-7z" /></svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13.5px] font-semibold text-ink-900">Predict my next reel</span>
+                      <span className="block text-[12px] text-ink-500">Forecast views, likes and engagement before you post — with a caption + timing idea.</span>
+                    </span>
+                    <svg className="shrink-0 text-ink-300 transition-transform duration-200 group-hover:translate-x-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                  </Link>
+                )}
               </div>
             )}
 
