@@ -72,29 +72,11 @@ function ConnectContent() {
 
             <PermissionsCard />
 
-            <div className="mt-6">
-              <button
-                disabled={!config?.configured}
-                onClick={() => {
-                  window.location.href = '/api/oauth/instagram';
-                }}
-                className="px-5 py-2.5 text-sm font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Connect Instagram account
-              </button>
-              {!config?.configured && (
-                <span className="ml-3 text-[12px] text-ink-400">
-                  Set IG_APP_ID, IG_APP_SECRET, IG_REDIRECT_URI to enable.
-                </span>
-              )}
-              <div className="mt-3 text-[12px] text-ink-400">
-                Prefer not to connect Instagram?{' '}
-                <a href="/creator/join" className="text-ink-900 underline underline-offset-2">
-                  Claim your profile with email instead
-                </a>
-                .
-              </div>
-            </div>
+            <InstagramConnect
+              configured={!!config?.configured}
+              initialHandle={params.get('handle')}
+              betaError={errorParam === 'beta'}
+            />
 
             <h2 className="mt-10 mb-3 text-sm font-semibold text-ink-900">Connected accounts</h2>
             {accounts.length === 0 ? (
@@ -111,6 +93,192 @@ function ConnectContent() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+interface BetaState {
+  open: boolean;
+  gated: boolean;
+  allowed: boolean;
+  on_waitlist: boolean;
+}
+
+// The connect surface, beta-gated. While the Meta app is pre-approval, Instagram
+// Login only works for the handles we've added as testers — so a non-allowlisted
+// creator is offered the waitlist here instead of being bounced into Instagram's
+// opaque error wall. Once IG_BETA_OPEN=true (app Live), the gate lifts and this
+// is just the plain Connect button.
+function InstagramConnect({
+  configured,
+  initialHandle,
+  betaError,
+}: {
+  configured: boolean;
+  initialHandle: string | null;
+  betaError: boolean;
+}) {
+  const [beta, setBeta] = useState<BetaState | null>(null);
+  const [handle, setHandle] = useState((initialHandle ?? '').replace(/^@/, ''));
+  const [checking, setChecking] = useState(false);
+  const [email, setEmail] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [joined, setJoined] = useState(false);
+
+  // Learn whether the gate is open, and (if a handle came in via URL) that
+  // handle's access — so a bounced-back creator lands straight on the waitlist.
+  useEffect(() => {
+    const h = (initialHandle ?? '').replace(/^@/, '').trim();
+    const qs = h ? `?handle=${encodeURIComponent(h)}` : '';
+    fetch(`/api/creator/beta-access${qs}`)
+      .then((r) => r.json())
+      .then((d: BetaState) => setBeta(d))
+      .catch(() => setBeta({ open: true, gated: false, allowed: true, on_waitlist: false }));
+  }, [initialHandle]);
+
+  const clean = handle.trim().replace(/^@/, '').toLowerCase();
+  const handleValid = /^[a-z0-9._]{1,30}$/.test(clean);
+
+  const startConnect = (withHandle?: string) => {
+    const h = (withHandle ?? '').replace(/^@/, '').trim();
+    window.location.href = h ? `/api/oauth/instagram?handle=${encodeURIComponent(h)}` : '/api/oauth/instagram';
+  };
+
+  const checkAccess = async () => {
+    if (!handleValid || checking) return;
+    setChecking(true);
+    try {
+      const d: BetaState = await fetch(`/api/creator/beta-access?handle=${encodeURIComponent(clean)}`).then((r) => r.json());
+      setBeta(d);
+      if (d.allowed) startConnect(clean); // straight through — no extra click
+    } catch {
+      /* leave state; user can retry */
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const joinWaitlist = async () => {
+    if (!handleValid || joining) return;
+    setJoining(true);
+    try {
+      const d = await fetch('/api/creator/beta-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ handle: clean, email: email.trim() || undefined }),
+      }).then((r) => r.json());
+      if (d?.allowed) { startConnect(clean); return; }
+      if (d?.ok) { setJoined(true); setBeta((b) => (b ? { ...b, on_waitlist: true } : b)); }
+    } catch {
+      /* retry */
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const inputCls = 'w-full text-sm text-ink-900 rounded-lg border border-border px-3 py-2 outline-none focus:border-ink-400 transition-colors';
+
+  // Not configured — nothing to gate; show the disabled hint as before.
+  if (!configured) {
+    return (
+      <div className="mt-6">
+        <button disabled className="px-5 py-2.5 text-sm font-medium text-white bg-ink-900 rounded-lg opacity-40 cursor-not-allowed">
+          Connect Instagram account
+        </button>
+        <span className="ml-3 text-[12px] text-ink-400">Set IG_APP_ID, IG_APP_SECRET, IG_REDIRECT_URI to enable.</span>
+        <EmailFallback />
+      </div>
+    );
+  }
+
+  // Gate open (app Live) — plain connect button.
+  if (beta && beta.open) {
+    return (
+      <div className="mt-6">
+        <button onClick={() => startConnect(clean || undefined)}
+          className="px-5 py-2.5 text-sm font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800">
+          Connect Instagram account
+        </button>
+        <EmailFallback />
+      </div>
+    );
+  }
+
+  // Already confirmed allowlisted for this handle — one-click connect.
+  if (beta && beta.allowed) {
+    return (
+      <div className="mt-6">
+        <div className="mb-3 px-4 py-3 rounded-lg border border-emerald-200 bg-emerald-50 text-sm text-emerald-800">
+          @{clean || 'your account'} is on the beta — you can connect Instagram now.
+        </div>
+        <button onClick={() => startConnect(clean)}
+          className="px-5 py-2.5 text-sm font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800">
+          Connect Instagram account
+        </button>
+        <EmailFallback />
+      </div>
+    );
+  }
+
+  // On the waitlist (just joined, or already was) — confirmation.
+  if (beta && (joined || beta.on_waitlist)) {
+    return (
+      <div className="mt-6">
+        <div className="px-4 py-3 rounded-lg border border-emerald-200 bg-emerald-50 text-sm text-emerald-800">
+          You’re on the list{clean ? ` for @${clean}` : ''}. Instagram Connect is in limited beta — we’ll email you the moment it opens up. In the meantime you can{' '}
+          <a href="/creator/setup" className="underline underline-offset-2">verify with your public profile</a> and get brand-ready today.
+        </div>
+        <EmailFallback />
+      </div>
+    );
+  }
+
+  // Gated + unknown/blocked handle — offer the beta check / waitlist.
+  return (
+    <div className="mt-6 p-5 rounded-xl bg-surface border border-border">
+      <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Limited beta</div>
+      <div className="text-sm font-medium text-ink-900">Instagram Connect is in early access</div>
+      <p className="mt-1 text-[13px] text-ink-500">
+        {betaError
+          ? 'That account isn’t on the beta yet. Add your handle to the waitlist and we’ll email you when Connect opens up.'
+          : 'Enter your Instagram handle to check if your account is in the beta.'}
+      </p>
+
+      <div className="mt-4 flex gap-2">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 text-sm">@</span>
+          <input value={handle} onChange={(e) => setHandle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void checkAccess(); }}
+            placeholder="yourhandle" className={inputCls + ' pl-7'} />
+        </div>
+        <button onClick={checkAccess} disabled={!handleValid || checking}
+          className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-ink-900 rounded-lg hover:bg-ink-800 disabled:opacity-40 disabled:cursor-not-allowed">
+          {checking ? 'Checking…' : 'Check access'}
+        </button>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-border">
+        <div className="text-[13px] text-ink-600 mb-2">Not in the beta yet? Join the waitlist:</div>
+        <div className="flex gap-2">
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email"
+            placeholder="Email (optional — to notify you)" className={inputCls} />
+          <button onClick={joinWaitlist} disabled={!handleValid || joining}
+            className="shrink-0 px-4 py-2 text-sm font-medium text-ink-900 border border-border rounded-lg hover:bg-canvas disabled:opacity-40 disabled:cursor-not-allowed">
+            {joining ? 'Joining…' : 'Join waitlist'}
+          </button>
+        </div>
+      </div>
+
+      <EmailFallback />
+    </div>
+  );
+}
+
+function EmailFallback() {
+  return (
+    <div className="mt-3 text-[12px] text-ink-400">
+      Prefer not to connect Instagram?{' '}
+      <a href="/creator/join" className="text-ink-900 underline underline-offset-2">Claim your profile with email instead</a>.
     </div>
   );
 }
