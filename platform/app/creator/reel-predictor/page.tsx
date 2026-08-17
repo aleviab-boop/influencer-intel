@@ -407,24 +407,7 @@ function ReelPredictor() {
 
                 <div className="mt-3 divide-y divide-[#f2f0fb]">
                   {history.predictions.map((p) => (
-                    <div key={p.id} className="py-2.5 flex items-center gap-3">
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 capitalize" style={{ background: ACCENT_SOFT, color: ACCENT }}>{p.format ?? 'post'}</span>
-                      <span className="min-w-0 flex-1 text-[12.5px] text-ink-600 truncate">{p.caption_preview || 'No caption'}</span>
-                      <span className="shrink-0 text-right tabular-nums">
-                        {p.scored ? (
-                          <>
-                            <span className="block text-[12.5px] text-ink-800">{fmtNum(p.predicted_likes)} <span className="text-ink-400">→</span> {fmtNum(p.actual_likes)} likes</span>
-                            {p.likes_ape != null && (
-                              <span className="block text-[11px] font-semibold" style={{ color: p.likes_ape <= 0.25 ? '#16a34a' : p.likes_ape <= 0.5 ? '#d97706' : '#dc2626' }}>
-                                {Math.round((1 - Math.min(p.likes_ape, 1)) * 100)}% accurate
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="block text-[12px] text-ink-400">predicted {fmtNum(p.predicted_likes)} likes · awaiting result</span>
-                        )}
-                      </span>
-                    </div>
+                    <ForecastRow key={p.id} p={p} onRecorded={() => handle && loadHistory(handle)} />
                   ))}
                 </div>
               </div>
@@ -454,6 +437,82 @@ function Factor({ label, value, up }: { label: string; value: string; up: boolea
     <div className="rounded-xl border border-[#f0edfa] bg-[#faf9ff] p-2.5 text-center">
       <div className="text-[11px] text-ink-400">{label}</div>
       <div className="text-[14px] font-bold tabular-nums" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function ForecastRow({ p, onRecorded }: { p: LoggedPrediction; onRecorded: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [likes, setLikes] = useState('');
+  const [views, setViews] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const isVideo = p.format === 'reel' || p.format === 'video';
+
+  const save = async () => {
+    const l = Number(likes);
+    if (!Number.isFinite(l) || l < 0) { setErr('Enter the actual likes.'); return; }
+    setSaving(true);
+    setErr(null);
+    try {
+      const body: Record<string, unknown> = { prediction_id: p.id, actual_likes: l };
+      const v = Number(views);
+      if (isVideo && Number.isFinite(v) && v > 0) body.actual_views = v;
+      const r = await fetch('/api/creator/forecast-history', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then((res) => res.json());
+      if (r?.ok) onRecorded();
+      else setErr('Couldn’t save that — please try again.');
+    } catch {
+      setErr('Something went wrong.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="py-2.5">
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 capitalize" style={{ background: ACCENT_SOFT, color: ACCENT }}>{p.format ?? 'post'}</span>
+        <span className="min-w-0 flex-1 text-[12.5px] text-ink-600 truncate">{p.caption_preview || 'No caption'}</span>
+        <span className="shrink-0 text-right tabular-nums">
+          {p.scored ? (
+            <>
+              <span className="block text-[12.5px] text-ink-800">{fmtNum(p.predicted_likes)} <span className="text-ink-400">→</span> {fmtNum(p.actual_likes)} likes</span>
+              {p.likes_ape != null && (
+                <span className="block text-[11px] font-semibold" style={{ color: p.likes_ape <= 0.25 ? '#16a34a' : p.likes_ape <= 0.5 ? '#d97706' : '#dc2626' }}>
+                  {Math.round((1 - Math.min(p.likes_ape, 1)) * 100)}% accurate
+                </span>
+              )}
+            </>
+          ) : (
+            <button type="button" onClick={() => setOpen((o) => !o)} className="text-[12px] font-semibold" style={{ color: ACCENT }}>
+              {open ? 'Cancel' : 'Add result'}
+            </button>
+          )}
+        </span>
+      </div>
+
+      {!p.scored && open && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-1">
+          <span className="text-[11.5px] text-ink-400">predicted {fmtNum(p.predicted_likes)} likes — actuals:</span>
+          <input type="number" inputMode="numeric" value={likes} onChange={(e) => setLikes(e.target.value)} placeholder="Likes"
+            className="w-24 text-[12.5px] text-ink-800 rounded-lg border border-[#eee9fb] px-2.5 py-1.5 outline-none focus:border-[#c9bcfb]" />
+          {isVideo && (
+            <input type="number" inputMode="numeric" value={views} onChange={(e) => setViews(e.target.value)} placeholder="Views"
+              className="w-24 text-[12.5px] text-ink-800 rounded-lg border border-[#eee9fb] px-2.5 py-1.5 outline-none focus:border-[#c9bcfb]" />
+          )}
+          <button type="button" onClick={save} disabled={saving}
+            className="text-[12.5px] font-semibold text-white rounded-lg px-3 py-1.5 disabled:opacity-60"
+            style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          {err && <span className="text-[11.5px] text-[#dc2626]">{err}</span>}
+        </div>
+      )}
     </div>
   );
 }
