@@ -645,6 +645,9 @@ export function LiveSearch({
   const [draftLang, setDraftLang] = useState<'auto' | 'english' | 'hinglish' | 'hindi'>('auto');
   const [draftFollowup, setDraftFollowup] = useState(false);
   const [copied, setCopied] = useState(false);
+  // one-click email send (Phase 5): 'idle' | 'sending' | 'sent' | 'error'
+  const [emailSend, setEmailSend] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [emailSendErr, setEmailSendErr] = useState<string | null>(null);
   // bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -997,6 +1000,8 @@ export function LiveSearch({
     setDraftFollowup(followup);
     setDraftText('');
     setCopied(false);
+    setEmailSend('idle');
+    setEmailSendErr(null);
     setDraftLoading(true);
     try {
       const d = await fetch('/api/discover-live/outreach', {
@@ -1009,6 +1014,39 @@ export function LiveSearch({
       setDraftText((err as Error).message);
     } finally {
       setDraftLoading(false);
+    }
+  }
+
+  // One-click email send: fires the drafted message through /api/outreach/send
+  // (Resend + outreach_messages log) instead of handing off to a mailto:. Marks
+  // the creator contacted on success, mirroring the old link's behaviour.
+  async function sendOutreachEmail(p: LiveProfile) {
+    if (!p.email || !draftText || emailSend === 'sending') return;
+    setEmailSend('sending');
+    setEmailSendErr(null);
+    try {
+      const res = await fetch('/api/outreach/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          handle: p.username,
+          message: draftText,
+          channel: 'email',
+          recipient: p.email,
+          creator_id: p.creator_id,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) {
+        setEmailSend('error');
+        setEmailSendErr(d.error || 'Could not send. Try Copy instead.');
+        return;
+      }
+      setEmailSend('sent');
+      markContacted(p.username);
+    } catch {
+      setEmailSend('error');
+      setEmailSendErr('Could not reach the server. Try Copy instead.');
     }
   }
 
@@ -2262,14 +2300,15 @@ export function LiveSearch({
                 </button>
                 {draftChannel === 'email' ? (
                   draftFor.email ? (
-                    <a
-                      href={mailLink(draftFor.email, draftText)}
-                      onClick={() => markContacted(draftFor.username)}
-                      className={`px-4 py-2 rounded-lg text-white text-[13px] font-semibold ${draftLoading || !draftText ? 'pointer-events-none opacity-50' : ''}`}
+                    <button
+                      onClick={() => void sendOutreachEmail(draftFor)}
+                      disabled={draftLoading || !draftText || emailSend === 'sending' || emailSend === 'sent'}
+                      className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-60 flex items-center gap-2"
                       style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                     >
-                      ✉ Send email
-                    </a>
+                      {emailSend === 'sending' && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+                      {emailSend === 'sent' ? 'Sent ✓' : emailSend === 'sending' ? 'Sending…' : '✉ Send email'}
+                    </button>
                   ) : (
                     <span className="px-4 py-2 text-[12px] text-[#999]">No email on file — use Copy</span>
                   )
@@ -2300,6 +2339,12 @@ export function LiveSearch({
               </div>
               {draftChannel === 'dm' && (
                 <p className="mt-2 text-[11px] text-[#aaa] text-right">Opens the DM with @{draftFor.username} — your message is copied, just paste &amp; send.</p>
+              )}
+              {draftChannel === 'email' && emailSend === 'sent' && draftFor.email && (
+                <p className="mt-2 text-[11px] text-emerald-600 text-right">Sent to {draftFor.email} — logged to outreach history.</p>
+              )}
+              {draftChannel === 'email' && emailSend === 'error' && (
+                <p className="mt-2 text-[11px] text-rose-600 text-right">{emailSendErr}</p>
               )}
             </div>
           </div>
