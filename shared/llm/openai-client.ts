@@ -13,6 +13,35 @@ import type {
   InsightConfidence,
 } from '../types/growth-engine.js';
 
+// ── Brand campaign ideation ───────────────────────────────────────────────
+// Input a brand profile → the web-search model browses for what's trending in
+// that niche RIGHT NOW and drafts campaign concepts a brand could run. Each
+// concept carries a `creator_query` the caller turns into a DB creator search,
+// so trend → campaign → creator shortlist is one flow.
+export interface BrandCampaignInput {
+  brand: string;              // brand name
+  category: string;           // niche, e.g. "skincare", "fitness apparel"
+  audience?: string | null;   // free text, e.g. "women 18-34, metro + tier-2"
+  cities?: string[];          // target cities
+  budget?: string | null;     // 'low' | 'mid' | 'high' or free text
+  goals?: string | null;      // free text, e.g. "festive sales push"
+}
+
+export interface BrandCampaignConcept {
+  title: string;              // short campaign name
+  angle: string;              // one-line description of the idea
+  trend: {
+    name: string;             // the trend it rides, e.g. "#MonsoonSkincare"
+    type: string;             // 'audio' | 'hashtag' | 'topic' | 'format'
+    why_now: string;          // why this trend is hot right now
+  };
+  format: string;             // 'Reel series', 'GRWM', 'Talking-head', …
+  campaign_type: string;      // 'barter' | 'paid' | 'UGC' | 'ambassador'
+  hashtags: string[];         // suggested campaign hashtags
+  deliverables: string;       // what each creator delivers
+  creator_query: string;      // plain-English query to shortlist creators
+}
+
 // ── Content-quality scoring (vision) ──────────────────────────────────────
 // Score a post's creative on 12 dimensions from the actual image (a photo, or a
 // reel's cover frame). Powers the reach predictor's content-quality multiplier.
@@ -391,6 +420,116 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
     });
     const content = res.choices[0]?.message?.content ?? '';
     return this.parseHandles(content, max);
+  }
+
+  /**
+   * Draft trend-driven campaign concepts for a brand. Uses the web-search model
+   * so it grounds ideas in what's ACTUALLY trending for the niche right now
+   * (seasonal moments, hot hashtags/audio, cultural events) rather than guessing
+   * from stale training memory. Each concept includes a `creator_query` the
+   * caller feeds into the DB creator search to attach a shortlist. Search models
+   * reply with prose + citations, so we parse the embedded JSON leniently.
+   */
+  async suggestBrandCampaigns(input: BrandCampaignInput, max = 4): Promise<BrandCampaignConcept[]> {
+    const cities = (input.cities ?? []).filter(Boolean).slice(0, 8);
+    const brief = [
+      `Brand: ${input.brand}`,
+      `Category / niche: ${input.category}`,
+      input.audience ? `Target audience: ${input.audience}` : '',
+      cities.length ? `Target cities: ${cities.join(', ')}` : '',
+      input.budget ? `Budget: ${input.budget}` : '',
+      input.goals ? `Goals: ${input.goals}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const res = await this.client.chat.completions.create({
+      model: 'gpt-4o-mini-search-preview',
+      web_search_options: { search_context_size: 'medium' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are an influencer-marketing strategist for an INDIAN brand platform. Search the web for what is trending RIGHT NOW on Instagram reels for the brand's niche in India — hot hashtags, trending audio, seasonal/cultural moments (festivals, cricket, weather), and content formats — and design ${max} distinct campaign concepts the brand could run this month.
+Rules:
+- Ground every concept in a REAL, current trend you found via search — name it and say why it's hot now. Prefer emerging/growing trends over saturated ones.
+- Concepts must be practical for creator marketing in India (barter drops, UGC, paid reels, ambassador programs).
+- Keep it India-relevant: Indian festivals, cities, audience.
+- For each concept include a "creator_query": a short plain-English search string (niche + audience + city words) that a creator-database search would use to find the right influencers — e.g. "skincare micro influencer mumbai women".
+Respond with ONLY a JSON object, no prose and no markdown fences:
+{"campaigns":[{"title":"...","angle":"one line","trend":{"name":"#Tag or audio/topic","type":"hashtag|audio|topic|format","why_now":"..."},"format":"Reel series|GRWM|Talking-head|...","campaign_type":"barter|paid|UGC|ambassador","hashtags":["#a","#b"],"deliverables":"what each creator posts","creator_query":"niche audience city words"}]}
+At most ${max} campaigns.`,
+        },
+        { role: 'user', content: brief },
+      ],
+    });
+    const content = res.choices[0]?.message?.content ?? '';
+    return this.parseCampaignConcepts(content, max);
+  }
+
+  /** Pull the campaign array out of an LLM reply (clean JSON, else the first
+   *  {...} block containing "campaigns"), normalising each concept's shape. */
+  private parseCampaignConcepts(content: string, max: number): BrandCampaignConcept[] {
+    const asStr = (v: unknown, fallback = ''): string =>
+      typeof v === 'string' ? v.trim() : fallback;
+    const asArr = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').map((s) => s.trim()).filter(Boolean) : [];
+    const normalise = (c: Record<string, unknown>): BrandCampaignConcept | null => {
+      const title = asStr(c.title);
+      if (!title) return null;
+      const t = (c.trend && typeof c.trend === 'object' ? c.trend : {}) as Record<string, unknown>;
+      return {
+        title,
+        angle: asStr(c.angle),
+        trend: { name: asStr(t.name), type: asStr(t.type, 'topic'), why_now: asStr(t.why_now) },
+        format: asStr(c.format),
+        campaign_type: asStr(c.campaign_type),
+        hashtags: asArr(c.hashtags),
+        deliverables: asStr(c.deliverables),
+        creator_query: asStr(c.creator_query),
+      };
+    };
+    const fromParsed = (parsed: unknown): BrandCampaignConcept[] | null => {
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object' && Array.isArray((parsed as { campaigns?: unknown }).campaigns)
+          ? (parsed as { campaigns: unknown[] }).campaigns
+          : null;
+      if (!arr) return null;
+      const out = arr
+        .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+        .map(normalise)
+        .filter((c): c is BrandCampaignConcept => c !== null);
+      return out.length ? out.slice(0, max) : null;
+    };
+
+    // 1. Whole content is JSON.
+    try {
+      const whole = fromParsed(JSON.parse(content));
+      if (whole) return whole;
+    } catch {
+      /* fall through */
+    }
+    // 2. First {...} block that mentions "campaigns".
+    const objMatch = content.match(/\{[\s\S]*"campaigns"[\s\S]*\}/);
+    if (objMatch) {
+      try {
+        const out = fromParsed(JSON.parse(objMatch[0]));
+        if (out) return out;
+      } catch {
+        /* fall through */
+      }
+    }
+    // 3. First bare [...] array.
+    const arrMatch = content.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      try {
+        const out = fromParsed(JSON.parse(arrMatch[0]));
+        if (out) return out;
+      } catch {
+        /* give up */
+      }
+    }
+    return [];
   }
 
   /** Extract IG handles from an LLM reply — clean JSON first, else @mentions /
