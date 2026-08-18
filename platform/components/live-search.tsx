@@ -1330,7 +1330,11 @@ export function LiveSearch({
         // prompt+tab was viewed (kept in sessionStorage) instead of re-running
         // the live pipeline — which is non-deterministic (IG throttle/validation)
         // and would return fewer/different creators, "losing" what was there.
-        const restored = readResultCache(p, sourceBucket);
+        // EXCEPTION: a direct "@username" lookup must always hit Instagram fresh —
+        // otherwise an earlier (pre-live-lookup) cached list keeps masking the
+        // real account, so we skip the cache for handle lookups.
+        const isHandleLookup = /^@[a-z0-9._]{1,30}$/i.test(p);
+        const restored = isHandleLookup ? null : readResultCache(p, sourceBucket);
         if (restored) { setRun(restored); return; }
         void search({ mode: initialMode, promptOverride: initialPrompt, seedOverride: initialMode === 'db' ? '' : (initialSeed || undefined) });
       }
