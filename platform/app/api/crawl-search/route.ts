@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { tokenize, STATE_CITIES, type LiveProfile } from '@/lib/live-discovery';
+import { tokenize, STATE_CITIES, profilesFromHandles, type LiveProfile } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
 
 export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 // POST /api/crawl-search
 //   { prompt }
@@ -75,6 +76,28 @@ export async function POST(req: NextRequest) {
     results = await searchCreatorsInDb(tokens, 60);
   } catch (err) {
     console.error('[crawl-search] db search failed:', err);
+  }
+
+  // Direct "@username" lookup: the user asked for one SPECIFIC account, so fetch
+  // it live from Instagram right now (cookie scraper → Apify fallback) and put it
+  // at the TOP as a 'live' result — instead of only returning tokenized DB
+  // name-matches (which is why "@advika.singh" was returning 40 "…singh" rows).
+  // The enqueued worker job above still runs to warm related/network accounts.
+  const handleMatch = prompt.match(/^@([a-z0-9._]{1,30})$/i);
+  if (handleMatch) {
+    const handle = handleMatch[1]!.toLowerCase();
+    try {
+      const live = await profilesFromHandles([handle], tokens, { max: 1, budgetMs: 14_000 });
+      const exact = live
+        .filter((p) => p.username)
+        .map((p) => ({ ...p, from_ai: false, from: 'live' as const }));
+      if (exact.length > 0) {
+        const liveNames = new Set(exact.map((p) => p.username.toLowerCase()));
+        results = [...exact, ...results.filter((p) => !liveNames.has(p.username.toLowerCase()))];
+      }
+    } catch (err) {
+      console.error('[crawl-search] direct handle lookup failed:', err);
+    }
   }
 
   return NextResponse.json({ job_id: jobId, prompt, tokens, results });
