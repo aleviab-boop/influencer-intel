@@ -209,11 +209,6 @@ function MarketingNav() {
   );
 }
 
-const FILTER_CHIPS = [
-  'AI creators', 'Micro influencer', 'UGC creators', 'Barter ready', 'Cricket lover',
-  'Podcast', 'Beauty', 'Gym freak', 'Fashion', 'Trading', 'Education', 'Food blogger',
-];
-
 const SUGGESTIONS = [
   'Cricket and sports creators in Visakhapatnam for IPL season',
   'Summer Goa lookbook fashion creators',
@@ -373,19 +368,6 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
           <p className="mt-2.5 text-center text-[13px] text-[#888]">
             To search a particular username, use <span className="font-semibold" style={{ color: ACCENT }}>@username</span>
           </p>
-        </div>
-
-        <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-2xl mx-auto">
-          {FILTER_CHIPS.map((c) => (
-            <button
-              key={c}
-              onClick={() => setValue((v) => (v.trim() ? `${v.trim()} ${c.toLowerCase()}` : c))}
-              className="px-3.5 py-1.5 rounded-full border border-[#dcd6f7] text-[13px] hover:bg-white bg-white/70"
-              style={{ color: ACCENT }}
-            >
-              {c}
-            </button>
-          ))}
         </div>
       </div>
     </section>
