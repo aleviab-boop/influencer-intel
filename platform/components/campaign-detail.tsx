@@ -367,8 +367,8 @@ export function CampaignDetail({ id, backHref }: { id: string; backHref: string 
 
           {recruits.length === 0 && (
             <div className="text-sm text-ink-400 py-10 text-center">
-              No recruits yet. Add influencers from{' '}
-              <Link href="/lander" className="text-ink-900 underline">the home search</Link>.
+              No recruits yet. Find and add creators from the{' '}
+              <Link href="/admin/scraper" className="text-ink-900 underline">agency finder</Link>.
             </div>
           )}
         </>
