@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
   const tier = url.searchParams.get('tier'); // mega/macro/micro/nano
   const verified = url.searchParams.get('verified');
   const sort = ALLOWED_SORT[url.searchParams.get('sort') ?? 'followers'] ?? ALLOWED_SORT.followers;
-  const limit = Math.min(60, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
+  const limit = Math.min(120, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
+  const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
 
   const where: string[] = ['is_active = true'];
   const params: unknown[] = [];
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
      FROM creators
      WHERE ${where.join(' AND ')}
      ORDER BY ${sort}
-     LIMIT ${limit}`,
+     LIMIT ${limit} OFFSET ${offset}`,
     params,
   );
 

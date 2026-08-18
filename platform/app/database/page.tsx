@@ -19,6 +19,7 @@ interface Creator {
   vision_niche: string | null;
 }
 
+const PAGE_SIZE = 120;
 const CATEGORIES = ['Fashion', 'Beauty', 'Lifestyle', 'Fitness', 'Travel', 'Food', 'Music', 'Art', 'Gaming', 'Tech', 'Comedy', 'Education'];
 const TIERS = [
   { v: '', t: 'All tiers' },
@@ -59,6 +60,8 @@ export default function DatabasePage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -66,18 +69,41 @@ export default function DatabasePage() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const load = useCallback(() => {
-    const params = new URLSearchParams({ limit: '60', sort });
+  const buildParams = useCallback((offset: number) => {
+    const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), sort });
     if (debouncedQ.trim()) params.set('q', debouncedQ.trim());
     if (category) params.set('category', category);
     if (tier) params.set('tier', tier);
     if (verified) params.set('verified', '1');
-    setLoading(true);
-    return fetch(`/api/creators?${params.toString()}`)
-      .then((r) => r.json())
-      .then((d) => { setCreators(d.creators ?? []); setTotal(d.total ?? null); })
-      .finally(() => setLoading(false));
+    return params;
   }, [debouncedQ, category, tier, verified, sort]);
+
+  // First page (also re-runs whenever filters/sort change).
+  const load = useCallback(() => {
+    setLoading(true);
+    return fetch(`/api/creators?${buildParams(0).toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const list: Creator[] = d.creators ?? [];
+        setCreators(list);
+        setTotal(d.total ?? null);
+        setHasMore(list.length >= PAGE_SIZE);
+      })
+      .finally(() => setLoading(false));
+  }, [buildParams]);
+
+  // Append the next page.
+  const loadMore = useCallback(() => {
+    setLoadingMore(true);
+    fetch(`/api/creators?${buildParams(creators.length).toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const list: Creator[] = d.creators ?? [];
+        setCreators((prev) => [...prev, ...list]);
+        setHasMore(list.length >= PAGE_SIZE);
+      })
+      .finally(() => setLoadingMore(false));
+  }, [buildParams, creators.length]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -152,7 +178,21 @@ export default function DatabasePage() {
             ))}
           </div>
         )}
-        {!loading && creators.length > 0 && <div className="mt-3 text-[12px] text-ink-400 text-center">Showing {creators.length} creators{total ? ` of ${total.toLocaleString('en-IN')}` : ''}.</div>}
+        {!loading && creators.length > 0 && (
+          <div className="mt-4 flex flex-col items-center gap-3">
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-5 py-2.5 text-sm font-semibold rounded-xl border border-border bg-white hover:bg-[#faf9ff] disabled:opacity-60"
+                style={{ color: ACCENT }}
+              >
+                {loadingMore ? 'Loading…' : 'Load more creators'}
+              </button>
+            )}
+            <div className="text-[12px] text-ink-400 text-center">Showing {creators.length.toLocaleString('en-IN')} creators{total ? ` of ${total.toLocaleString('en-IN')}` : ''}.</div>
+          </div>
+        )}
       </main>
     </div>
   );
