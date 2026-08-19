@@ -75,6 +75,13 @@ const STATUS_COLOR: Record<PipelineStatus, string> = {
   passed: '#9ca3af',
 };
 
+type PipelineSort = 'recent' | 'stage' | 'followers';
+const SORT_LABEL: Record<PipelineSort, string> = {
+  recent: 'Recently saved',
+  stage: 'Funnel stage',
+  followers: 'Followers',
+};
+
 const fmt = (n: number): string =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
 
@@ -188,6 +195,8 @@ function PipelineBoard({ pipeline, brand, category }: { pipeline: PipelineApi; b
   // Selected handles (lowercased) for bulk contact.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  // How the row list is ordered. 'recent' = API order (added_at DESC).
+  const [sortBy, setSortBy] = useState<PipelineSort>('recent');
 
   // Group by stage, in funnel order.
   const byStatus = useMemo(() => {
@@ -196,6 +205,21 @@ function PipelineBoard({ pipeline, brand, category }: { pipeline: PipelineApi; b
     for (const it of items) m.get(it.status)?.push(it);
     return m;
   }, [items]);
+
+  // Row order for the list. The API already returns added_at DESC, so 'recent'
+  // is a no-op passthrough; the others re-sort a shallow copy (stable within a
+  // tie via added_at). Stage order follows the funnel (saved → won → passed).
+  const sortedItems = useMemo(() => {
+    if (sortBy === 'recent') return items;
+    const rank = new Map(PIPELINE_STATUSES.map((s, i) => [s, i] as const));
+    const copy = [...items];
+    if (sortBy === 'stage') {
+      copy.sort((a, b) => (rank.get(a.status) ?? 99) - (rank.get(b.status) ?? 99));
+    } else {
+      copy.sort((a, b) => snapNum(b.snapshot, 'followers') - snapNum(a.snapshot, 'followers'));
+    }
+    return copy;
+  }, [items, sortBy]);
 
   // Drop any selections whose rows have disappeared (removed, etc.).
   useEffect(() => {
@@ -266,6 +290,19 @@ function PipelineBoard({ pipeline, brand, category }: { pipeline: PipelineApi; b
             );
           })}
         </div>
+        <label className="shrink-0 flex items-center gap-1.5 text-[12px] text-ink-500">
+          <span className="hidden sm:inline">Sort</span>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as PipelineSort)}
+            className="text-[12px] font-semibold text-ink-700 border border-border rounded-lg px-2 py-1 bg-white cursor-pointer"
+            title="Order the pipeline"
+          >
+            {(Object.keys(SORT_LABEL) as PipelineSort[]).map((s) => (
+              <option key={s} value={s}>{SORT_LABEL[s]}</option>
+            ))}
+          </select>
+        </label>
         <a
           href={`/api/brand/pipeline/export?brand=${encodeURIComponent(brand)}`}
           className="shrink-0 text-[12px] font-semibold text-ink-500 hover:text-ink-800 border border-border rounded-lg px-2.5 py-1 transition-colors"
@@ -293,7 +330,7 @@ function PipelineBoard({ pipeline, brand, category }: { pipeline: PipelineApi; b
       )}
 
       <div className="space-y-2.5">
-        {items.map((it) => (
+        {sortedItems.map((it) => (
           <PipelineRow
             key={it.id}
             item={it}
