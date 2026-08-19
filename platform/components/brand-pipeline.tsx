@@ -243,27 +243,36 @@ function PipelineBoard({ pipeline, brand, category }: { pipeline: PipelineApi; b
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {PIPELINE_STATUSES.map((st) => {
-          const rows = byStatus.get(st) ?? [];
-          if (rows.length === 0) return null;
-          const allIn = rows.every((r) => selected.has(keyOf(r)));
-          return (
-            <button
-              key={st}
-              onClick={() => toggleStage(st)}
-              title={`Select all in ${STATUS_LABEL[st]}`}
-              className="text-[11.5px] px-2.5 py-1 rounded-full font-semibold transition-shadow"
-              style={{
-                background: `${STATUS_COLOR[st]}14`,
-                color: STATUS_COLOR[st],
-                boxShadow: allIn ? `inset 0 0 0 1.5px ${STATUS_COLOR[st]}` : undefined,
-              }}
-            >
-              {STATUS_LABEL[st]} · {rows.length}
-            </button>
-          );
-        })}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap gap-2 flex-1">
+          {PIPELINE_STATUSES.map((st) => {
+            const rows = byStatus.get(st) ?? [];
+            if (rows.length === 0) return null;
+            const allIn = rows.every((r) => selected.has(keyOf(r)));
+            return (
+              <button
+                key={st}
+                onClick={() => toggleStage(st)}
+                title={`Select all in ${STATUS_LABEL[st]}`}
+                className="text-[11.5px] px-2.5 py-1 rounded-full font-semibold transition-shadow"
+                style={{
+                  background: `${STATUS_COLOR[st]}14`,
+                  color: STATUS_COLOR[st],
+                  boxShadow: allIn ? `inset 0 0 0 1.5px ${STATUS_COLOR[st]}` : undefined,
+                }}
+              >
+                {STATUS_LABEL[st]} · {rows.length}
+              </button>
+            );
+          })}
+        </div>
+        <a
+          href={`/api/brand/pipeline/export?brand=${encodeURIComponent(brand)}`}
+          className="shrink-0 text-[12px] font-semibold text-ink-500 hover:text-ink-800 border border-border rounded-lg px-2.5 py-1 transition-colors"
+          title={`Download ${brand} pipeline as CSV`}
+        >
+          Export CSV
+        </a>
       </div>
 
       {/* Bulk action bar */}
