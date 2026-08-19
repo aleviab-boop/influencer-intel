@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { setBrandSession } from '@/lib/brand-session';
 
 interface BrandDna {
   brand: string;
@@ -58,6 +59,18 @@ export default function BrandDnaPage() {
       }
       setDna(d.profile ?? null);
       setSaved(!!d.saved);
+      // Sign the brand in: stash the analysed context so every brand surface
+      // (workspace, campaign ideas, scoped discovery) is personalised to them.
+      if (d.profile) {
+        setBrandSession({
+          brand: brand.trim(),
+          url: url.trim() || null,
+          social: social.trim() || null,
+          mode: 'barter',
+          dna: d.profile,
+          ts: Date.now(),
+        });
+      }
     } catch {
       setError('Could not reach the server. Try again.');
     }
@@ -73,13 +86,13 @@ export default function BrandDnaPage() {
       <div className="max-w-5xl mx-auto px-6 py-10">
         <header className="mb-8">
           <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
-            Brand DNA
+            Brand login
           </span>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">Analyse your brand&apos;s DNA</h1>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">Sign in your brand</h1>
           <p className="mt-2 text-[15px] text-ink-600 max-w-2xl">
-            Give us the brand&apos;s name, website and social handle. We read the actual site and profiles and distil a
-            structured brand profile — positioning, voice, audience and the kind of creators that fit — to drive your
-            campaigns.
+            Give us the brand&apos;s name, website and social handle. We read the actual site and profiles, distil a
+            structured brand DNA — positioning, voice, audience and the creators that fit — and use it to personalise
+            your whole workspace: campaigns, creators and trends, all scoped to your brand.
           </p>
         </header>
 
@@ -170,15 +183,23 @@ export default function BrandDnaPage() {
 
             <div className="border-t border-border bg-[#fafafc] px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
               <p className="text-[12.5px] text-ink-500">
-                {saved ? 'Saved — your campaign ideas will build on this DNA.' : 'This DNA was generated but not saved.'}
+                {saved ? 'Signed in — your workspace is now personalised to this brand.' : 'This DNA was generated but not saved.'}
               </p>
-              <a
-                href={campaignHref}
-                className="px-4 py-2 rounded-xl text-white text-[13px] font-semibold"
-                style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
-              >
-                Generate campaign ideas →
-              </a>
+              <div className="flex items-center gap-2 flex-wrap">
+                <a
+                  href={campaignHref}
+                  className="px-4 py-2 rounded-xl text-[13px] font-semibold border border-border text-ink-700 bg-white"
+                >
+                  Campaign ideas →
+                </a>
+                <a
+                  href="/brand/home"
+                  className="px-4 py-2 rounded-xl text-white text-[13px] font-semibold"
+                  style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                >
+                  Enter brand workspace →
+                </a>
+              </div>
             </div>
           </div>
         )}
