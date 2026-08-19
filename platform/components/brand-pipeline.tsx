@@ -339,6 +339,8 @@ function PipelineRow({
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<OutreachHistoryItem[] | null>(null);
   const [histLoading, setHistLoading] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(item.note ?? '');
+  const [savingNote, setSavingNote] = useState(false);
   const name = snapStr(item.snapshot, 'name') || item.handle;
   const followers = snapNum(item.snapshot, 'followers');
   const engagement = snapNum(item.snapshot, 'engagement');
@@ -356,6 +358,20 @@ function PipelineRow({
       setHistLoading(false);
     }
   }, [item.handle]);
+
+  // Keep the note draft in sync when the row refetches (e.g. after a save).
+  useEffect(() => { setNoteDraft(item.note ?? ''); }, [item.note]);
+  const noteDirty = noteDraft.trim() !== (item.note ?? '').trim();
+
+  async function saveNote() {
+    if (savingNote || !noteDirty) return;
+    setSavingNote(true);
+    try {
+      await pipeline.updateNote(item.handle, noteDraft.trim());
+    } finally {
+      setSavingNote(false);
+    }
+  }
 
   function toggleHistory() {
     const next = !showHistory;
@@ -422,14 +438,15 @@ function PipelineRow({
             {followers ? ` · ${fmt(followers)} followers` : ''}
             {engagement ? ` · ${engagement.toFixed(1)}% ER` : ''}
           </div>
+          {item.note ? <div className="text-[11.5px] text-ink-400 italic truncate">“{item.note}”</div> : null}
         </a>
 
         <button
           onClick={toggleHistory}
           className={`shrink-0 text-[12px] font-semibold rounded-lg px-2 py-1.5 transition-colors ${showHistory ? 'text-ink-700' : 'text-ink-400 hover:text-ink-600'}`}
-          title="Outreach history"
+          title="Notes & outreach history"
         >
-          Log{history && history.length > 0 ? ` · ${history.length}` : ''}
+          Notes{history && history.length > 0 ? ` · ${history.length}` : ''}
         </button>
 
         <button
@@ -465,9 +482,34 @@ function PipelineRow({
         </button>
       </div>
 
-      {/* Outreach history — this account's logged sends to this creator */}
+      {/* Notes + outreach history — this account's private record for the creator */}
       {showHistory && (
-        <div className="border-t border-border px-3 py-2.5">
+        <div className="border-t border-border px-3 py-2.5 space-y-3">
+          {/* Editable note */}
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-400 mb-1">Note</div>
+            <div className="flex items-start gap-2">
+              <textarea
+                value={noteDraft}
+                onChange={(e) => setNoteDraft(e.target.value)}
+                placeholder="Add a private note — e.g. asked for rate card, waiting on manager…"
+                rows={2}
+                className="flex-1 rounded-lg border border-border px-2.5 py-1.5 text-[12.5px] text-ink-800 resize-y focus:outline-none focus:ring-2"
+                style={{ ['--tw-ring-color' as string]: ACCENT_SOFT }}
+              />
+              <button
+                onClick={() => void saveNote()}
+                disabled={!noteDirty || savingNote}
+                className="shrink-0 text-[12px] font-semibold px-2.5 py-1.5 rounded-lg text-white disabled:opacity-40"
+                style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+              >
+                {savingNote ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          {/* Outreach history */}
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">Outreach history</div>
           {histLoading && <p className="text-[12px] text-ink-400">Loading history…</p>}
           {!histLoading && history && history.length === 0 && (
             <p className="text-[12px] text-ink-400">No outreach logged yet — the Contact button records email sends here.</p>
