@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient, type BrandDnaProfile } from '@influencer-intel/shared/llm';
+import { getAgencySession } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -35,14 +36,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Could not analyse the brand. Try again.' }, { status: 502 });
   }
 
+  // Stamp ownership when an agency is signed in, so this brand joins their roster.
+  const account = await getAgencySession();
+
   // Persist the analysis (best-effort — the DNA is still returned if the write
   // fails, e.g. before the migration is applied).
   let saved = false;
   try {
     await getBolticClient().query(
-      `INSERT INTO brand_dna (brand_name, url, social, profile)
-       VALUES ($1, $2, $3, $4)`,
-      [brand, url || null, social || null, JSON.stringify(profile)],
+      `INSERT INTO brand_dna (brand_name, url, social, profile, account_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [brand, url || null, social || null, JSON.stringify(profile), account?.account_id ?? null],
     );
     saved = true;
   } catch (err) {
@@ -62,18 +66,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const brand = req.nextUrl.searchParams.get('brand')?.trim() ?? '';
 
-  // List mode — recent distinct brands for the login picker.
+  // List mode — recent distinct brands for the login picker. When an agency is
+  // signed in, scope to the brands they own; otherwise (anonymous) show recent
+  // brands so the localStorage flow still works.
   if (brand.length < 2) {
+    const account = await getAgencySession();
     try {
       const brands = await getBolticClient().query<{ brand_name: string; category: string | null; created_at: string }>(
         `SELECT brand_name, category, created_at FROM (
            SELECT DISTINCT ON (lower(brand_name))
                   brand_name, profile->>'category' AS category, created_at
              FROM brand_dna
+            WHERE ($1::uuid IS NULL OR account_id = $1)
             ORDER BY lower(brand_name), created_at DESC
          ) t
          ORDER BY created_at DESC
          LIMIT 24`,
+        [account?.account_id ?? null],
       );
       return NextResponse.json({ brands: brands.map((b) => ({ ...b, created_at: String(b.created_at) })) });
     } catch {

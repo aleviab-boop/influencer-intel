@@ -17,6 +17,7 @@ import crypto from 'node:crypto';
 
 const COOKIE_NAME = 'ii_session';
 const CREATOR_COOKIE_NAME = 'ii_creator';
+const AGENCY_COOKIE_NAME = 'ii_agency';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 interface SessionPayload {
@@ -38,7 +39,16 @@ export interface CreatorSession {
   iat: number;
 }
 
-export { CREATOR_COOKIE_NAME };
+export { CREATOR_COOKIE_NAME, AGENCY_COOKIE_NAME };
+
+// An agency's session — an email/password account that OWNS a roster of brands.
+// Separate cookie from brand + creator sessions so identities never collide.
+export interface AgencySession {
+  account_id: string;
+  email: string;
+  name: string | null;
+  iat: number;
+}
 
 function getSecret(): string {
   return process.env.SESSION_SECRET ?? 'change-me-in-prod-influencer-intel-dev';
@@ -318,4 +328,53 @@ export async function setCreatorSession(input: Omit<CreatorSession, 'iat'>): Pro
 export async function signOutCreator(): Promise<void> {
   const c = await cookies();
   c.delete(CREATOR_COOKIE_NAME);
+}
+
+// ---- agency session (email/password account) ----------------------------
+// Same HMAC-SHA256-over-base64url-JSON signing as the brand + creator sessions,
+// just a different payload + cookie name.
+
+function signAgency(payload: AgencySession): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', getSecret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyAgency(token: string | undefined): AgencySession | null {
+  if (!token) return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac('sha256', getSecret()).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    return JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as AgencySession;
+  } catch {
+    return null;
+  }
+}
+
+/** Read the current agency session from cookies. Null if unauthenticated. */
+export async function getAgencySession(): Promise<AgencySession | null> {
+  const c = await cookies();
+  return verifyAgency(c.get(AGENCY_COOKIE_NAME)?.value);
+}
+
+/** Set the agency session cookie (mints a fresh signed token). */
+export async function setAgencySession(input: Omit<AgencySession, 'iat'>): Promise<void> {
+  const token = signAgency({ ...input, iat: Math.floor(Date.now() / 1000) });
+  const c = await cookies();
+  c.set(AGENCY_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: COOKIE_MAX_AGE,
+  });
+}
+
+export async function signOutAgency(): Promise<void> {
+  const c = await cookies();
+  c.delete(AGENCY_COOKIE_NAME);
 }

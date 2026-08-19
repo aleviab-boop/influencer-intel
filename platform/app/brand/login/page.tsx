@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { setBrandSession, type BrandDnaProfile } from '@/lib/brand-session';
-import { useAgencyRoster, addBrandToRoster } from '@/lib/agency-session';
+import { useAgencyRoster, addBrandToRoster, type AgencyBrand } from '@/lib/agency-session';
+import { useAgencyAccount } from '@/lib/use-agency-account';
 
 interface SavedBrand {
   brand_name: string;
@@ -17,6 +18,7 @@ export default function BrandLoginPage() {
   const [adding, setAdding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const roster = useAgencyRoster();
+  const { account, loading: accountLoading, logout } = useAgencyAccount();
   const inRoster = (name: string) => roster.some((b) => b.brand.trim().toLowerCase() === name.trim().toLowerCase());
 
   useEffect(() => {
@@ -29,7 +31,30 @@ export default function BrandLoginPage() {
         setBrands([]);
       }
     })();
-  }, []);
+  }, [account?.id]);
+
+  // Signed in → hydrate the roster from the account's owned brands (full DNA), so
+  // the workspace switcher lists them with everything cached for instant switching.
+  useEffect(() => {
+    if (!account) return;
+    (async () => {
+      try {
+        const r = await fetch('/api/agency/brands', { cache: 'no-store' });
+        const d = await r.json().catch(() => ({}));
+        const owned = Array.isArray(d.brands) ? (d.brands as AgencyBrand[]) : [];
+        for (const b of owned) {
+          if (b.dna) addBrandToRoster({ brand: b.brand, category: b.category ?? null, dna: b.dna, ts: Date.now() });
+        }
+      } catch {
+        /* ignore — cards still work from the list endpoint */
+      }
+    })();
+  }, [account?.id]);
+
+  async function handleLogout() {
+    await logout();
+    window.location.reload();
+  }
 
   // Restore a brand's saved DNA into the session and open their workspace.
   async function signIn(name: string) {
@@ -80,6 +105,24 @@ export default function BrandLoginPage() {
   return (
     <div className="min-h-screen bg-[#fafafc] font-sans">
       <div className="max-w-4xl mx-auto px-6 py-12">
+        {/* Agency account strip */}
+        <div className="mb-6 flex justify-end">
+          {accountLoading ? null : account ? (
+            <div className="flex items-center gap-3 text-[13px]">
+              <span className="text-ink-500">
+                Signed in as <span className="font-semibold text-ink-800">{account.name || account.email}</span>
+              </span>
+              <button onClick={() => void handleLogout()} className="font-semibold text-ink-400 hover:text-ink-600 underline">
+                Log out
+              </button>
+            </div>
+          ) : (
+            <a href="/agency/login" className="text-[13px] font-semibold" style={{ color: ACCENT }}>
+              Sign in to your agency account →
+            </a>
+          )}
+        </div>
+
         <header className="mb-8 text-center">
           <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
             Agency login
