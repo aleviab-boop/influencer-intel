@@ -15,7 +15,7 @@ import { getBolticClient } from '@influencer-intel/shared/db';
 import type { BrandDnaProfile } from '@influencer-intel/shared/llm';
 import { tokenize } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
-import type { PulseBrandSection, PulseTrend, PulseCreator } from '@/lib/email';
+import type { PulseBrandSection, PulseTrend, PulseCreator, PulsePipeline } from '@/lib/email';
 
 /** One brand owned by an agency account — the unit a pulse section is built for. */
 export interface PulseTarget {
@@ -108,20 +108,52 @@ async function loadNicheCreators(dna: BrandDnaProfile, limit = 4): Promise<Pulse
   }
 }
 
-/** Build the pulse section for one brand (trends + creators + a marketing tip). */
-export async function buildBrandSection(brandName: string, dna: BrandDnaProfile): Promise<PulseBrandSection> {
+// The agency's own funnel for this brand, as stage counts — a personal nudge
+// ("3 awaiting reply") alongside the discovery content. Best-effort: a missing
+// table / empty funnel yields null and the section falls back to discovery only.
+async function loadPipelineStats(accountId: string, brandName: string): Promise<PulsePipeline | null> {
+  try {
+    const rows = await getBolticClient().query<{ status: string; n: number }>(
+      `SELECT status, count(*)::int AS n
+         FROM brand_pipeline
+        WHERE account_id = $1 AND lower(brand_name) = lower($2)
+        GROUP BY status`,
+      [accountId, brandName],
+    );
+    if (rows.length === 0) return null;
+    const by = (s: string) => Number(rows.find((r) => r.status === s)?.n ?? 0);
+    const saved = by('saved'), contacted = by('contacted'), replied = by('replied');
+    const negotiating = by('negotiating'), won = by('won');
+    const pending = saved + contacted + replied + negotiating;
+    return { saved, contacted, replied, negotiating, won, pending };
+  } catch {
+    return null;
+  }
+}
+
+/** Build the pulse section for one brand (pipeline + trends + creators + a tip). */
+export async function buildBrandSection(accountId: string, brandName: string, dna: BrandDnaProfile): Promise<PulseBrandSection> {
   const category = dna.category || '';
-  const [trends, creators] = await Promise.all([loadNicheTrends(category), loadNicheCreators(dna)]);
+  const [trends, creators, pipeline] = await Promise.all([
+    loadNicheTrends(category),
+    loadNicheCreators(dna),
+    loadPipelineStats(accountId, brandName),
+  ]);
   return {
     brand_name: brandName,
     category,
     trends,
     creators,
+    pipeline,
     top_opportunity: dna.opportunities?.[0] ?? null,
   };
 }
 
-/** True when a section is worth emailing (has at least a trend or a creator). */
+/**
+ * True when a section is worth emailing: fresh discovery content (a trend or a
+ * creator) OR a pending pipeline the agency should act on. A funnel that's all
+ * won/passed (nothing pending) doesn't, on its own, trigger a mail.
+ */
 export function sectionHasContent(s: PulseBrandSection): boolean {
-  return s.trends.length > 0 || s.creators.length > 0;
+  return s.trends.length > 0 || s.creators.length > 0 || (s.pipeline?.pending ?? 0) > 0;
 }

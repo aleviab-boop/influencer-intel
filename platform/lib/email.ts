@@ -453,11 +453,22 @@ export interface PulseCreator {
   followers: number;
   engagement: number | null; // ER %, null if unknown
 }
+// The agency's OWN funnel for this brand — a personal, actionable nudge
+// (e.g. "3 awaiting reply") that complements the discovery content below.
+export interface PulsePipeline {
+  saved: number;       // not yet contacted
+  contacted: number;   // reached out, awaiting reply
+  replied: number;     // they replied — act now
+  negotiating: number;
+  won: number;
+  pending: number;     // saved+contacted+replied+negotiating — the "worth-emailing" signal
+}
 export interface PulseBrandSection {
   brand_name: string;
   category: string;
   trends: PulseTrend[];
   creators: PulseCreator[];
+  pipeline?: PulsePipeline | null;
   top_opportunity?: string | null;
 }
 export interface BrandPulse {
@@ -470,7 +481,22 @@ export interface BrandPulse {
 const fmtFollowers = (n: number): string =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n || 0);
 
+// "5 saved · 3 awaiting reply · 1 negotiating" — non-zero stages only.
+function pipelineWords(p: PulsePipeline): string {
+  const parts: string[] = [];
+  if (p.saved) parts.push(`${p.saved} saved`);
+  if (p.contacted) parts.push(`${p.contacted} awaiting reply`);
+  if (p.replied) parts.push(`${p.replied} replied`);
+  if (p.negotiating) parts.push(`${p.negotiating} negotiating`);
+  if (p.won) parts.push(`${p.won} won`);
+  return parts.join(' &middot; ');
+}
+
 function pulseSectionHtml(s: PulseBrandSection): string {
+  const pipe = s.pipeline && s.pipeline.pending > 0
+    ? `<div style="margin:0 0 12px;padding:10px 12px;background:#f5f3ff;border-radius:9px;font-size:13px;color:#4c1d95;line-height:1.45;"><strong>Your pipeline:</strong> ${pipelineWords(s.pipeline)}</div>`
+    : '';
+
   const trendRows = s.trends.length
     ? `<div style="font-size:12px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:0.4px;margin:0 0 6px;">Trending in ${escapeHtml(s.category || 'your niche')}</div>` +
       s.trends.map((t) =>
@@ -496,7 +522,7 @@ function pulseSectionHtml(s: PulseBrandSection): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
     <tr><td style="padding:16px 18px;border:1px solid #ececf1;border-radius:12px;">
       <div style="font-size:16px;font-weight:700;color:#111827;margin:0 0 10px;">${escapeHtml(s.brand_name)}</div>
-      ${trendRows}${creatorRows}${opp}
+      ${pipe}${trendRows}${creatorRows}${opp}
     </td></tr></table>`;
 }
 

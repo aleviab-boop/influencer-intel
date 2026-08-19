@@ -37,7 +37,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     for (const t of targets) {
       const g = byAccount.get(t.account_id) ?? { email: t.email, account_name: t.account_name, sections: [] };
       if (g.sections.length < MAX_BRANDS_PER_EMAIL) {
-        const section = await buildBrandSection(t.brand_name, t.dna);
+        const section = await buildBrandSection(t.account_id, t.brand_name, t.dna);
         if (sectionHasContent(section)) g.sections.push(section);
       }
       byAccount.set(t.account_id, g);
