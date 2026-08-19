@@ -38,6 +38,7 @@ export default function BrandCampaignsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const [trendsUsed, setTrendsUsed] = useState(0);
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
@@ -69,6 +70,7 @@ export default function BrandCampaignsPage() {
         return;
       }
       setCampaigns(Array.isArray(d.campaigns) ? d.campaigns : []);
+      setTrendsUsed(typeof d.trends_used === 'number' ? d.trends_used : 0);
     } catch {
       setError('Could not reach the server. Try again.');
     }
@@ -143,6 +145,11 @@ export default function BrandCampaignsPage() {
           <div className="mt-8 space-y-5">
             <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-400">
               {campaigns.length} campaign {campaigns.length === 1 ? 'idea' : 'ideas'}
+              {trendsUsed > 0 && (
+                <span className="ml-2 normal-case tracking-normal font-medium" style={{ color: ACCENT }}>
+                  · grounded in {trendsUsed} trend{trendsUsed === 1 ? '' : 's'} measured from your niche
+                </span>
+              )}
             </h2>
             {campaigns.map((c, i) => (
               <div key={i} className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">

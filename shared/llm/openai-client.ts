@@ -25,6 +25,10 @@ export interface BrandCampaignInput {
   cities?: string[];          // target cities
   budget?: string | null;     // 'low' | 'mid' | 'high' or free text
   goals?: string | null;      // free text, e.g. "festive sales push"
+  // First-party trends measured from our OWN crawl data (trend_signals), passed
+  // in by the caller. When present the model anchors to THESE (with the live web
+  // search adding freshness) instead of guessing trends purely from the web.
+  measuredTrends?: string[];
 }
 
 export interface BrandCampaignConcept {
@@ -432,6 +436,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
    */
   async suggestBrandCampaigns(input: BrandCampaignInput, max = 4): Promise<BrandCampaignConcept[]> {
     const cities = (input.cities ?? []).filter(Boolean).slice(0, 8);
+    const measured = (input.measuredTrends ?? []).filter(Boolean).slice(0, 15);
     const brief = [
       `Brand: ${input.brand}`,
       `Category / niche: ${input.category}`,
@@ -439,6 +444,9 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
       cities.length ? `Target cities: ${cities.join(', ')}` : '',
       input.budget ? `Budget: ${input.budget}` : '',
       input.goals ? `Goals: ${input.goals}` : '',
+      measured.length
+        ? `Trends we measured from real creator activity in this niche (prefer these — they are first-party and current):\n- ${measured.join('\n- ')}`
+        : '',
     ]
       .filter(Boolean)
       .join('\n');
@@ -451,7 +459,8 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
           role: 'system',
           content: `You are an influencer-marketing strategist for an INDIAN brand platform. Search the web for what is trending RIGHT NOW on Instagram reels for the brand's niche in India — hot hashtags, trending audio, seasonal/cultural moments (festivals, cricket, weather), and content formats — and design ${max} distinct campaign concepts the brand could run this month.
 Rules:
-- Ground every concept in a REAL, current trend you found via search — name it and say why it's hot now. Prefer emerging/growing trends over saturated ones.
+- Ground every concept in a REAL, current trend — name it and say why it's hot now. Prefer emerging/growing trends over saturated ones.
+- If the brief lists "Trends we measured from real creator activity", treat those as the strongest signal and build most concepts around them; use web search to confirm why each is hot and to fill any gaps.
 - Concepts must be practical for creator marketing in India (barter drops, UGC, paid reels, ambassador programs).
 - Keep it India-relevant: Indian festivals, cities, audience.
 - For each concept include a "creator_query": a short plain-English search string (niche + audience + city words) that a creator-database search would use to find the right influencers — e.g. "skincare micro influencer mumbai women".

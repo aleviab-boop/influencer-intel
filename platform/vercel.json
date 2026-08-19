@@ -17,6 +17,10 @@
       "schedule": "30 3 * * *"
     },
     {
+      "path": "/api/cron/trends-refresh",
+      "schedule": "0 2 * * *"
+    },
+    {
       "path": "/api/cron/brand-digest",
       "schedule": "30 3 * * 1"
     }
