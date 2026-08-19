@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { LiveSearch } from '@/components/live-search';
 import { BrandSwitcher } from '@/components/brand-switcher';
+import { BrandPipelinePanel, SaveCreatorButton } from '@/components/brand-pipeline';
 import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandMode } from '@/lib/brand-session';
+import { useBrandPipeline } from '@/lib/use-brand-pipeline';
 import { addBrandToRoster } from '@/lib/agency-session';
 
 interface Creator {
@@ -58,6 +60,10 @@ export default function BrandHomePage() {
   const dna = session?.dna ?? null;
   const category = dna?.category || '';
   const mode = session?.mode ?? 'barter';
+
+  // One pipeline hook for the whole page — shared by the "+ Save" buttons on
+  // creator cards and the funnel panel below, so they always stay in sync.
+  const pipeline = useBrandPipeline(session?.brand ?? null);
 
   // Keep the active brand in the agency roster so the switcher dropdown always
   // lists every brand they've opened (with its cached DNA for instant switching).
@@ -302,28 +308,33 @@ export default function BrandHomePage() {
                     {c.creators?.length ? (
                       <div className="grid sm:grid-cols-2 gap-2">
                         {c.creators.map((cr) => (
-                          <a
+                          <div
                             key={cr.username}
-                            href={`https://instagram.com/${cr.username}`}
-                            target="_blank"
-                            rel="noreferrer"
                             className="flex items-center gap-3 rounded-xl bg-white border border-border px-3 py-2 hover:border-[#c9bdfb] transition-colors"
                           >
-                            <div className="w-9 h-9 rounded-full bg-ink-100 grid place-items-center text-[13px] font-semibold text-ink-500 overflow-hidden shrink-0">
-                              {cr.profile_pic_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={cr.profile_pic_url} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                cr.username.slice(0, 1).toUpperCase()
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-[13.5px] font-semibold text-ink-900 truncate">@{cr.username}</div>
-                              <div className="text-[11.5px] text-ink-500">
-                                {fmt(cr.followers)} followers{cr.engagement ? ` · ${cr.engagement.toFixed(1)}% ER` : ''}
+                            <a
+                              href={`https://instagram.com/${cr.username}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-3 min-w-0 flex-1"
+                            >
+                              <div className="w-9 h-9 rounded-full bg-ink-100 grid place-items-center text-[13px] font-semibold text-ink-500 overflow-hidden shrink-0">
+                                {cr.profile_pic_url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={cr.profile_pic_url} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  cr.username.slice(0, 1).toUpperCase()
+                                )}
                               </div>
-                            </div>
-                          </a>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[13.5px] font-semibold text-ink-900 truncate">@{cr.username}</div>
+                                <div className="text-[11.5px] text-ink-500">
+                                  {fmt(cr.followers)} followers{cr.engagement ? ` · ${cr.engagement.toFixed(1)}% ER` : ''}
+                                </div>
+                              </div>
+                            </a>
+                            <SaveCreatorButton pipeline={pipeline} creator={cr} compact />
+                          </div>
                         ))}
                       </div>
                     ) : (
@@ -337,6 +348,17 @@ export default function BrandHomePage() {
           {campaigns && campaigns.length === 0 && !campaignsLoading && !error && (
             <p className="text-[14px] text-ink-500">No campaigns came back. Try refreshing.</p>
           )}
+        </section>
+
+        {/* Your pipeline — the agency-owned creator funnel for this brand */}
+        <section className="mb-10">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-400">
+              {session.brand} pipeline
+              {pipeline.items.length > 0 && <span className="normal-case tracking-normal text-ink-400"> · {pipeline.items.length} saved</span>}
+            </h2>
+          </div>
+          <BrandPipelinePanel pipeline={pipeline} brand={session.brand} />
         </section>
 
         {/* Scoped creator discovery — the prompt bar remembers the brand's niche */}
