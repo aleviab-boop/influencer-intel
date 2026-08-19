@@ -434,6 +434,86 @@ export async function sendBrandDigest(d: BrandDigest): Promise<boolean> {
   }, { kind: 'digest', brand_id: d.brand_id });
 }
 
+// ---- weekly brand pulse (niche discovery digest) -------------------------
+// A retention-driving roll-up for a signed-in AGENCY account: for each brand in
+// their roster, the freshest trends in that brand's niche + new creators worth
+// reaching. Distinct from sendBrandDigest (which is a campaign-OPERATIONS feed
+// for the legacy brands table) — this is a "here's what's new for your brands,
+// come back in" discovery email built from Brand DNA + trend_signals + the
+// creator DB. Recipient is the agency account email; grouped one mail per account.
+
+export interface PulseTrend {
+  display_name: string;
+  phase: string;
+  growth_label: string; // e.g. "+42% wk-on-wk"
+}
+export interface PulseCreator {
+  handle: string;
+  name: string;
+  followers: number;
+  engagement: number | null; // ER %, null if unknown
+}
+export interface PulseBrandSection {
+  brand_name: string;
+  category: string;
+  trends: PulseTrend[];
+  creators: PulseCreator[];
+  top_opportunity?: string | null;
+}
+export interface BrandPulse {
+  to: string;
+  account_id: string | null;
+  account_name: string;
+  brands: PulseBrandSection[]; // already trimmed by the caller; only non-empty ones
+}
+
+const fmtFollowers = (n: number): string =>
+  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n || 0);
+
+function pulseSectionHtml(s: PulseBrandSection): string {
+  const trendRows = s.trends.length
+    ? `<div style="font-size:12px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:0.4px;margin:0 0 6px;">Trending in ${escapeHtml(s.category || 'your niche')}</div>` +
+      s.trends.map((t) =>
+        `<div style="font-size:14px;color:#111827;margin:0 0 4px;">${escapeHtml(t.display_name)}
+          <span style="color:#9ca3af;font-size:12px;"> &middot; ${escapeHtml(t.phase)}${t.growth_label ? ` &middot; ${escapeHtml(t.growth_label)}` : ''}</span>
+        </div>`,
+      ).join('')
+    : '';
+
+  const creatorRows = s.creators.length
+    ? `<div style="font-size:12px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:0.4px;margin:14px 0 6px;">Fresh creators to reach</div>` +
+      s.creators.map((c) =>
+        `<div style="font-size:14px;color:#111827;margin:0 0 4px;">@${escapeHtml(c.handle)}
+          <span style="color:#9ca3af;font-size:12px;"> &middot; ${fmtFollowers(c.followers)} followers${c.engagement ? ` &middot; ${c.engagement.toFixed(1)}% ER` : ''}</span>
+        </div>`,
+      ).join('')
+    : '';
+
+  const opp = s.top_opportunity
+    ? `<div style="margin-top:14px;padding:11px 13px;background:#faf5ff;border-radius:9px;color:#4c1d95;font-size:13px;line-height:1.45;"><strong>Try this:</strong> ${escapeHtml(s.top_opportunity)}</div>`
+    : '';
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+    <tr><td style="padding:16px 18px;border:1px solid #ececf1;border-radius:12px;">
+      <div style="font-size:16px;font-weight:700;color:#111827;margin:0 0 10px;">${escapeHtml(s.brand_name)}</div>
+      ${trendRows}${creatorRows}${opp}
+    </td></tr></table>`;
+}
+
+export async function sendBrandPulse(d: BrandPulse): Promise<boolean> {
+  if (!emailEnabled() || !d.to || d.brands.length === 0) return false;
+  const href = `${appBaseUrl()}/brand/login`;
+  const brandWord = d.brands.length === 1 ? d.brands[0]!.brand_name : `${d.brands.length} brands`;
+  const body = `<p style="margin:0 0 14px;">Hi ${escapeHtml(d.account_name || 'there')},</p>
+    <p style="margin:0 0 16px;">Here\u2019s this week\u2019s pulse for ${escapeHtml(brandWord)} \u2014 the freshest trends in each niche and new creators worth reaching out to.</p>
+    ${d.brands.map(pulseSectionHtml).join('')}`;
+  return sendEmail({
+    to: d.to,
+    subject: d.brands.length === 1 ? `This week for ${d.brands[0]!.brand_name}` : `Your weekly brand pulse — ${d.brands.length} brands`,
+    html: shell('Your weekly brand pulse', body, 'Open your workspace', href, BRAND_FOOTER),
+  }, { kind: 'digest', brand_id: null });
+}
+
 // A short, single-line preview of a message body for the email teaser.
 function messagePreview(body: string, max = 140): string {
   const one = body.replace(/\s+/g, ' ').trim();
