@@ -16,6 +16,10 @@
 import { useEffect, useState } from 'react';
 import type { BrandDnaProfile } from '@influencer-intel/shared/llm';
 
+// Re-exported so client pages can type the DNA without importing the shared LLM
+// module (which pulls in server-only deps) directly.
+export type { BrandDnaProfile };
+
 const KEY = 'ii_brand_session';
 const EVENT = 'ii-brand-session';
 

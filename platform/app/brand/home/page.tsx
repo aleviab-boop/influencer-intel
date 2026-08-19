@@ -174,7 +174,7 @@ export default function BrandHomePage() {
               ))}
             </div>
             <button
-              onClick={() => { clearBrandSession(); window.location.href = '/brand-dna'; }}
+              onClick={() => { clearBrandSession(); window.location.href = '/brand/login'; }}
               className="text-[12.5px] text-ink-400 hover:text-ink-600 underline"
             >
               Switch brand

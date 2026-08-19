@@ -52,16 +52,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({ profile, saved });
 }
 
-// GET /api/brand/dna?brand=NAME
-//   → { profile: BrandDnaProfile | null, created_at: string | null }
+// GET /api/brand/dna
+//   ?brand=NAME → { profile: BrandDnaProfile | null, created_at }
+//   (no brand)  → { brands: [{ brand_name, category, created_at }] }  (recent, distinct)
 //
-// Latest saved DNA for a brand (case-insensitive). Used to prefill/reuse an
-// earlier analysis. Returns null when nothing is on file.
+// With a brand: the latest saved DNA for it (case-insensitive) — used to sign a
+// returning brand back in / reuse an earlier analysis. With no brand: the recent
+// distinct brands we've analysed, so the login page can list them to pick from.
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const brand = req.nextUrl.searchParams.get('brand')?.trim() ?? '';
+
+  // List mode — recent distinct brands for the login picker.
   if (brand.length < 2) {
-    return NextResponse.json({ profile: null, created_at: null });
+    try {
+      const brands = await getBolticClient().query<{ brand_name: string; category: string | null; created_at: string }>(
+        `SELECT brand_name, category, created_at FROM (
+           SELECT DISTINCT ON (lower(brand_name))
+                  brand_name, profile->>'category' AS category, created_at
+             FROM brand_dna
+            ORDER BY lower(brand_name), created_at DESC
+         ) t
+         ORDER BY created_at DESC
+         LIMIT 24`,
+      );
+      return NextResponse.json({ brands: brands.map((b) => ({ ...b, created_at: String(b.created_at) })) });
+    } catch {
+      return NextResponse.json({ brands: [] });
+    }
   }
+
   try {
     const rows = await getBolticClient().query<{ profile: BrandDnaProfile; created_at: string }>(
       `SELECT profile, created_at::text AS created_at

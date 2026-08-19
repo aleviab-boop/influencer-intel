@@ -94,6 +94,9 @@ export default function BrandDnaPage() {
             structured brand DNA — positioning, voice, audience and the creators that fit — and use it to personalise
             your whole workspace: campaigns, creators and trends, all scoped to your brand.
           </p>
+          <a href="/brand/login" className="inline-block mt-3 text-[13px] font-semibold" style={{ color: ACCENT }}>
+            Already set up a brand? Sign in →
+          </a>
         </header>
 
         {/* Input form */}
