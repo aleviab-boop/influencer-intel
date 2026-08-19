@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { setBrandSession } from '@/lib/brand-session';
+import { addBrandToRoster } from '@/lib/agency-session';
 
 interface BrandDna {
   brand: string;
@@ -67,6 +68,15 @@ export default function BrandDnaPage() {
           url: url.trim() || null,
           social: social.trim() || null,
           mode: 'barter',
+          dna: d.profile,
+          ts: Date.now(),
+        });
+        // Add to the agency's roster so it appears in the workspace switcher.
+        addBrandToRoster({
+          brand: brand.trim(),
+          url: url.trim() || null,
+          social: social.trim() || null,
+          category: d.profile.category ?? null,
           dna: d.profile,
           ts: Date.now(),
         });

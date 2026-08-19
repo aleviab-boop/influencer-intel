@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { LiveSearch } from '@/components/live-search';
+import { BrandSwitcher } from '@/components/brand-switcher';
 import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandMode } from '@/lib/brand-session';
+import { addBrandToRoster } from '@/lib/agency-session';
 
 interface Creator {
   username: string;
@@ -56,6 +58,20 @@ export default function BrandHomePage() {
   const dna = session?.dna ?? null;
   const category = dna?.category || '';
   const mode = session?.mode ?? 'barter';
+
+  // Keep the active brand in the agency roster so the switcher dropdown always
+  // lists every brand they've opened (with its cached DNA for instant switching).
+  useEffect(() => {
+    if (!session?.brand) return;
+    addBrandToRoster({
+      brand: session.brand,
+      url: session.url ?? null,
+      social: session.social ?? null,
+      category: dna?.category ?? null,
+      dna,
+      ts: session.ts,
+    });
+  }, [session?.brand, session?.ts, session?.url, session?.social, dna]);
 
   const loadCampaigns = useCallback(async () => {
     if (!session?.brand || !category) return;
@@ -150,9 +166,13 @@ export default function BrandHomePage() {
         {/* Brand header */}
         <header className="mb-8 flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
-              Your brand workspace
-            </span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                Agency workspace
+              </span>
+              {/* Pick which of the agency's brands to work on */}
+              <BrandSwitcher activeBrand={session.brand} />
+            </div>
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">{session.brand}</h1>
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
               {category && <span className="text-[13px] text-ink-600 capitalize">{category}</span>}
