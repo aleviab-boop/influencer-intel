@@ -369,7 +369,7 @@ export default function BrandHomePage() {
           <p className="text-[13px] text-ink-500 mb-4">
             Pre-scoped to your niche — search within {category || 'your space'} and we&apos;ll rank creators that fit.
           </p>
-          <LiveSearch initialPrompt={scope} initialMode="db" initialBucket="instagram" />
+          <LiveSearch initialPrompt={scope} initialMode="db" initialBucket="instagram" pipeline={pipeline} />
         </section>
       </div>
     </div>

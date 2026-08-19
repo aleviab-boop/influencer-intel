@@ -4,6 +4,8 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildSuggestions } from '@/lib/suggestions';
 import { brandSafety } from '@/lib/creator-metrics';
+import { SaveCreatorButton } from '@/components/brand-pipeline';
+import type { useBrandPipeline } from '@/lib/use-brand-pipeline';
 
 const ACCENT = '#6C4DF6';
 const ACCENT_SOFT = '#F4F2FF';
@@ -577,6 +579,7 @@ export function LiveSearch({
   initialMode = 'crawl',
   initialBucket = 'instagram',
   onSearchPrompt,
+  pipeline,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
@@ -589,6 +592,12 @@ export function LiveSearch({
   // searching in-place — so browser back/forward navigates between searches and
   // returning restores the last one. Unset (Scraper) → search in place.
   onSearchPrompt?: (prompt: string) => void;
+  // When a brand context is signed in (the Brand home), the page lifts ONE
+  // useBrandPipeline instance and passes it down so a discovery result can be
+  // saved straight into that brand's agency-owned pipeline — same source of
+  // truth as the pipeline board, no second save concept. Unset (Lander /
+  // Scraper) → the pipeline-save action simply isn't rendered.
+  pipeline?: ReturnType<typeof useBrandPipeline>;
 }) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [seedText, setSeedText] = useState(initialSeed);
@@ -2111,6 +2120,22 @@ export function LiveSearch({
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          {pipeline ? (
+                            <SaveCreatorButton
+                              pipeline={pipeline}
+                              creator={{
+                                username: p.username,
+                                full_name: p.full_name,
+                                followers: liveStats[p.username]?.followers ?? p.followers,
+                                engagement: liveStats[p.username]?.engagement ?? p.engagement,
+                                profile_pic_url: p.profile_pic_url,
+                                email: p.email,
+                                phone: p.phone,
+                                creator_id: p.creator_id ?? null,
+                              }}
+                              compact
+                            />
+                          ) : null}
                           <button
                             onClick={() => toggleSaved(p)}
                             title={isSaved(p.username) ? 'Saved — click to remove' : 'Save creator'}
