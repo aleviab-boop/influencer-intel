@@ -358,7 +358,7 @@ export default function BrandHomePage() {
               {pipeline.items.length > 0 && <span className="normal-case tracking-normal text-ink-400"> · {pipeline.items.length} saved</span>}
             </h2>
           </div>
-          <BrandPipelinePanel pipeline={pipeline} brand={session.brand} />
+          <BrandPipelinePanel pipeline={pipeline} brand={session.brand} category={category} />
         </section>
 
         {/* Scoped creator discovery — the prompt bar remembers the brand's niche */}
