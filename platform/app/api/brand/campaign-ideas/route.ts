@@ -1,11 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { getOpenAIClient, type BrandCampaignConcept } from '@influencer-intel/shared/llm';
+import { getOpenAIClient, type BrandCampaignConcept, type BrandDnaProfile } from '@influencer-intel/shared/llm';
 import { tokenize, type LiveProfile } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+
+// Load the latest saved Brand DNA for this brand (case-insensitive). Lets the
+// campaign step reuse an earlier analysis — filling category/audience gaps and
+// keeping concepts on-brand — even when called directly, not just via the
+// workspace hand-off. Best-effort: null if none saved / table missing.
+async function loadSavedDna(brand: string): Promise<BrandDnaProfile | null> {
+  try {
+    const rows = await getBolticClient().query<{ profile: BrandDnaProfile }>(
+      `SELECT profile FROM brand_dna WHERE lower(brand_name) = lower($1)
+        ORDER BY created_at DESC LIMIT 1`,
+      [brand],
+    );
+    return rows[0]?.profile ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Condense a DNA profile into a compact, promptable brief the campaign model
+// can stay on-brand with.
+function dnaToContext(dna: BrandDnaProfile): string {
+  const line = (label: string, v: string) => (v ? `${label}: ${v}` : '');
+  const list = (label: string, a: string[]) => (a?.length ? `${label}: ${a.slice(0, 6).join(', ')}` : '');
+  return [
+    line('Summary', dna.summary),
+    line('Positioning', dna.positioning),
+    list('Values', dna.values),
+    list('Personality', dna.personality),
+    list('Content pillars', dna.content_pillars),
+    list('Fitting creators', dna.creator_archetypes),
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 
 // Pull the liveliest trends we measured from our OWN crawl data (trend_signals,
 // filled by the ingestion worker) for this brand's niche, so the campaign model
@@ -39,22 +73,29 @@ async function loadMeasuredTrends(category: string): Promise<string[]> {
 }
 
 // POST /api/brand/campaign-ideas
-//   { brand, category, audience?, cities?, budget?, goals? }
-//   → { brand, campaigns: [{ ...concept, creators: LiveProfile[] }], trends_used }
+//   { brand, category?, audience?, cities?, budget?, goals? }
+//   → { brand, campaigns: [{ ...concept, creators }], trends_used, dna_used }
 //
-// Powers the brand "Campaign Ideas" feature. We first pull the trends we MEASURED
-// from our own crawl data (trend_signals) for this niche and hand them to the
-// web-search model as the primary signal — it grounds concepts in those and uses
-// live search to confirm/fill gaps. For each concept we run its `creator_query`
-// against the creator DB to attach a ready shortlist — so a brand goes
-// trend → campaign → creators in one call.
+// Powers the brand "Campaign Ideas" feature. We reuse the brand's saved DNA
+// (category/audience gaps + on-brand context) AND the trends we MEASURED from our
+// own crawl data (trend_signals), handing both to the web-search model — it
+// grounds concepts in those and uses live search to confirm/fill gaps. `category`
+// is optional when a DNA analysis exists for the brand. For each concept we run
+// its `creator_query` against the creator DB to attach a ready shortlist — so a
+// brand goes DNA → trend → campaign → creators in one call.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const brand = typeof body?.brand === 'string' ? body.brand.trim() : '';
-  const category = typeof body?.category === 'string' ? body.category.trim() : '';
-  if (brand.length < 2 || category.length < 2) {
+  if (brand.length < 2) {
+    return NextResponse.json({ error: 'brand is required (min 2 characters)' }, { status: 400 });
+  }
+
+  // Pull any saved Brand DNA so we can fill gaps + keep concepts on-brand.
+  const dna = await loadSavedDna(brand);
+  const category = (typeof body?.category === 'string' && body.category.trim()) || dna?.category || '';
+  if (category.length < 2) {
     return NextResponse.json(
-      { error: 'brand and category are required (min 2 characters each)' },
+      { error: 'category is required (min 2 characters) — or analyse the brand DNA first' },
       { status: 400 },
     );
   }
@@ -66,11 +107,12 @@ export async function POST(req: NextRequest) {
   const input = {
     brand,
     category,
-    audience: typeof body?.audience === 'string' ? body.audience.trim() : null,
+    audience: (typeof body?.audience === 'string' && body.audience.trim()) || dna?.target_audience || null,
     cities,
     budget: typeof body?.budget === 'string' ? body.budget.trim() : null,
     goals: typeof body?.goals === 'string' ? body.goals.trim() : null,
     measuredTrends,
+    brandContext: dna ? dnaToContext(dna) : null,
   };
 
   let concepts: BrandCampaignConcept[] = [];
@@ -97,5 +139,5 @@ export async function POST(req: NextRequest) {
     }),
   );
 
-  return NextResponse.json({ brand, campaigns, trends_used: measuredTrends.length });
+  return NextResponse.json({ brand, campaigns, trends_used: measuredTrends.length, dna_used: !!dna });
 }

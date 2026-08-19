@@ -29,6 +29,10 @@ export interface BrandCampaignInput {
   // in by the caller. When present the model anchors to THESE (with the live web
   // search adding freshness) instead of guessing trends purely from the web.
   measuredTrends?: string[];
+  // Distilled Brand DNA context (positioning, values, voice, content pillars,
+  // fitting creator types) so concepts sound on-brand. Filled server-side from
+  // the saved brand_dna analysis when available.
+  brandContext?: string | null;
 }
 
 export interface BrandCampaignConcept {
@@ -472,6 +476,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
       cities.length ? `Target cities: ${cities.join(', ')}` : '',
       input.budget ? `Budget: ${input.budget}` : '',
       input.goals ? `Goals: ${input.goals}` : '',
+      input.brandContext ? `Brand DNA (keep every concept on-brand with this):\n${input.brandContext}` : '',
       measured.length
         ? `Trends we measured from real creator activity in this niche (prefer these — they are first-party and current):\n- ${measured.join('\n- ')}`
         : '',
