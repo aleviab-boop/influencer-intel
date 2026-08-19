@@ -46,6 +46,34 @@ export interface BrandCampaignConcept {
   creator_query: string;      // plain-English query to shortlist creators
 }
 
+// ── Brand DNA ─────────────────────────────────────────────────────────────
+// Point the web-search model at a brand's website + socials and distil a
+// structured "DNA" profile — who they are, how they sound, who they sell to and
+// what kind of creators fit. This front-loads the campaign flow: DNA → campaign
+// suggestions → creator shortlist → outreach.
+export interface BrandDnaInput {
+  brand: string;              // brand name
+  url?: string | null;        // website URL to analyse
+  social?: string | null;     // Instagram handle or profile URL
+  notes?: string | null;      // any extra context the user typed
+}
+
+export interface BrandDnaProfile {
+  brand: string;              // echoed brand name
+  summary: string;            // 1–2 line "who they are"
+  category: string;           // primary niche, e.g. "ayurvedic skincare"
+  positioning: string;        // premium/value/etc + market stance
+  values: string[];           // core brand values
+  personality: string[];      // tone/voice adjectives
+  target_audience: string;    // who they sell to
+  aesthetic: string;          // visual style / look & feel
+  content_pillars: string[];  // recurring content themes
+  keywords: string[];         // discovery keywords for search
+  creator_archetypes: string[]; // creator types that fit the brand
+  competitors: string[];      // named competitors / peers
+  opportunities: string[];    // concrete ways the brand could market/grow better
+}
+
 // ── Content-quality scoring (vision) ──────────────────────────────────────
 // Score a post's creative on 12 dimensions from the actual image (a photo, or a
 // reel's cover frame). Powers the reach predictor's content-quality multiplier.
@@ -539,6 +567,87 @@ At most ${max} campaigns.`,
       }
     }
     return [];
+  }
+
+  /**
+   * Build a structured Brand DNA profile from a brand's name + website + social.
+   * Uses the web-search model so it reads the ACTUAL site/socials (positioning,
+   * tone, products, audience) rather than hallucinating from the name alone.
+   * Search models reply with prose + citations, so the JSON is parsed leniently.
+   */
+  async analyzeBrandDna(input: BrandDnaInput): Promise<BrandDnaProfile> {
+    const brief = [
+      `Brand name: ${input.brand}`,
+      input.url ? `Website: ${input.url}` : '',
+      input.social ? `Social profile: ${input.social}` : '',
+      input.notes ? `Extra context: ${input.notes}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const res = await this.client.chat.completions.create({
+      model: 'gpt-4o-mini-search-preview',
+      web_search_options: { search_context_size: 'medium' },
+      messages: [
+        {
+          role: 'system',
+          content: `You are a brand strategist for an INDIAN influencer-marketing platform. Search the web for the brand's website and social profiles and distil a concise, factual "Brand DNA" profile that will drive creator-campaign planning. Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best inference from the category.
+Respond with ONLY a JSON object, no prose and no markdown fences:
+{"summary":"1-2 lines on who they are","category":"primary niche","positioning":"premium/value/etc + market stance","values":["..."],"personality":["tone adjectives"],"target_audience":"who they sell to","aesthetic":"visual style","content_pillars":["themes"],"keywords":["discovery keywords"],"creator_archetypes":["creator types that fit"],"competitors":["named peers"],"opportunities":["concrete, specific ways this brand could market or grow better via creators/social"]}
+Keep arrays to 3-7 items, India-relevant where applicable. "opportunities" must be actionable and specific to THIS brand, not generic advice.`,
+        },
+        { role: 'user', content: brief },
+      ],
+    });
+    const content = res.choices[0]?.message?.content ?? '';
+    return this.parseBrandDna(content, input.brand);
+  }
+
+  /** Pull the DNA object out of an LLM reply (clean JSON, else first {...}),
+   *  coercing every field so the caller always gets a fully-shaped profile. */
+  private parseBrandDna(content: string, brand: string): BrandDnaProfile {
+    const asStr = (v: unknown, fallback = ''): string =>
+      typeof v === 'string' ? v.trim() : fallback;
+    const asArr = (v: unknown): string[] =>
+      Array.isArray(v)
+        ? v.filter((x): x is string => typeof x === 'string').map((s) => s.trim()).filter(Boolean).slice(0, 7)
+        : [];
+    const shape = (o: Record<string, unknown>): BrandDnaProfile => ({
+      brand,
+      summary: asStr(o.summary),
+      category: asStr(o.category),
+      positioning: asStr(o.positioning),
+      values: asArr(o.values),
+      personality: asArr(o.personality),
+      target_audience: asStr(o.target_audience),
+      aesthetic: asStr(o.aesthetic),
+      content_pillars: asArr(o.content_pillars),
+      keywords: asArr(o.keywords),
+      creator_archetypes: asArr(o.creator_archetypes),
+      competitors: asArr(o.competitors),
+      opportunities: asArr(o.opportunities),
+    });
+
+    const tryParse = (raw: string): BrandDnaProfile | null => {
+      try {
+        const p = JSON.parse(raw);
+        if (p && typeof p === 'object' && !Array.isArray(p)) return shape(p as Record<string, unknown>);
+      } catch {
+        /* fall through */
+      }
+      return null;
+    };
+
+    // 1. Whole content is JSON. 2. First {...} block.
+    const whole = tryParse(content);
+    if (whole) return whole;
+    const objMatch = content.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+      const out = tryParse(objMatch[0]);
+      if (out) return out;
+    }
+    // Give up gracefully — an empty-but-shaped profile the UI can still render.
+    return shape({});
   }
 
   /** Extract IG handles from an LLM reply — clean JSON first, else @mentions /

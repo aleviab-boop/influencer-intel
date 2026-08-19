@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 
 interface Creator {
@@ -39,6 +39,19 @@ export default function BrandCampaignsPage() {
   const [error, setError] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [trendsUsed, setTrendsUsed] = useState(0);
+
+  // Prefill from the Brand DNA hand-off (/brand-campaigns?brand=&category=&audience=)
+  // so "Generate campaign ideas →" carries the analysed brand straight in.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams(window.location.search);
+    const b = q.get('brand');
+    const c = q.get('category');
+    const a = q.get('audience');
+    if (b) setBrand((v) => v || b);
+    if (c) setCategory((v) => v || c);
+    if (a) setAudience((v) => v || a);
+  }, []);
 
   async function generate(e: React.FormEvent) {
     e.preventDefault();
