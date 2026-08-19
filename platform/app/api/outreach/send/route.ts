@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { sendEmail, emailEnabled } from '@/lib/email';
+import { getAgencySession } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -70,6 +71,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Stamp the sending agency (when signed in) so the pipeline can scope each
+  // creator's outreach history to the account that sent it. Null for the
+  // anonymous discovery flow — those sends just aren't account-attributed.
+  const account = await getAgencySession();
+  const accountId = account?.account_id ?? null;
+
   // Send first (no meta → skips the creator opt-out gate + email_log; this is
   // first-contact outreach, not a subscribed notification). We keep our own
   // audit in outreach_messages instead.
@@ -79,13 +86,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const rows = await db.query<{ id: string }>(
       `INSERT INTO outreach_messages
-         (handle, creator_id, program_id, channel, recipient, subject, body, status, error)
-       VALUES ($1, $2, $3, 'email', $4, $5, $6, $7, $8)
+         (handle, creator_id, program_id, account_id, channel, recipient, subject, body, status, error)
+       VALUES ($1, $2, $3, $4, 'email', $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         handle,
         creatorId,
         programId,
+        accountId,
         recipient,
         subject.slice(0, 300),
         message,

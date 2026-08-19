@@ -43,6 +43,20 @@ const keyOf = (handleOrItem: string | { handle: string }): string =>
   (typeof handleOrItem === 'string' ? handleOrItem : handleOrItem.handle).toLowerCase();
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+interface OutreachHistoryItem {
+  id: string;
+  channel: string;
+  recipient: string | null;
+  subject: string | null;
+  preview: string;
+  status: string;
+  sent_at: string;
+}
+const fmtDate = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+};
+
 const STATUS_LABEL: Record<PipelineStatus, string> = {
   saved: 'Saved',
   contacted: 'Contacted',
@@ -313,10 +327,39 @@ function PipelineRow({
 }) {
   const [busy, setBusy] = useState(false);
   const [contacting, setContacting] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState<OutreachHistoryItem[] | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
   const name = snapStr(item.snapshot, 'name') || item.handle;
   const followers = snapNum(item.snapshot, 'followers');
   const engagement = snapNum(item.snapshot, 'engagement');
   const pic = snapStr(item.snapshot, 'profile_pic_url');
+
+  const loadHistory = useCallback(async () => {
+    setHistLoading(true);
+    try {
+      const r = await fetch(`/api/outreach/history?handle=${encodeURIComponent(item.handle)}`, { cache: 'no-store' });
+      const d = await r.json().catch(() => ({}));
+      setHistory(Array.isArray(d.items) ? d.items : []);
+    } catch {
+      setHistory([]);
+    } finally {
+      setHistLoading(false);
+    }
+  }, [item.handle]);
+
+  function toggleHistory() {
+    const next = !showHistory;
+    setShowHistory(next);
+    if (next && history === null) void loadHistory();
+  }
+
+  // After sending, the log changed — drop the cache so it refetches on next open.
+  function afterContact() {
+    setContacting(false);
+    setHistory(null);
+    if (showHistory) void loadHistory();
+  }
 
   async function change(status: PipelineStatus) {
     if (busy || status === item.status) return;
@@ -339,69 +382,109 @@ function PipelineRow({
 
   return (
     <div
-      className="flex items-center gap-3 rounded-xl bg-white border border-border px-3 py-2.5 transition-colors"
+      className="rounded-xl bg-white border border-border transition-colors"
       style={selected ? { borderColor: ACCENT, background: ACCENT_SOFT } : undefined}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggleSelect}
-        className="shrink-0 w-4 h-4 rounded cursor-pointer accent-[#6C4DF6]"
-        title="Select for bulk outreach"
-      />
-      <div className="w-9 h-9 rounded-full bg-ink-100 grid place-items-center text-[13px] font-semibold text-ink-500 overflow-hidden shrink-0">
-        {pic ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={pic} alt="" className="w-full h-full object-cover" />
-        ) : (
-          item.handle.slice(0, 1).toUpperCase()
-        )}
-      </div>
-      <a
-        href={`https://instagram.com/${item.handle}`}
-        target="_blank"
-        rel="noreferrer"
-        className="min-w-0 flex-1"
-      >
-        <div className="text-[13.5px] font-semibold text-ink-900 truncate">{name}</div>
-        <div className="text-[11.5px] text-ink-500">
-          @{item.handle}
-          {followers ? ` · ${fmt(followers)} followers` : ''}
-          {engagement ? ` · ${engagement.toFixed(1)}% ER` : ''}
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="shrink-0 w-4 h-4 rounded cursor-pointer accent-[#6C4DF6]"
+          title="Select for bulk outreach"
+        />
+        <div className="w-9 h-9 rounded-full bg-ink-100 grid place-items-center text-[13px] font-semibold text-ink-500 overflow-hidden shrink-0">
+          {pic ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pic} alt="" className="w-full h-full object-cover" />
+          ) : (
+            item.handle.slice(0, 1).toUpperCase()
+          )}
         </div>
-      </a>
+        <a
+          href={`https://instagram.com/${item.handle}`}
+          target="_blank"
+          rel="noreferrer"
+          className="min-w-0 flex-1"
+        >
+          <div className="text-[13.5px] font-semibold text-ink-900 truncate">{name}</div>
+          <div className="text-[11.5px] text-ink-500">
+            @{item.handle}
+            {followers ? ` · ${fmt(followers)} followers` : ''}
+            {engagement ? ` · ${engagement.toFixed(1)}% ER` : ''}
+          </div>
+        </a>
 
-      <button
-        onClick={() => setContacting(true)}
-        className="shrink-0 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors"
-        style={{ background: ACCENT_SOFT, color: ACCENT }}
-        title="Draft & send outreach"
-      >
-        Contact
-      </button>
+        <button
+          onClick={toggleHistory}
+          className={`shrink-0 text-[12px] font-semibold rounded-lg px-2 py-1.5 transition-colors ${showHistory ? 'text-ink-700' : 'text-ink-400 hover:text-ink-600'}`}
+          title="Outreach history"
+        >
+          Log{history && history.length > 0 ? ` · ${history.length}` : ''}
+        </button>
 
-      <select
-        value={item.status}
-        onChange={(e) => void change(e.target.value as PipelineStatus)}
-        disabled={busy}
-        className="text-[12px] font-semibold rounded-lg border border-border bg-white px-2 py-1.5 disabled:opacity-50 cursor-pointer"
-        style={{ color: STATUS_COLOR[item.status] }}
-      >
-        {PIPELINE_STATUSES.map((st) => (
-          <option key={st} value={st} style={{ color: '#111' }}>
-            {STATUS_LABEL[st]}
-          </option>
-        ))}
-      </select>
+        <button
+          onClick={() => setContacting(true)}
+          className="shrink-0 text-[12px] font-semibold rounded-lg px-2.5 py-1.5 transition-colors"
+          style={{ background: ACCENT_SOFT, color: ACCENT }}
+          title="Draft & send outreach"
+        >
+          Contact
+        </button>
 
-      <button
-        onClick={() => void drop()}
-        disabled={busy}
-        title="Remove"
-        className="shrink-0 text-ink-300 hover:text-rose-500 text-[16px] leading-none px-1 disabled:opacity-50"
-      >
-        ×
-      </button>
+        <select
+          value={item.status}
+          onChange={(e) => void change(e.target.value as PipelineStatus)}
+          disabled={busy}
+          className="text-[12px] font-semibold rounded-lg border border-border bg-white px-2 py-1.5 disabled:opacity-50 cursor-pointer"
+          style={{ color: STATUS_COLOR[item.status] }}
+        >
+          {PIPELINE_STATUSES.map((st) => (
+            <option key={st} value={st} style={{ color: '#111' }}>
+              {STATUS_LABEL[st]}
+            </option>
+          ))}
+        </select>
+
+        <button
+          onClick={() => void drop()}
+          disabled={busy}
+          title="Remove"
+          className="shrink-0 text-ink-300 hover:text-rose-500 text-[16px] leading-none px-1 disabled:opacity-50"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Outreach history — this account's logged sends to this creator */}
+      {showHistory && (
+        <div className="border-t border-border px-3 py-2.5">
+          {histLoading && <p className="text-[12px] text-ink-400">Loading history…</p>}
+          {!histLoading && history && history.length === 0 && (
+            <p className="text-[12px] text-ink-400">No outreach logged yet — the Contact button records email sends here.</p>
+          )}
+          {!histLoading && history && history.length > 0 && (
+            <ul className="space-y-1.5">
+              {history.map((h) => (
+                <li key={h.id} className="text-[12px] text-ink-600 flex items-start gap-2">
+                  <span
+                    className="shrink-0 mt-0.5 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
+                    style={{ background: h.status === 'sent' ? '#dcfce7' : '#fee2e2', color: h.status === 'sent' ? '#15803d' : '#b91c1c' }}
+                  >
+                    {h.channel}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="text-ink-800 font-medium">{h.subject || '(no subject)'}</span>
+                    {h.recipient ? <span className="text-ink-400"> → {h.recipient}</span> : null}
+                    {h.preview ? <span className="block text-ink-400 truncate">{h.preview}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-ink-400">{fmtDate(h.sent_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {contacting && (
         <ContactModal
@@ -409,7 +492,7 @@ function PipelineRow({
           brand={brand}
           category={category}
           pipeline={pipeline}
-          onClose={() => setContacting(false)}
+          onClose={afterContact}
         />
       )}
     </div>
