@@ -408,6 +408,24 @@ Generate 30-50 candidate Instagram handles.`,
   }
 
   /**
+   * Web-search-grounded completion via the Responses API. OpenAI deprecated the
+   * chat `gpt-4o-mini-search-preview` model (404 model_not_found), so we now run
+   * gpt-4o-mini with the built-in `web_search` tool — same live-browsing power,
+   * current API. Returns the assistant's text; callers parse JSON leniently.
+   */
+  private async webSearch(system: string, user: string): Promise<string> {
+    const res = await this.client.responses.create({
+      model: 'gpt-4o-mini',
+      tools: [{ type: 'web_search_preview' }],
+      input: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    });
+    return res.output_text ?? '';
+  }
+
+  /**
    * Suggest REAL Instagram handles for a plain-English prompt (e.g. "fashion
    * influencer in guwahati"). Instagram blocks keyword search for our session,
    * so we let the model name creators it knows; every handle is validated
@@ -436,13 +454,8 @@ Generate 30-50 candidate Instagram handles.`,
 This is a FESTIVE / occasion campaign brief. Suggest Indian FASHION, ethnic-wear, styling, beauty and lifestyle creators who post festive OUTFIT / look / celebration content for this occasion (saree & ethnic-wear styling, festive GRWM, traditional-wear hauls, celebration lifestyle). Do NOT suggest: accounts that merely contain the festival's name in their handle, event / community / pandal / temple pages, brands or sarees shops, or people simply named after a deity. Real, currently-active Indian creators only.`
       : prompt;
 
-    const res = await this.client.chat.completions.create({
-      model: 'gpt-4o-mini-search-preview',
-      web_search_options: { search_context_size: 'medium' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are an Instagram creator-research assistant for an INDIAN influencer-marketing platform. Search the web to find REAL Instagram creators that match BOTH the niche and the location in the query.
+    const content = await this.webSearch(
+      `You are an Instagram creator-research assistant for an INDIAN influencer-marketing platform. Search the web to find REAL Instagram creators that match BOTH the niche and the location in the query.
 Rules:
 - INDIA ONLY. Only creators based in India, who are Indian and post for an Indian audience. NEVER suggest foreign / international / non-Indian creators or accounts based outside India. If unsure whether a creator is Indian, do not include them.
 - If the query names an Indian city, prioritise creators actually from that city; if no location is given, assume India-wide.
@@ -450,11 +463,8 @@ Rules:
 - Exclude brands, news outlets, agencies, marketplaces, meme/fan pages.
 - Only real, existing handles you can find via search — never invent or guess.
 Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["username1","username2"]} with at most ${max} handles, no @ prefix.`,
-        },
-        { role: 'user', content: userContent },
-      ],
-    });
-    const content = res.choices[0]?.message?.content ?? '';
+      userContent,
+    );
     return this.parseHandles(content, max);
   }
 
@@ -484,13 +494,8 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
       .filter(Boolean)
       .join('\n');
 
-    const res = await this.client.chat.completions.create({
-      model: 'gpt-4o-mini-search-preview',
-      web_search_options: { search_context_size: 'medium' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are an influencer-marketing strategist for an INDIAN brand platform. Search the web for what is trending RIGHT NOW on Instagram reels for the brand's niche in India — hot hashtags, trending audio, seasonal/cultural moments (festivals, cricket, weather), and content formats — and design ${max} distinct campaign concepts the brand could run this month.
+    const content = await this.webSearch(
+      `You are an influencer-marketing strategist for an INDIAN brand platform. Search the web for what is trending RIGHT NOW on Instagram reels for the brand's niche in India — hot hashtags, trending audio, seasonal/cultural moments (festivals, cricket, weather), and content formats — and design ${max} distinct campaign concepts the brand could run this month.
 Rules:
 - Ground every concept in a REAL, current trend — name it and say why it's hot now. Prefer emerging/growing trends over saturated ones.
 - If the brief lists "Trends we measured from real creator activity", treat those as the strongest signal and build most concepts around them; use web search to confirm why each is hot and to fill any gaps.
@@ -500,11 +505,8 @@ Rules:
 Respond with ONLY a JSON object, no prose and no markdown fences:
 {"campaigns":[{"title":"...","angle":"one line","trend":{"name":"#Tag or audio/topic","type":"hashtag|audio|topic|format","why_now":"..."},"format":"Reel series|GRWM|Talking-head|...","campaign_type":"barter|paid|UGC|ambassador","hashtags":["#a","#b"],"deliverables":"what each creator posts","creator_query":"niche audience city words"}]}
 At most ${max} campaigns.`,
-        },
-        { role: 'user', content: brief },
-      ],
-    });
-    const content = res.choices[0]?.message?.content ?? '';
+      brief,
+    );
     return this.parseCampaignConcepts(content, max);
   }
 
@@ -590,21 +592,13 @@ At most ${max} campaigns.`,
       .filter(Boolean)
       .join('\n');
 
-    const res = await this.client.chat.completions.create({
-      model: 'gpt-4o-mini-search-preview',
-      web_search_options: { search_context_size: 'medium' },
-      messages: [
-        {
-          role: 'system',
-          content: `You are a brand strategist for an INDIAN influencer-marketing platform. Search the web for the brand's website and social profiles and distil a concise, factual "Brand DNA" profile that will drive creator-campaign planning. Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best inference from the category.
+    const content = await this.webSearch(
+      `You are a brand strategist for an INDIAN influencer-marketing platform. Search the web for the brand's website and social profiles and distil a concise, factual "Brand DNA" profile that will drive creator-campaign planning. Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best inference from the category.
 Respond with ONLY a JSON object, no prose and no markdown fences:
 {"summary":"1-2 lines on who they are","category":"primary niche","positioning":"premium/value/etc + market stance","values":["..."],"personality":["tone adjectives"],"target_audience":"who they sell to","aesthetic":"visual style","content_pillars":["themes"],"keywords":["discovery keywords"],"creator_archetypes":["creator types that fit"],"competitors":["named peers"],"opportunities":["concrete, specific ways this brand could market or grow better via creators/social"]}
 Keep arrays to 3-7 items, India-relevant where applicable. "opportunities" must be actionable and specific to THIS brand, not generic advice.`,
-        },
-        { role: 'user', content: brief },
-      ],
-    });
-    const content = res.choices[0]?.message?.content ?? '';
+      brief,
+    );
     return this.parseBrandDna(content, input.brand);
   }
 
