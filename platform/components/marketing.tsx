@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BookDemoButton } from './book-demo';
+import { useAgencyAccount } from '@/lib/use-agency-account';
+import { clearBrandSession } from '@/lib/brand-session';
 
 // Scroll-reveal: fades + rises its children in when they enter the viewport.
 export function Reveal({
@@ -111,6 +113,10 @@ export function AccountMenu() {
   // OAuth). This is what makes the portal reachable after a creator logs in.
   const [creatorAuthed, setCreatorAuthed] = useState(false);
   const [sessionHandle, setSessionHandle] = useState<string | null>(null);
+  // Brand / agency sign-ins live in the httpOnly ii_agency cookie (not creator,
+  // not localStorage) — probe /api/agency/me so the menu knows they're signed in
+  // and can offer "Log out" instead of falsely showing Log in / Sign up.
+  const { account: agencyAccount, logout: agencyLogout } = useAgencyAccount();
   useEffect(() => {
     const read = () => {
       try {
@@ -139,30 +145,45 @@ export function AccountMenu() {
     return () => { cancelled = true; };
   }, []);
 
-  // A creator OAuth session counts as signed in even without any localStorage.
-  const signedIn = loggedIn || creatorAuthed;
+  // A creator OAuth session or a brand/agency cookie counts as signed in even
+  // without any localStorage.
+  const signedIn = loggedIn || creatorAuthed || !!agencyAccount;
   const shownHandle = handle ?? sessionHandle;
-  // Where "Go to dashboard" lands: creator portal, admin panel, or the brand
-  // campaigns workspace (agency), in that priority.
+  const agencyLabel = agencyAccount ? (agencyAccount.name || agencyAccount.email) : null;
+  // Where "Go to dashboard" lands: creator portal, admin panel, the brand/agency
+  // workspace, or the legacy campaigns view, in that priority.
   const dashboardHref = creatorAuthed
     ? '/creator'
     : role === 'admin'
       ? '/admin'
-      : signedIn
-        ? '/campaigns'
-        : null;
+      : agencyAccount
+        ? '/brand/home'
+        : signedIn
+          ? '/campaigns'
+          : null;
 
-  // Log a creator out of the cookie session too, not just localStorage.
+  // Log out of every session kind we might hold: creator cookie, brand/agency
+  // cookie (+ its cached brand session), and localStorage.
   const doLogout = async () => {
     if (creatorAuthed) {
       try { await fetch('/api/creator/session', { method: 'DELETE' }); } catch { /* ignore */ }
     }
+    if (agencyAccount) {
+      try { await agencyLogout(); } catch { /* ignore */ }
+      clearBrandSession();
+    }
     logout();
   };
 
-  const label = shownHandle ? `@${shownHandle}` : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Guest';
+  const label = shownHandle
+    ? `@${shownHandle}`
+    : agencyLabel
+      ? agencyLabel
+      : role
+        ? role.charAt(0).toUpperCase() + role.slice(1)
+        : 'Guest';
   const showPhoto = signedIn && shownHandle && !imgErr;
-  const initials = signedIn ? (shownHandle || role || 'U').slice(0, 2).toUpperCase() : null;
+  const initials = signedIn ? (shownHandle || agencyLabel || role || 'U').slice(0, 2).toUpperCase() : null;
   return (
     <div className="relative">
       <button
@@ -191,7 +212,7 @@ export function AccountMenu() {
               <>
                 <div className="px-4 py-3 border-b border-[#f3f3f3]">
                   <div className="text-[13px] font-semibold text-[#111] truncate">{label}</div>
-                  <div className="text-[11px] text-[#999]">{creatorAuthed || shownHandle ? 'Creator account' : 'Signed in'}</div>
+                  <div className="text-[11px] text-[#999]">{creatorAuthed || shownHandle ? 'Creator account' : agencyAccount?.account_type === 'brand' ? 'Brand account' : agencyAccount ? 'Agency account' : 'Signed in'}</div>
                 </div>
                 {dashboardHref && (
                   <Link href={dashboardHref} onClick={() => setOpen(false)} className="block px-4 py-2.5 text-[13px] font-medium hover:bg-[#f6f4ff]" style={{ color: ACCENT }}>
