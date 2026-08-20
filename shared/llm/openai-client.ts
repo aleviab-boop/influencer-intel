@@ -422,9 +422,9 @@ Generate 30-50 candidate Instagram handles.`,
    * gpt-4o-mini with the built-in `web_search` tool — same live-browsing power,
    * current API. Returns the assistant's text; callers parse JSON leniently.
    */
-  private async webSearch(system: string, user: string): Promise<string> {
+  private async webSearch(system: string, user: string, model = 'gpt-4o-mini'): Promise<string> {
     const res = await this.client.responses.create({
-      model: 'gpt-4o-mini',
+      model,
       tools: [{ type: 'web_search_preview' }],
       input: [
         { role: 'system', content: system },
@@ -664,6 +664,9 @@ Rules:
 - Exclude the brand's OWN accounts and any account whose handle is basically the brand name or a reseller/shop/regional page, plus news outlets, marketplaces and agencies.
 Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["username1","username2"]} with at most ${max} handles, no @ prefix.`,
       brief,
+      // Collaborator recall is a harder research task than the other web-search
+      // calls — gpt-4o finds materially more real, correct handles than -mini.
+      'gpt-4o',
     );
     const found = this.parseHandles(content, max);
     // Drop handles that are basically the brand's own name (reseller / regional /

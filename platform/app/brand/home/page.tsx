@@ -464,10 +464,10 @@ export default function BrandHomePage() {
               <section className="mb-14">
                 <SectionHead
                   eyebrow="Warm intros"
-                  title={`Creators who've worked with ${session.brand}`}
+                  title={`Creators who fit ${session.brand}`}
                 />
                 <p className="text-[14px] text-[#666] -mt-2 mb-5 max-w-2xl">
-                  Past collaborators and creators {session.brand} has tagged — the warmest place to restart a partnership.
+                  Past collaborators, creators {session.brand} tags, and top creators in its product niche — the warmest place to start outreach.
                 </p>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {collaborators.map((cr) => (

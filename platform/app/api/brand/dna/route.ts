@@ -3,6 +3,8 @@ import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient, type BrandDnaProfile } from '@influencer-intel/shared/llm';
 import { getAgencySession } from '@/lib/auth';
 import { scrapeBrandSite, scrapeBrandInstagram } from '@/lib/brand-scrape';
+import { tokenize } from '@/lib/live-discovery';
+import { searchCreatorsInDb } from '@/lib/creator-db-search';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -129,6 +131,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (ig?.mentions?.length) {
       collaborators = await enrichCollaborators(ig.mentions.map((m) => m.handle));
     }
+  }
+
+  // Blend in REAL, enriched creators from our own DB that match the brand's
+  // product niche — the exact kind of creators a brand like this hires (for
+  // Milton: home / kitchen / appliance / lifestyle creators). This guarantees
+  // the section shows genuine creators with photos + reach even when the AI
+  // web-search is thin or the IG relay is down. DB creators fill AFTER the
+  // AI/first-party collaborators, de-duped by handle, up to a cap of 12.
+  try {
+    const nicheQuery = [
+      profile.category,
+      ...(profile.creator_archetypes ?? []),
+      ...(profile.keywords ?? []),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const tokens = tokenize(nicheQuery);
+    if (tokens.length) {
+      const dbCreators = await searchCreatorsInDb(tokens, 12, { bucket: 'instagram', minFollowers: 3000 });
+      const seen = new Set(collaborators.map((c) => c.username.toLowerCase()));
+      for (const p of dbCreators) {
+        const k = p.username.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        collaborators.push({
+          username: p.username,
+          full_name: p.full_name ?? '',
+          followers: p.followers ?? 0,
+          engagement: typeof p.engagement === 'number' ? p.engagement : 0,
+          profile_pic_url: p.profile_pic_url ?? null,
+          in_db: true,
+        });
+        if (collaborators.length >= 12) break;
+      }
+    }
+  } catch (err) {
+    console.error('[brand/dna] db collaborator blend failed:', err);
   }
 
   // Stamp ownership when an agency is signed in, so this brand joins their roster.
