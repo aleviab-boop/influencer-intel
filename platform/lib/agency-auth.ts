@@ -19,6 +19,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** What a route handler needs to mint the agency cookie. */
 export type AgencySessionInput = Omit<AgencySession, 'iat'>;
 
+// 'agency' owns a roster of brands; 'brand' is a single brand that signed up for
+// itself (see migration 043). Same table + auth, different post-login UX.
+export type AccountType = 'agency' | 'brand';
+
 interface AgencyRow {
   id: string;
   email: string;
@@ -33,12 +37,15 @@ const sessionFor = (row: AgencyRow): AgencySessionInput => ({
 });
 
 /**
- * Create an agency account. Rejects if the email is already registered.
+ * Create an account. Rejects if the email is already registered. `accountType`
+ * tags whether this is a multi-brand agency ('agency', default) or a single
+ * brand signing up for itself ('brand') — both live in agency_accounts.
  */
 export async function createAgencyAccount(
   email: string,
   password: string,
   name?: string,
+  accountType: AccountType = 'agency',
 ): Promise<AgencySessionInput> {
   const cleanEmail = email.trim().toLowerCase();
   if (!EMAIL_RE.test(cleanEmail)) throw new Error('Enter a valid email address');
@@ -56,6 +63,7 @@ export async function createAgencyAccount(
     email: cleanEmail,
     password_hash: hashPassword(password),
     name: display,
+    account_type: accountType,
   });
   return sessionFor(row);
 }
