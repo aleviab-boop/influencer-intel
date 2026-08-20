@@ -355,6 +355,27 @@ export default function BrandHomePage() {
     };
   }, [category]);
 
+  // Lazy-load "Creators who fit {brand}" for a returning brand that has DNA but
+  // no cached collaborators yet (signed up before the feature existed, or the
+  // list wasn't persisted). Grounds on the saved DNA server-side — best-effort.
+  useEffect(() => {
+    if (!session?.brand || !category || collaborators.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/brand/collaborators?brand=${encodeURIComponent(session.brand)}`);
+        const d = await r.json().catch(() => ({}));
+        const list = Array.isArray(d.collaborators) ? d.collaborators : [];
+        if (!cancelled && list.length > 0) updateBrandSession({ collaborators: list });
+      } catch {
+        /* best-effort — the section just stays hidden */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.brand, category, collaborators.length]);
+
   // (Re)analyse the brand's DNA from the workspace. This is what rescues an
   // empty workspace: if DNA analysis failed at sign-up (e.g. the LLM key wasn't
   // set), the brand lands here with no category — one click maps it and unlocks

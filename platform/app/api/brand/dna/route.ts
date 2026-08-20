@@ -3,57 +3,10 @@ import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient, type BrandDnaProfile } from '@influencer-intel/shared/llm';
 import { getAgencySession } from '@/lib/auth';
 import { scrapeBrandSite, scrapeBrandInstagram } from '@/lib/brand-scrape';
-import { tokenize } from '@/lib/live-discovery';
-import { searchCreatorsInDb } from '@/lib/creator-db-search';
+import { buildBrandCollaborators } from '@/lib/brand-collaborators';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
-
-interface Collaborator {
-  username: string;
-  full_name: string;
-  followers: number;
-  engagement: number;
-  profile_pic_url: string | null;
-  in_db: boolean;
-}
-
-// Enrich a list of collaborator handles from the creators table (photo, reach,
-// ER) so the workspace can render real cards. Handles not in the DB still come
-// back with a minimal shell so the brand can still open them on Instagram.
-async function enrichCollaborators(handles: string[]): Promise<Collaborator[]> {
-  if (handles.length === 0) return [];
-  const lower = handles.map((h) => h.toLowerCase());
-  let rows: Array<{
-    handle: string;
-    display_name: string | null;
-    follower_count: number | string | null;
-    engagement_rate: number | string | null;
-    profile_photo_url: string | null;
-  }> = [];
-  try {
-    rows = await getBolticClient().query(
-      `SELECT handle, display_name, follower_count, engagement_rate, profile_photo_url
-         FROM creators
-        WHERE platform = 'instagram' AND lower(handle) = ANY($1)`,
-      [lower],
-    );
-  } catch {
-    rows = [];
-  }
-  const byHandle = new Map(rows.map((r) => [r.handle.toLowerCase(), r]));
-  return handles.map((h) => {
-    const r = byHandle.get(h.toLowerCase());
-    return {
-      username: h,
-      full_name: r?.display_name ?? '',
-      followers: Number(r?.follower_count ?? 0),
-      engagement: r?.engagement_rate != null ? Math.round(Number(r.engagement_rate) * 1000) / 10 : 0,
-      profile_pic_url: r?.profile_photo_url ?? null,
-      in_db: Boolean(r),
-    };
-  });
-}
 
 // POST /api/brand/dna
 //   { brand, url?, social?, notes? }
@@ -100,75 +53,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Could not analyse the brand. Try again.' }, { status: 502 });
   }
 
-  // Creators who have worked with the brand. We use AI (web search) to actually
-  // SOURCE them — creators who've done gifted/paid posts for THIS brand, and,
-  // when few exist, creators who post about the same kind of products (for Milton:
-  // bottles, appliances, bags, kitchenware). We ground the search in what the
-  // brand makes (from the DNA we just built) so the model targets the right niche,
-  // seed it with the handles the brand tags in its own posts (first-party), then
-  // enrich every handle from the creators DB where we have it. The AI method
-  // already drops the brand's own / reseller look-alike handles.
-  const products = [
-    profile.summary,
-    profile.category,
-    ...(profile.content_pillars ?? []),
-    ...(profile.keywords ?? []),
-  ]
-    .filter(Boolean)
-    .join('; ')
-    .slice(0, 400);
-  let collaborators: Collaborator[] = [];
-  try {
-    const handles = await getOpenAIClient().suggestBrandCollaborators(brand, {
-      category: profile.category || ig?.category || undefined,
-      products: products || undefined,
-      seedHandles: (ig?.mentions ?? []).map((m) => m.handle),
-    });
-    collaborators = await enrichCollaborators(handles);
-  } catch (err) {
-    console.error('[brand/dna] collaborators failed:', err);
-    // Fall back to the raw first-party mentions if the AI step fails.
-    if (ig?.mentions?.length) {
-      collaborators = await enrichCollaborators(ig.mentions.map((m) => m.handle));
-    }
-  }
-
-  // Blend in REAL, enriched creators from our own DB that match the brand's
-  // product niche — the exact kind of creators a brand like this hires (for
-  // Milton: home / kitchen / appliance / lifestyle creators). This guarantees
-  // the section shows genuine creators with photos + reach even when the AI
-  // web-search is thin or the IG relay is down. DB creators fill AFTER the
-  // AI/first-party collaborators, de-duped by handle, up to a cap of 12.
-  try {
-    const nicheQuery = [
-      profile.category,
-      ...(profile.creator_archetypes ?? []),
-      ...(profile.keywords ?? []),
-    ]
-      .filter(Boolean)
-      .join(' ');
-    const tokens = tokenize(nicheQuery);
-    if (tokens.length) {
-      const dbCreators = await searchCreatorsInDb(tokens, 12, { bucket: 'instagram', minFollowers: 3000 });
-      const seen = new Set(collaborators.map((c) => c.username.toLowerCase()));
-      for (const p of dbCreators) {
-        const k = p.username.toLowerCase();
-        if (seen.has(k)) continue;
-        seen.add(k);
-        collaborators.push({
-          username: p.username,
-          full_name: p.full_name ?? '',
-          followers: p.followers ?? 0,
-          engagement: typeof p.engagement === 'number' ? p.engagement : 0,
-          profile_pic_url: p.profile_pic_url ?? null,
-          in_db: true,
-        });
-        if (collaborators.length >= 12) break;
-      }
-    }
-  } catch (err) {
-    console.error('[brand/dna] db collaborator blend failed:', err);
-  }
+  // Creators who fit the brand: AI-sourced collaborators (grounded on the DNA we
+  // just built + the handles the brand tags in its own IG posts) blended with
+  // real DB creators in the brand's niche. Shared with /api/brand/collaborators
+  // so a returning brand can lazy-load the same list.
+  const collaborators = await buildBrandCollaborators(brand, profile, {
+    seedHandles: (ig?.mentions ?? []).map((m) => m.handle),
+    igCategory: ig?.category ?? null,
+  });
 
   // Stamp ownership when an agency is signed in, so this brand joins their roster.
   const account = await getAgencySession();
