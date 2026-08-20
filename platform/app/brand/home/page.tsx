@@ -196,6 +196,43 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
   );
 }
 
+// Creator avatar with the app's standard fallback chain: proxy the stored IG
+// CDN URL through /api/ig-image (those URLs are hotlink-blocked cross-origin, so
+// a raw <img src> shows a broken photo), then /api/ig-avatar by handle (a live
+// lookup), then a deterministic gradient initial. `stage` advances on each error.
+function CreatorAvatar({ handle, name, pic }: { handle: string; name?: string | null; pic?: string | null }) {
+  const [stage, setStage] = useState(0);
+  let h = 0;
+  for (let i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
+
+  const src =
+    stage === 0 && pic
+      ? `/api/ig-image?u=${encodeURIComponent(pic)}`
+      : stage <= 1
+        ? `/api/ig-avatar?handle=${encodeURIComponent(handle)}`
+        : null;
+
+  if (src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={handle}
+        onError={() => setStage((s) => (s === 0 && pic ? 1 : 2))}
+        className="w-9 h-9 rounded-full object-cover shrink-0"
+      />
+    );
+  }
+  return (
+    <div
+      className="w-9 h-9 rounded-full shrink-0 grid place-items-center text-white text-[13px] font-semibold"
+      style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}
+    >
+      {(name || handle).charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
 // Small section header in the marketing style: a coloured eyebrow above a bold title.
 function SectionHead({ eyebrow, title, action }: { eyebrow: string; title: string; action?: React.ReactNode }) {
   return (
@@ -481,14 +518,7 @@ export default function BrandHomePage() {
                         rel="noreferrer"
                         className="flex items-center gap-3 min-w-0 flex-1"
                       >
-                        <div className="w-9 h-9 rounded-full bg-[#f2f2f7] grid place-items-center text-[13px] font-semibold text-[#888] overflow-hidden shrink-0">
-                          {cr.profile_pic_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={cr.profile_pic_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            cr.username.slice(0, 1).toUpperCase()
-                          )}
-                        </div>
+                        <CreatorAvatar handle={cr.username} name={cr.full_name} pic={cr.profile_pic_url} />
                         <div className="min-w-0 flex-1">
                           <div className="text-[13.5px] font-semibold text-[#111] truncate">@{cr.username}</div>
                           <div className="text-[11.5px] text-[#888]">
@@ -612,14 +642,7 @@ export default function BrandHomePage() {
                                   rel="noreferrer"
                                   className="flex items-center gap-3 min-w-0 flex-1"
                                 >
-                                  <div className="w-9 h-9 rounded-full bg-[#f2f2f7] grid place-items-center text-[13px] font-semibold text-[#888] overflow-hidden shrink-0">
-                                    {cr.profile_pic_url ? (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img src={cr.profile_pic_url} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                      cr.username.slice(0, 1).toUpperCase()
-                                    )}
-                                  </div>
+                                  <CreatorAvatar handle={cr.username} name={cr.full_name} pic={cr.profile_pic_url} />
                                   <div className="min-w-0 flex-1">
                                     <div className="text-[13.5px] font-semibold text-[#111] truncate">@{cr.username}</div>
                                     <div className="text-[11.5px] text-[#888]">
