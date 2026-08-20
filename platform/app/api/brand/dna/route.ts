@@ -98,22 +98,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Could not analyse the brand. Try again.' }, { status: 502 });
   }
 
-  // Creators who have worked with the brand: seed with the handles the brand
-  // tags in its own captions (first-party, verified), then let AI web-search add
-  // more. We only SURFACE a collaborator we can actually verify — one present in
-  // our creators DB, or a first-party IG tag — and drop pure AI web-search
-  // guesses we can't confirm, so unverifiable name-matches never show as
-  // "past collaborators". (When the IG relay is live the first-party seeds and
-  // DB-warmed handles populate this properly.)
-  const seedSet = new Set((ig?.mentions ?? []).map((m) => m.handle.toLowerCase()));
+  // Creators who have worked with the brand. We use AI (web search) to actually
+  // SOURCE them — creators who've done gifted/paid posts for THIS brand, and,
+  // when few exist, creators who post about the same kind of products (for Milton:
+  // bottles, appliances, bags, kitchenware). We ground the search in what the
+  // brand makes (from the DNA we just built) so the model targets the right niche,
+  // seed it with the handles the brand tags in its own posts (first-party), then
+  // enrich every handle from the creators DB where we have it. The AI method
+  // already drops the brand's own / reseller look-alike handles.
+  const products = [
+    profile.summary,
+    profile.category,
+    ...(profile.content_pillars ?? []),
+    ...(profile.keywords ?? []),
+  ]
+    .filter(Boolean)
+    .join('; ')
+    .slice(0, 400);
   let collaborators: Collaborator[] = [];
   try {
     const handles = await getOpenAIClient().suggestBrandCollaborators(brand, {
       category: profile.category || ig?.category || undefined,
+      products: products || undefined,
       seedHandles: (ig?.mentions ?? []).map((m) => m.handle),
     });
-    const enriched = await enrichCollaborators(handles);
-    collaborators = enriched.filter((c) => c.in_db || seedSet.has(c.username.toLowerCase()));
+    collaborators = await enrichCollaborators(handles);
   } catch (err) {
     console.error('[brand/dna] collaborators failed:', err);
     // Fall back to the raw first-party mentions if the AI step fails.

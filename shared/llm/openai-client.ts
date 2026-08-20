@@ -639,13 +639,14 @@ Keep arrays to 3-7 items, India-relevant where applicable. "opportunities" must 
    */
   async suggestBrandCollaborators(
     brand: string,
-    opts: { category?: string; seedHandles?: string[]; max?: number } = {},
+    opts: { category?: string; products?: string; seedHandles?: string[]; max?: number } = {},
   ): Promise<string[]> {
     const max = opts.max ?? 12;
     const seeds = (opts.seedHandles ?? []).filter(Boolean).slice(0, 20);
     const brief = [
       `Brand: ${brand}`,
       opts.category ? `Category / niche: ${opts.category}` : '',
+      opts.products ? `What the brand makes / sells: ${opts.products}` : '',
       seeds.length
         ? `Creators this brand tags in its own Instagram posts (strong signal they have collaborated — keep the real ones and add more):\n- ${seeds.join('\n- ')}`
         : '',
@@ -654,23 +655,36 @@ Keep arrays to 3-7 items, India-relevant where applicable. "opportunities" must 
       .join('\n');
 
     const content = await this.webSearch(
-      `You are an influencer-marketing researcher for an INDIAN brand platform. Search the web (the brand's tagged/mentioned Instagram posts, press coverage, creators' sponsored "#ad"/"paid partnership" posts) to find REAL Instagram creators who have actually WORKED WITH or been gifted by this brand before.
+      `You are an influencer-marketing researcher for an INDIAN brand platform. Search the web to find REAL Instagram creators connected to this brand, in this order of preference:
+1. Creators who have ACTUALLY worked with / been gifted by THIS brand before — look at the brand's tagged & mentioned Instagram posts, press coverage, and creators' own sponsored "#ad"/"paid partnership"/"gifted" posts naming the brand.
+2. If few or none can be verified for this exact brand, add creators who have done sponsored/gifted posts for the SAME kind of products (e.g. for a kitchenware/appliances/bottles/bags brand: home & kitchen creators, gadget/appliance reviewers, lunchbox/tiffin & meal-prep creators, travel/lifestyle creators who feature bottles & bags, homemaker & organisation creators) — the exact creators a brand like this hires.
 Rules:
-- INDIA ONLY — real, currently-active Indian creators the brand has genuinely collaborated with. Never invent handles.
-- Prefer genuine nano/micro/mid-tier creators over global celebrities.
-- Exclude the brand's own account, reseller/shop pages, news outlets and agencies.
-- If you cannot verify a real past collaboration, do not include the handle.
+- INDIA ONLY — real, currently-active Indian creators. Never invent or guess handles; only handles you can find via search.
+- Prefer genuine nano / micro / mid-tier creators (a few thousand to ~1M followers) over big celebrities.
+- Exclude the brand's OWN accounts and any account whose handle is basically the brand name or a reseller/shop/regional page, plus news outlets, marketplaces and agencies.
 Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["username1","username2"]} with at most ${max} handles, no @ prefix.`,
       brief,
     );
     const found = this.parseHandles(content, max);
+    // Drop handles that are basically the brand's own name (reseller / regional /
+    // shop pages the model sometimes returns — e.g. "milton_homewares",
+    // "miltonindia"). A creator's handle rarely contains the brand name; brand-
+    // owned pages almost always do. Seeds are exempt (they are first-party truth).
+    const brandTokens = brand
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 4); // ignore short/common tokens
+    const seedSet = new Set(seeds.map((s) => s.toLowerCase().replace(/^@/, '')));
+    const looksLikeBrand = (h: string): boolean =>
+      !seedSet.has(h) && brandTokens.some((t) => h.includes(t));
+
     // Union with the first-party seed handles (creators the brand already tags),
     // de-duped, seeds first — those are the strongest evidence.
     const seen = new Set<string>();
     const out: string[] = [];
     for (const h of [...seeds, ...found]) {
       const k = h.toLowerCase().replace(/^@/, '');
-      if (/^[a-z0-9._]{1,30}$/.test(k) && !seen.has(k)) {
+      if (/^[a-z0-9._]{1,30}$/.test(k) && !seen.has(k) && !looksLikeBrand(k)) {
         seen.add(k);
         out.push(k);
       }
