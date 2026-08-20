@@ -5,9 +5,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
 
-type Role = 'agency' | 'influencer' | 'admin';
+type Role = 'brand' | 'agency' | 'influencer' | 'admin';
 
 const PANEL: Record<Role, { headline: string; sub: string; points: string[] }> = {
+  brand: {
+    headline: 'Your brand, its own command center',
+    sub: 'Sign in for a single brand and run it end to end.',
+    points: [
+      'Auto-distilled brand DNA from your site',
+      'Discover & save creators to your pipeline',
+      'One-click outreach, tracked to won',
+    ],
+  },
   agency: {
     headline: 'Run smarter influencer campaigns',
     sub: 'Discover, recruit and pay creators — all in one place.',
@@ -54,7 +63,7 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     setPlan(params.get('plan'));
     const r = params.get('role');
-    if (r === 'influencer' || r === 'agency' || r === 'admin') setRole(r);
+    if (r === 'brand' || r === 'influencer' || r === 'agency' || r === 'admin') setRole(r);
   }, []);
 
   // Clear fields/errors when switching roles — no pre-filled credentials.
@@ -215,13 +224,31 @@ export default function LoginPage() {
             </p>
 
             {/* role selector */}
-            <div className="mt-6 grid grid-cols-3 gap-2.5">
-              <RoleTab active={role === 'agency'} onClick={() => setRole('agency')} title="Agency" sub="Brand / marketer" icon={ICONS.agency} />
+            <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <RoleTab active={role === 'brand'} onClick={() => setRole('brand')} title="Brand" sub="Your own brand" icon={ICONS.brand} />
+              <RoleTab active={role === 'agency'} onClick={() => setRole('agency')} title="Agency" sub="Manage clients" icon={ICONS.agency} />
               <RoleTab active={role === 'influencer'} onClick={() => setRole('influencer')} title="Influencer" sub="Creator" icon={ICONS.influencer} />
               <RoleTab active={role === 'admin'} onClick={() => setRole('admin')} title="Admin" sub="Super admin" icon={ICONS.admin} />
             </div>
 
-            {role === 'influencer' ? (
+            {role === 'brand' ? (
+              <div className="mt-6 rounded-2xl border border-border bg-ink-50/40 px-6 py-9 text-center" style={{ animation: 'ii-rise .35s both' }}>
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                  {ICONS.brand}
+                </div>
+                <h3 className="text-[17px] font-semibold text-ink-900">Your own brand workspace</h3>
+                <p className="mt-1.5 text-[13px] text-ink-500">Sign in for a single brand — we distil your brand DNA and open a workspace scoped to you: campaigns, creators, pipeline &amp; outreach.</p>
+
+                <a href="/brand/login" className="group mt-6 flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-white text-[14px] font-semibold hover:brightness-105 hover:-translate-y-0.5 transition-all duration-200" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
+                  Sign in to your brand
+                  <svg className="transition-transform duration-300 group-hover:translate-x-1" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </a>
+                <a href="/brand/signup" className="mt-3 flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-[14px] font-semibold border border-border text-ink-700 hover:border-[#c9bdfb] hover:bg-white transition-all duration-200">
+                  Create a brand account
+                </a>
+                <p className="mt-3 text-[11px] text-ink-400">Managing brands for clients? Use the Agency tab.</p>
+              </div>
+            ) : role === 'influencer' ? (
               <div className="mt-6 rounded-2xl border border-border bg-ink-50/40 px-6 py-9 text-center" style={{ animation: 'ii-rise .35s both' }}>
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full text-white" style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19V5" /><path d="M4 15l4-4 4 3 6-6" /><path d="M15 8h5v5" /></svg>
@@ -327,6 +354,9 @@ export default function LoginPage() {
 }
 
 const ICONS = {
+  brand: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16l-1.2 4.2A2 2 0 0 1 16.9 9.7L16 10" /><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M3 4l1.5 5a2.5 2.5 0 0 0 5 0L10 4M14 4l.5 5a2.5 2.5 0 0 0 5 0L21 4" /><path d="M9 20v-5h6v5" /></svg>
+  ),
   agency: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M3 12h18" /></svg>
   ),
