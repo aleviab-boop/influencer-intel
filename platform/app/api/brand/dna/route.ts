@@ -2,17 +2,66 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient, type BrandDnaProfile } from '@influencer-intel/shared/llm';
 import { getAgencySession } from '@/lib/auth';
+import { scrapeBrandSite, scrapeBrandInstagram } from '@/lib/brand-scrape';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+interface Collaborator {
+  username: string;
+  full_name: string;
+  followers: number;
+  engagement: number;
+  profile_pic_url: string | null;
+  in_db: boolean;
+}
+
+// Enrich a list of collaborator handles from the creators table (photo, reach,
+// ER) so the workspace can render real cards. Handles not in the DB still come
+// back with a minimal shell so the brand can still open them on Instagram.
+async function enrichCollaborators(handles: string[]): Promise<Collaborator[]> {
+  if (handles.length === 0) return [];
+  const lower = handles.map((h) => h.toLowerCase());
+  let rows: Array<{
+    handle: string;
+    display_name: string | null;
+    follower_count: number | string | null;
+    engagement_rate: number | string | null;
+    profile_photo_url: string | null;
+  }> = [];
+  try {
+    rows = await getBolticClient().query(
+      `SELECT handle, display_name, follower_count, engagement_rate, profile_photo_url
+         FROM creators
+        WHERE platform = 'instagram' AND lower(handle) = ANY($1)`,
+      [lower],
+    );
+  } catch {
+    rows = [];
+  }
+  const byHandle = new Map(rows.map((r) => [r.handle.toLowerCase(), r]));
+  return handles.map((h) => {
+    const r = byHandle.get(h.toLowerCase());
+    return {
+      username: h,
+      full_name: r?.display_name ?? '',
+      followers: Number(r?.follower_count ?? 0),
+      engagement: r?.engagement_rate != null ? Math.round(Number(r.engagement_rate) * 1000) / 10 : 0,
+      profile_pic_url: r?.profile_photo_url ?? null,
+      in_db: Boolean(r),
+    };
+  });
+}
+
 // POST /api/brand/dna
 //   { brand, url?, social?, notes? }
-//   → { profile: BrandDnaProfile, saved: boolean }
+//   → { profile: BrandDnaProfile, saved: boolean, collaborators: Collaborator[] }
 //
-// Analyse a brand from its name + website + social with the web-search model and
-// return a structured Brand DNA profile, persisting it to brand_dna so the
-// campaign-ideas step can reuse it. The front of the brand flow.
+// The front of the brand flow. We ACTUALLY scrape the brand's website + Instagram
+// (lib/brand-scrape), feed that real content to the web-search model to build a
+// grounded Brand DNA, persist it to brand_dna for the campaign step, and — using
+// the creators the brand tags in its own posts plus an AI web search — surface
+// real creators who have worked with the brand before.
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const body = await req.json().catch(() => null);
   const brand = typeof body?.brand === 'string' ? body.brand.trim() : '';
@@ -23,6 +72,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const social = typeof body?.social === 'string' ? body.social.trim() : '';
   const notes = typeof body?.notes === 'string' ? body.notes.trim() : '';
 
+  // Scrape the real website + Instagram in parallel (both best-effort → null).
+  const [site, ig] = await Promise.all([
+    url ? scrapeBrandSite(url) : Promise.resolve(null),
+    social ? scrapeBrandInstagram(social) : Promise.resolve(null),
+  ]);
+
   let profile: BrandDnaProfile;
   try {
     profile = await getOpenAIClient().analyzeBrandDna({
@@ -30,10 +85,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       url: url || null,
       social: social || null,
       notes: notes || null,
+      siteText: site?.text ?? null,
+      siteTitle: site?.title ?? null,
+      siteDescription: site?.description ?? null,
+      igBio: ig?.biography ?? null,
+      igCategory: ig?.category ?? null,
+      igFollowers: ig?.followers ?? null,
+      igCaptions: ig?.captions ?? null,
     });
   } catch (err) {
     console.error('[brand/dna] analysis failed:', err);
     return NextResponse.json({ error: 'Could not analyse the brand. Try again.' }, { status: 502 });
+  }
+
+  // Creators who have worked with the brand: seed with the handles the brand
+  // tags in its own captions (first-party), then let AI web-search add more.
+  let collaborators: Collaborator[] = [];
+  try {
+    const handles = await getOpenAIClient().suggestBrandCollaborators(brand, {
+      category: profile.category || ig?.category || undefined,
+      seedHandles: (ig?.mentions ?? []).map((m) => m.handle),
+    });
+    collaborators = await enrichCollaborators(handles);
+  } catch (err) {
+    console.error('[brand/dna] collaborators failed:', err);
+    // Fall back to the raw first-party mentions if the AI step fails.
+    if (ig?.mentions?.length) {
+      collaborators = await enrichCollaborators(ig.mentions.map((m) => m.handle));
+    }
   }
 
   // Stamp ownership when an agency is signed in, so this brand joins their roster.
@@ -53,7 +132,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     console.error('[brand/dna] save failed:', err);
   }
 
-  return NextResponse.json({ profile, saved });
+  return NextResponse.json({ profile, saved, collaborators });
 }
 
 // GET /api/brand/dna

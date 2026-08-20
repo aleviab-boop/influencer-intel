@@ -76,6 +76,7 @@ export default function BrandSignupPage() {
       });
       const dd = await d.json().catch(() => ({}));
       const dna = (dd.profile ?? null) as BrandDnaProfile | null;
+      const collaborators = Array.isArray(dd.collaborators) ? dd.collaborators : [];
 
       // Hydrate the client brand-session so the workspace opens personalised.
       setBrandSession({
@@ -84,6 +85,7 @@ export default function BrandSignupPage() {
         social: social.trim() || null,
         mode: 'barter',
         dna,
+        collaborators,
         ts: Date.now(),
       });
       if (dna) {

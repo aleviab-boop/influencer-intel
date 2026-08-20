@@ -5,7 +5,7 @@ import { ACCENT, ACCENT_SOFT, MarketingNav, MarketingFooter } from '@/components
 import { LiveSearch } from '@/components/live-search';
 import { BrandSwitcher } from '@/components/brand-switcher';
 import { BrandPipelinePanel, SaveCreatorButton } from '@/components/brand-pipeline';
-import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandDnaProfile } from '@/lib/brand-session';
+import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandDnaProfile, type BrandCollaborator } from '@/lib/brand-session';
 import { useBrandPipeline } from '@/lib/use-brand-pipeline';
 import { addBrandToRoster } from '@/lib/agency-session';
 import { useAgencyAccount } from '@/lib/use-agency-account';
@@ -237,6 +237,7 @@ export default function BrandHomePage() {
 
   const dna = session?.dna ?? null;
   const category = dna?.category || '';
+  const collaborators: BrandCollaborator[] = session?.collaborators ?? [];
   // Campaigns still generate against a sensible default posture (barter/gifting
   // first) — the explicit toggle was removed to keep the workspace uncluttered.
   const budget = 'barter — gifting / product-seeding first';
@@ -340,7 +341,10 @@ export default function BrandHomePage() {
         setDnaError(d.error || 'Could not analyse your brand. Please try again.');
         return;
       }
-      updateBrandSession({ dna: d.profile });
+      updateBrandSession({
+        dna: d.profile,
+        collaborators: Array.isArray(d.collaborators) ? d.collaborators : [],
+      });
     } catch {
       setDnaError('Could not reach the server. Please try again.');
     } finally {
@@ -454,6 +458,62 @@ export default function BrandHomePage() {
                 </ul>
               </div>
             ) : null}
+
+            {/* Creators who've worked with this brand before */}
+            {collaborators.length > 0 && (
+              <section className="mb-14">
+                <SectionHead
+                  eyebrow="Warm intros"
+                  title={`Creators who've worked with ${session.brand}`}
+                />
+                <p className="text-[14px] text-[#666] -mt-2 mb-5 max-w-2xl">
+                  Past collaborators and creators {session.brand} has tagged — the warmest place to restart a partnership.
+                </p>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {collaborators.map((cr) => (
+                    <div
+                      key={cr.username}
+                      className="flex items-center gap-3 rounded-2xl bg-white border border-[#eee] px-3.5 py-2.5 hover:border-[#c9bdfb] transition-colors"
+                    >
+                      <a
+                        href={`https://instagram.com/${cr.username}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 min-w-0 flex-1"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-[#f2f2f7] grid place-items-center text-[13px] font-semibold text-[#888] overflow-hidden shrink-0">
+                          {cr.profile_pic_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={cr.profile_pic_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            cr.username.slice(0, 1).toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13.5px] font-semibold text-[#111] truncate">@{cr.username}</div>
+                          <div className="text-[11.5px] text-[#888]">
+                            {cr.followers > 0
+                              ? <>{fmt(cr.followers)} followers{cr.engagement ? ` · ${cr.engagement.toFixed(1)}% ER` : ''}</>
+                              : 'Tap to view on Instagram'}
+                          </div>
+                        </div>
+                      </a>
+                      <SaveCreatorButton
+                        pipeline={pipeline}
+                        creator={{
+                          username: cr.username,
+                          full_name: cr.full_name,
+                          followers: cr.followers,
+                          engagement: cr.engagement,
+                          profile_pic_url: cr.profile_pic_url,
+                        }}
+                        compact
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Trending in your niche */}
             {trends.length > 0 && (

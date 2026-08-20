@@ -25,12 +25,25 @@ const EVENT = 'ii-brand-session';
 
 export type BrandMode = 'barter' | 'paid';
 
+// A creator the brand has previously worked with (from the DNA scrape step:
+// handles the brand tags in its own posts + an AI web search), enriched from the
+// creators table where we have them.
+export interface BrandCollaborator {
+  username: string;
+  full_name: string;
+  followers: number;
+  engagement: number;
+  profile_pic_url: string | null;
+  in_db?: boolean;
+}
+
 export interface BrandSession {
   brand: string;
   url?: string | null;
   social?: string | null;
   mode: BrandMode;            // whether the brand runs barter or paid campaigns
   dna: BrandDnaProfile | null;
+  collaborators?: BrandCollaborator[]; // creators who've worked with the brand
   ts: number;                 // when this session was last written
 }
 

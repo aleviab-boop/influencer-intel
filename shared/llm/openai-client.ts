@@ -60,6 +60,15 @@ export interface BrandDnaInput {
   url?: string | null;        // website URL to analyse
   social?: string | null;     // Instagram handle or profile URL
   notes?: string | null;      // any extra context the user typed
+  // Real scraped content (from lib/brand-scrape). When present the model grounds
+  // the DNA on the ACTUAL site + IG rather than guessing from the name alone.
+  siteText?: string | null;   // visible copy scraped from the website
+  siteTitle?: string | null;  // <title> / og:title
+  siteDescription?: string | null; // meta description
+  igBio?: string | null;      // Instagram bio
+  igCategory?: string | null; // Instagram category label
+  igFollowers?: number | null;// Instagram follower count
+  igCaptions?: string[] | null; // recent post captions
 }
 
 export interface BrandDnaProfile {
@@ -583,23 +592,90 @@ At most ${max} campaigns.`,
    * Search models reply with prose + citations, so the JSON is parsed leniently.
    */
   async analyzeBrandDna(input: BrandDnaInput): Promise<BrandDnaProfile> {
+    const igCaptions = (input.igCaptions ?? []).filter(Boolean).slice(0, 12);
     const brief = [
       `Brand name: ${input.brand}`,
       input.url ? `Website: ${input.url}` : '',
       input.social ? `Social profile: ${input.social}` : '',
       input.notes ? `Extra context: ${input.notes}` : '',
+      // Scraped, first-party ground truth — the model MUST base the DNA on this.
+      input.siteTitle ? `\n[Scraped website title] ${input.siteTitle}` : '',
+      input.siteDescription ? `[Scraped website description] ${input.siteDescription}` : '',
+      input.siteText ? `[Scraped website copy]\n${input.siteText}` : '',
+      input.igBio ? `\n[Scraped Instagram bio] ${input.igBio}` : '',
+      input.igCategory ? `[Instagram category] ${input.igCategory}` : '',
+      typeof input.igFollowers === 'number' && input.igFollowers > 0
+        ? `[Instagram followers] ${input.igFollowers.toLocaleString()}`
+        : '',
+      igCaptions.length ? `[Recent Instagram post captions]\n- ${igCaptions.join('\n- ')}` : '',
     ]
       .filter(Boolean)
       .join('\n');
 
+    const hasScrape = Boolean(input.siteText || input.igBio || igCaptions.length);
     const content = await this.webSearch(
-      `You are a brand strategist for an INDIAN influencer-marketing platform. Search the web for the brand's website and social profiles and distil a concise, factual "Brand DNA" profile that will drive creator-campaign planning. Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best inference from the category.
+      `You are a brand strategist for an INDIAN influencer-marketing platform. Distil a concise, factual "Brand DNA" profile that will drive creator-campaign planning.${
+        hasScrape
+          ? ' The brief below includes REAL scraped content from the brand\'s own website and Instagram — treat it as ground truth and base the DNA primarily on it. Use web search only to fill gaps or confirm.'
+          : ' Search the web for the brand\'s website and social profiles.'
+      } Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best inference from the category.
 Respond with ONLY a JSON object, no prose and no markdown fences:
 {"summary":"1-2 lines on who they are","category":"primary niche","positioning":"premium/value/etc + market stance","values":["..."],"personality":["tone adjectives"],"target_audience":"who they sell to","aesthetic":"visual style","content_pillars":["themes"],"keywords":["discovery keywords"],"creator_archetypes":["creator types that fit"],"competitors":["named peers"],"opportunities":["concrete, specific ways this brand could market or grow better via creators/social"]}
 Keep arrays to 3-7 items, India-relevant where applicable. "opportunities" must be actionable and specific to THIS brand, not generic advice.`,
       brief,
     );
     return this.parseBrandDna(content, input.brand);
+  }
+
+  /**
+   * Suggest REAL Instagram creators who have PREVIOUSLY WORKED WITH the brand —
+   * paid partnerships, gifting/PR, ambassadors, UGC. Uses the web-search model so
+   * it browses for actual, verifiable collaborations (press, the brand's tagged
+   * posts, creator "#ad" posts) rather than guessing. `seedHandles` are creators
+   * the brand tags in its own captions (a strong first-party signal we already
+   * scraped) — the model should confirm/keep those and add more it can verify.
+   * Every handle is validated against Instagram + the creator DB downstream, so
+   * hallucinations are dropped. Returns lowercase handles, no @.
+   */
+  async suggestBrandCollaborators(
+    brand: string,
+    opts: { category?: string; seedHandles?: string[]; max?: number } = {},
+  ): Promise<string[]> {
+    const max = opts.max ?? 12;
+    const seeds = (opts.seedHandles ?? []).filter(Boolean).slice(0, 20);
+    const brief = [
+      `Brand: ${brand}`,
+      opts.category ? `Category / niche: ${opts.category}` : '',
+      seeds.length
+        ? `Creators this brand tags in its own Instagram posts (strong signal they have collaborated — keep the real ones and add more):\n- ${seeds.join('\n- ')}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const content = await this.webSearch(
+      `You are an influencer-marketing researcher for an INDIAN brand platform. Search the web (the brand's tagged/mentioned Instagram posts, press coverage, creators' sponsored "#ad"/"paid partnership" posts) to find REAL Instagram creators who have actually WORKED WITH or been gifted by this brand before.
+Rules:
+- INDIA ONLY — real, currently-active Indian creators the brand has genuinely collaborated with. Never invent handles.
+- Prefer genuine nano/micro/mid-tier creators over global celebrities.
+- Exclude the brand's own account, reseller/shop pages, news outlets and agencies.
+- If you cannot verify a real past collaboration, do not include the handle.
+Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["username1","username2"]} with at most ${max} handles, no @ prefix.`,
+      brief,
+    );
+    const found = this.parseHandles(content, max);
+    // Union with the first-party seed handles (creators the brand already tags),
+    // de-duped, seeds first — those are the strongest evidence.
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const h of [...seeds, ...found]) {
+      const k = h.toLowerCase().replace(/^@/, '');
+      if (/^[a-z0-9._]{1,30}$/.test(k) && !seen.has(k)) {
+        seen.add(k);
+        out.push(k);
+      }
+    }
+    return out.slice(0, max);
   }
 
   /** Pull the DNA object out of an LLM reply (clean JSON, else first {...}),
