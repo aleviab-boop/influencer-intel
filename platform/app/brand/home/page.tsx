@@ -8,6 +8,7 @@ import { BrandPipelinePanel, SaveCreatorButton } from '@/components/brand-pipeli
 import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandMode } from '@/lib/brand-session';
 import { useBrandPipeline } from '@/lib/use-brand-pipeline';
 import { addBrandToRoster } from '@/lib/agency-session';
+import { useAgencyAccount } from '@/lib/use-agency-account';
 
 interface Creator {
   username: string;
@@ -44,6 +45,10 @@ const budgetForMode = (m: BrandMode): string =>
 
 export default function BrandHomePage() {
   const session = useBrandSession();
+  const { account, logout } = useAgencyAccount();
+  // A dedicated brand account owns exactly one brand (itself) — no roster to
+  // switch, and the workspace reads as a "Brand workspace" not an agency one.
+  const isBrand = account?.account_type === 'brand';
   const [ready, setReady] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
@@ -153,7 +158,7 @@ export default function BrandHomePage() {
             Your workspace personalises campaigns, creators and trends to your brand. Analyse your brand DNA to get started.
           </p>
           <a
-            href="/brand-dna"
+            href="/brand/login"
             className="inline-block mt-5 px-5 py-2.5 rounded-xl text-white text-[14px] font-semibold"
             style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
           >
@@ -174,10 +179,10 @@ export default function BrandHomePage() {
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
-                Agency workspace
+                {isBrand ? 'Brand workspace' : 'Agency workspace'}
               </span>
-              {/* Pick which of the agency's brands to work on */}
-              <BrandSwitcher activeBrand={session.brand} />
+              {/* Only agencies switch between a roster; a brand account owns one brand. */}
+              {!isBrand && <BrandSwitcher activeBrand={session.brand} />}
             </div>
             <h1 className="mt-3 text-3xl font-bold tracking-tight text-ink-900">{session.brand}</h1>
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
@@ -199,11 +204,16 @@ export default function BrandHomePage() {
                 </button>
               ))}
             </div>
+            {/* A brand account logs out entirely; an agency just switches brand. */}
             <button
-              onClick={() => { clearBrandSession(); window.location.href = '/brand/login'; }}
+              onClick={async () => {
+                if (isBrand) await logout();
+                clearBrandSession();
+                window.location.href = '/brand/login';
+              }}
               className="text-[12.5px] text-ink-400 hover:text-ink-600 underline"
             >
-              Switch brand
+              {isBrand ? 'Log out' : 'Switch brand'}
             </button>
           </div>
         </header>

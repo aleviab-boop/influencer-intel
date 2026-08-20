@@ -11,6 +11,8 @@ export interface AgencyAccount {
   id: string;
   email: string;
   name: string | null;
+  // 'brand' = a single brand that owns itself; 'agency' = manages many (mig 043).
+  account_type?: 'agency' | 'brand';
 }
 
 export function useAgencyAccount() {
