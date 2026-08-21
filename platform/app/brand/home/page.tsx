@@ -515,8 +515,8 @@ export default function BrandHomePage() {
                 </div>
                 <ul className="mt-4 grid sm:grid-cols-2 gap-x-8 gap-y-3">
                   {dna.opportunities.map((o) => (
-                    <li key={o} className="text-[14.5px] text-[#333] flex gap-2.5 leading-relaxed">
-                      <span className="mt-0.5 shrink-0" style={{ color: ACCENT }}>→</span>
+                    <li key={o} className="group text-[14.5px] text-[#333] flex gap-2.5 leading-relaxed">
+                      <span className="mt-0.5 shrink-0 transition-transform duration-200 group-hover:translate-x-1" style={{ color: ACCENT }}>→</span>
                       <span>{o}</span>
                     </li>
                   ))}
@@ -538,7 +538,7 @@ export default function BrandHomePage() {
                   {collaborators.map((cr) => (
                     <div
                       key={cr.username}
-                      className="flex items-center gap-3 rounded-2xl bg-white border border-[#eee] px-3.5 py-2.5 hover:border-[#c9bdfb] transition-colors"
+                      className="flex items-center gap-3 rounded-2xl bg-white border border-[#eee] px-3.5 py-2.5 transition-all duration-200 hover:border-[#c9bdfb] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(108,77,246,0.10)]"
                     >
                       <a
                         href={`https://instagram.com/${cr.username}`}
@@ -583,7 +583,7 @@ export default function BrandHomePage() {
                     return (
                       <div
                         key={`${t.trend_type}-${t.display_name}`}
-                        className="rounded-2xl bg-white border border-[#eee] px-4 py-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.05)]"
+                        className="rounded-2xl bg-white border border-[#eee] px-4 py-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#c9bdfb] hover:shadow-[0_12px_34px_rgba(108,77,246,0.12)]"
                       >
                         <div className="flex items-center gap-2">
                           <div className="text-[14px] font-semibold text-[#111]">{t.display_name}</div>
@@ -626,7 +626,7 @@ export default function BrandHomePage() {
               {campaigns && campaigns.length > 0 && (
                 <div className="space-y-5">
                   {campaigns.map((c, i) => (
-                    <div key={i} className="rounded-[26px] bg-white border border-[#eeeef6] shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden">
+                    <div key={i} className="rounded-[26px] bg-white border border-[#eeeef6] shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden transition-all duration-300 hover:-translate-y-1 hover:border-[#e0d9fb] hover:shadow-[0_20px_60px_rgba(108,77,246,0.12)]">
                       <div className="p-6 md:p-7">
                         <div className="flex items-start justify-between gap-4 flex-wrap">
                           <div className="flex items-start gap-3.5 min-w-0">
@@ -707,7 +707,7 @@ export default function BrandHomePage() {
                             {c.creators.map((cr) => (
                               <div
                                 key={cr.username}
-                                className="flex items-center gap-3 rounded-2xl bg-white border border-[#eee] px-3.5 py-2.5 hover:border-[#c9bdfb] transition-colors"
+                                className="flex items-center gap-3 rounded-2xl bg-white border border-[#eee] px-3.5 py-2.5 transition-all duration-200 hover:border-[#c9bdfb] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(108,77,246,0.10)]"
                               >
                                 <a
                                   href={`https://instagram.com/${cr.username}`}
@@ -867,9 +867,9 @@ function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfil
           {sections.map((s, i) => (
             <div
               key={s.label}
-              className="relative p-6 md:p-7 border-b border-[#f2f2f7] sm:[&:nth-child(2n)]:border-l lg:[&:nth-child(2n)]:border-l-0 lg:[&:not(:nth-child(3n+1))]:border-l border-[#f2f2f7]"
+              className="group relative p-6 md:p-7 border-b border-[#f2f2f7] sm:[&:nth-child(2n)]:border-l lg:[&:nth-child(2n)]:border-l-0 lg:[&:not(:nth-child(3n+1))]:border-l border-[#f2f2f7] transition-colors duration-200 hover:bg-[#faf9ff]"
             >
-              <div className="text-[34px] font-bold leading-none tabular-nums" style={{ color: ACCENT, opacity: 0.22 }}>
+              <div className="text-[34px] font-bold leading-none tabular-nums opacity-20 transition-opacity duration-200 group-hover:opacity-40" style={{ color: ACCENT }}>
                 {String(i + 1).padStart(2, '0')}
               </div>
               <div className="mt-3 text-[14px] font-bold text-[#111]">{s.label}</div>
