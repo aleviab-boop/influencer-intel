@@ -783,6 +783,9 @@ export default function BrandHomePage() {
           </section>
         )}
 
+        {/* Build & run your own campaigns manually (brand-scoped programs) */}
+        <BrandCampaignManager brand={session.brand} />
+
         {/* Your pipeline — the creator funnel for this brand */}
         <section className="mb-14">
           <SectionHead
@@ -824,6 +827,240 @@ function Tag({ children }: { children: React.ReactNode }) {
     <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize" style={{ background: ACCENT_SOFT, color: ACCENT }}>
       {children}
     </span>
+  );
+}
+
+// A campaign is a program the brand runs (recruit creators → pipeline → deals →
+// budget). Mirrors the fields the standalone /campaigns manager persists.
+interface BrandProgram {
+  id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  recruit_count: number;
+  recruited_count: number;
+  budget: number | string | null;
+  spent: number | string | null;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string;
+}
+
+const inr = (v: number | string | null): string => {
+  const n = v == null ? 0 : Number(v) || 0;
+  return '₹' + (n >= 1e7 ? (n / 1e7).toFixed(1) + 'Cr' : n >= 1e5 ? (n / 1e5).toFixed(1) + 'L' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(Math.round(n)));
+};
+const fmtDate = (s: string | null): string => {
+  if (!s) return '';
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+};
+const campRange = (a: string | null, b: string | null): string | null => {
+  if (a && b) return `${fmtDate(a)} – ${fmtDate(b)}`;
+  if (a) return `From ${fmtDate(a)}`;
+  if (b) return `Until ${fmtDate(b)}`;
+  return null;
+};
+const CAMP_STATUS: Record<string, { t: string; c: string; b: string }> = {
+  active: { t: 'Active', c: '#047857', b: '#ecfdf5' },
+  paused: { t: 'Paused', c: '#b45309', b: '#fffbeb' },
+  closed: { t: 'Closed', c: '#6b7280', b: '#f3f4f6' },
+};
+
+// The brand's OWN campaign manager, embedded in the workspace: build a campaign
+// by hand (name, brief, requirements, budget, dates) and see the ones already
+// running — persisted brand-scoped via /api/programs, the same store the
+// standalone /campaigns manager uses. Complements the AI "Campaigns you can run"
+// ideas above with a place to actually plan and track real programs.
+function BrandCampaignManager({ brand }: { brand: string }) {
+  const [programs, setPrograms] = useState<BrandProgram[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ name: '', description: '', requirements: '', budget: '', start_date: '', end_date: '' });
+  const setF = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/programs');
+      const d = await r.json().catch(() => ({}));
+      setPrograms(Array.isArray(d.programs) ? d.programs : []);
+    } catch {
+      /* best-effort — the section just shows empty */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const create = async () => {
+    if (form.name.trim().length < 2) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/programs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          requirements: form.requirements.trim() || undefined,
+          budget: form.budget ? Number(form.budget) : undefined,
+          start_date: form.start_date || undefined,
+          end_date: form.end_date || undefined,
+        }),
+      });
+      if (r.ok) {
+        setForm({ name: '', description: '', requirements: '', budget: '', start_date: '', end_date: '' });
+        setCreating(false);
+        await load();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const active = programs.filter((p) => p.status === 'active').length;
+  const spend = programs.reduce((s, p) => s + (Number(p.spent) || 0), 0);
+  const cinp = 'w-full px-3 py-2 border border-[#e6e6ef] bg-white text-[14px] text-[#111] rounded-lg focus:outline-none focus:border-[#6C4DF6] transition-colors';
+
+  return (
+    <section className="mb-14">
+      <SectionHead
+        eyebrow="Plan & run"
+        title="Campaigns you manage"
+        action={
+          <div className="flex items-center gap-3">
+            <a href="/campaigns" className="text-[13px] font-semibold hover:opacity-80" style={{ color: ACCENT }}>
+              Open full manager →
+            </a>
+            <button
+              onClick={() => setCreating((c) => !c)}
+              className="text-[13px] font-semibold text-white px-3.5 py-2 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+            >
+              {creating ? 'Close' : '+ New campaign'}
+            </button>
+          </div>
+        }
+      />
+      <p className="text-[14px] text-[#666] -mt-2 mb-5 max-w-2xl">
+        Build a campaign by hand and track it end to end — recruit creators, move them through your pipeline, set deals and watch budget. Scoped to {brand}.
+      </p>
+
+      {/* Manual create form */}
+      {creating && (
+        <div className="mb-5 p-5 md:p-6 rounded-[22px] bg-white border border-[#eeeef6] shadow-[0_8px_40px_rgba(0,0,0,0.06)]">
+          <div className="text-[13px] font-semibold text-[#111] mb-4">New campaign</div>
+          <div className="grid md:grid-cols-2 gap-3.5">
+            <CampField label="Campaign name" className="md:col-span-2">
+              <input value={form.name} onChange={setF('name')} onKeyDown={(e) => e.key === 'Enter' && create()} autoFocus placeholder="e.g. Festive glow-up with creators" className={cinp} />
+            </CampField>
+            <CampField label="Brief / goal (optional)" className="md:col-span-2">
+              <textarea value={form.description} onChange={setF('description')} rows={2} placeholder={`What's this campaign about? e.g. recruit 10 skincare micro-creators for a ${brand} launch`} className={`${cinp} resize-none`} />
+            </CampField>
+            <CampField label="Requirements (optional)" className="md:col-span-2">
+              <textarea value={form.requirements} onChange={setF('requirements')} rows={3} placeholder="Who & what you need — e.g. 50K–300K followers, ER 2%+, based in Mumbai/Delhi, 1 reel + 2 stories, deliver by the 20th" className={`${cinp} resize-none`} />
+            </CampField>
+            <CampField label="Budget (₹, optional)">
+              <input type="number" value={form.budget} onChange={setF('budget')} placeholder="500000" className={cinp} />
+            </CampField>
+            <div className="grid grid-cols-2 gap-3.5">
+              <CampField label="Start date"><input type="date" value={form.start_date} onChange={setF('start_date')} className={cinp} /></CampField>
+              <CampField label="End date"><input type="date" value={form.end_date} onChange={setF('end_date')} className={cinp} /></CampField>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={() => setCreating(false)} className="px-4 py-2 text-[13px] text-[#666] hover:text-[#111]">Cancel</button>
+            <button
+              onClick={create}
+              disabled={busy || form.name.trim().length < 2}
+              className="px-5 py-2 text-[13px] font-semibold text-white rounded-lg disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+            >
+              {busy ? 'Creating…' : 'Create campaign'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Existing campaigns */}
+      {loading ? (
+        <div className="flex items-center justify-center py-14">
+          <div className="w-8 h-8 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
+        </div>
+      ) : programs.length === 0 ? (
+        <div className="text-[14px] text-[#888] py-12 text-center rounded-[22px] border border-dashed border-[#e6e6ef] bg-white">
+          No campaigns yet. Hit <span className="font-semibold" style={{ color: ACCENT }}>+ New campaign</span> to build one by hand.
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2 mb-4 text-[12.5px] text-[#666]">
+            <span className="px-3 py-1 rounded-full bg-white border border-[#eee]"><b className="text-[#111]">{programs.length}</b> campaigns</span>
+            <span className="px-3 py-1 rounded-full bg-white border border-[#eee]"><b className="text-[#111]">{active}</b> active</span>
+            <span className="px-3 py-1 rounded-full bg-white border border-[#eee]">Committed spend <b style={{ color: ACCENT }}>{inr(spend)}</b></span>
+          </div>
+          <div className="space-y-2.5">
+            {programs.map((p) => {
+              const budget = Number(p.budget) || 0;
+              const spent = Number(p.spent) || 0;
+              const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+              const over = budget > 0 && spent > budget;
+              const st = CAMP_STATUS[p.status] ?? { t: p.status, c: '#6b7280', b: '#f3f4f6' };
+              const range = campRange(p.start_date, p.end_date);
+              return (
+                <a
+                  key={p.id}
+                  href={`/campaigns/${p.id}`}
+                  className="group flex items-center gap-4 px-5 py-4 rounded-2xl bg-white border border-[#eee] transition-all duration-200 hover:border-[#c9bdfb] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(108,77,246,0.10)]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-semibold text-[#111] truncate group-hover:text-[#6C4DF6] transition-colors">{p.name}</span>
+                      <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2 py-0.5 rounded-full" style={{ color: st.c, background: st.b }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.c }} />
+                        {st.t}
+                      </span>
+                    </div>
+                    <div className="text-[12px] text-[#888] mt-1 flex items-center gap-2 flex-wrap">
+                      {range ? <span className="text-[#666] font-medium">{range}</span> : <span>Created {fmtDate(p.created_at)}</span>}
+                      <span className="text-[#ccc]">·</span>
+                      <span>{p.recruit_count} creators</span>
+                      <span className="text-[#ccc]">·</span>
+                      <span className="text-emerald-700">{p.recruited_count} confirmed</span>
+                    </div>
+                  </div>
+                  <div className="hidden sm:block w-40 shrink-0">
+                    <div className="flex items-center justify-between text-[12px] mb-1">
+                      <span className={over ? 'text-rose-600 font-medium' : 'text-[#444] font-medium'}>{inr(spent)}</span>
+                      <span className="text-[#999]">{budget > 0 ? `of ${inr(budget)}` : 'no budget'}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-[#eef] overflow-hidden">
+                      <div className="h-1.5 rounded-full" style={{ width: `${budget > 0 ? pct : 0}%`, background: over ? '#ef4444' : 'linear-gradient(90deg,#6C4DF6,#9b7bff)' }} />
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-[#ccc] group-hover:text-[#6C4DF6] transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function CampField({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <label className={`block ${className ?? ''}`}>
+      <span className="text-[12px] text-[#888] mb-1 block">{label}</span>
+      {children}
+    </label>
   );
 }
 
