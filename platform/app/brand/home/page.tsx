@@ -498,6 +498,12 @@ export default function BrandHomePage() {
         {/* Brand-DNA-driven intelligence, or an empty state that unlocks it */}
         {category ? (
           <>
+            {/* Brand DNA profile — laid out like a brand-guidelines deck: a
+                numbered section per DNA facet. This is the saved analysis the
+                whole workspace personalises from; surfaced here so the brand
+                can read (and re-run) it. */}
+            {dna && <BrandDnaGuidelines brand={session.brand} dna={dna} />}
+
             {/* What they can improve */}
             {dna?.opportunities?.length ? (
               <div
@@ -805,5 +811,77 @@ function Tag({ children }: { children: React.ReactNode }) {
     <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize" style={{ background: ACCENT_SOFT, color: ACCENT }}>
       {children}
     </span>
+  );
+}
+
+// The Brand DNA profile rendered as a brand-guidelines deck: each populated DNA
+// facet becomes its own numbered section (01, 02, …) with a big index numeral,
+// a label and either prose or a chip row — mirroring a printed brand book.
+function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfile }) {
+  type Section = { label: string; caption: string } & (
+    | { kind: 'text'; value: string }
+    | { kind: 'chips'; value: string[] }
+  );
+  const text = (v?: string | null): string => (typeof v === 'string' ? v.trim() : '');
+  const chips = (v?: string[]): string[] => (v ?? []).map((x) => x.trim()).filter(Boolean);
+
+  const raw: (Section | null)[] = [
+    text(dna.summary) ? { label: 'Brand story', caption: 'Who they are', kind: 'text', value: text(dna.summary) } : null,
+    text(dna.positioning) ? { label: 'Positioning', caption: 'Market stance', kind: 'text', value: text(dna.positioning) } : null,
+    text(dna.target_audience) ? { label: 'Audience', caption: 'Who they sell to', kind: 'text', value: text(dna.target_audience) } : null,
+    chips(dna.values).length ? { label: 'Values', caption: 'What they stand for', kind: 'chips', value: chips(dna.values) } : null,
+    chips(dna.personality).length ? { label: 'Personality', caption: 'Tone & voice', kind: 'chips', value: chips(dna.personality) } : null,
+    text(dna.aesthetic) ? { label: 'Aesthetic', caption: 'Look & feel', kind: 'text', value: text(dna.aesthetic) } : null,
+    chips(dna.content_pillars).length ? { label: 'Content pillars', caption: 'Recurring themes', kind: 'chips', value: chips(dna.content_pillars) } : null,
+    chips(dna.keywords).length ? { label: 'Keywords', caption: 'Discovery terms', kind: 'chips', value: chips(dna.keywords) } : null,
+    chips(dna.creator_archetypes).length ? { label: 'Creator fit', caption: 'Who to work with', kind: 'chips', value: chips(dna.creator_archetypes) } : null,
+    chips(dna.competitors).length ? { label: 'Competitors', caption: 'Peers & rivals', kind: 'chips', value: chips(dna.competitors) } : null,
+  ];
+  const sections = raw.filter((s): s is Section => s !== null);
+
+  return (
+    <section className="mb-14">
+      <SectionHead
+        eyebrow="Brand DNA"
+        title={`${brand} brand guidelines`}
+        action={
+          <a href="/brand-dna" className="text-[13px] font-semibold hover:opacity-80" style={{ color: ACCENT }}>
+            Re-analyse →
+          </a>
+        }
+      />
+      <div className="rounded-[26px] overflow-hidden border border-[#eeeef6] shadow-[0_8px_40px_rgba(0,0,0,0.06)] bg-white">
+        {/* Cover band */}
+        <div className="px-6 md:px-8 py-7 border-b border-[#f0f0f0]" style={{ background: ACCENT_SOFT }}>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: ACCENT }}>Brand guidelines</div>
+          <h3 className="mt-1 text-[26px] md:text-[30px] font-bold tracking-tight text-[#111]">{brand}</h3>
+          {text(dna.category) && <p className="mt-1 text-[14px] text-[#555] capitalize">{text(dna.category)}</p>}
+        </div>
+        {/* Numbered sections */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3">
+          {sections.map((s, i) => (
+            <div
+              key={s.label}
+              className="relative p-6 md:p-7 border-b border-[#f2f2f7] sm:[&:nth-child(2n)]:border-l lg:[&:nth-child(2n)]:border-l-0 lg:[&:not(:nth-child(3n+1))]:border-l border-[#f2f2f7]"
+            >
+              <div className="text-[34px] font-bold leading-none tabular-nums" style={{ color: ACCENT, opacity: 0.22 }}>
+                {String(i + 1).padStart(2, '0')}
+              </div>
+              <div className="mt-3 text-[14px] font-bold text-[#111]">{s.label}</div>
+              <div className="text-[11.5px] text-[#999] mb-2.5">{s.caption}</div>
+              {s.kind === 'text' ? (
+                <p className="text-[13.5px] text-[#444] leading-relaxed">{s.value}</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {s.value.map((v) => (
+                    <span key={v} className="text-[12px] px-2.5 py-1 rounded-full border border-[#ececf6] bg-[#fafafc] text-[#555] capitalize">{v}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
