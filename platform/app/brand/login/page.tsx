@@ -171,8 +171,10 @@ export default function BrandLoginPage() {
 
         {accountLoading ? (
           <p className="text-center text-[14px] text-ink-500 py-16">Loading…</p>
-        ) : !account ? (
-          /* Signed out → credentialed brand sign-in. */
+        ) : (
+          <>
+          {/* Brand sign-in form — always shown so you can sign in fresh, even
+              when a session already exists (per product decision). */}
           <div className="max-w-md mx-auto">
             <header className="mb-6 text-center">
               <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
@@ -208,9 +210,11 @@ export default function BrandLoginPage() {
               Managing brands for clients? <a href="/agency/login" className="font-semibold text-ink-500 hover:text-ink-700">Agency login →</a>
             </p>
           </div>
-        ) : (
-          /* Signed in → pick which owned brand to work on. */
-          <>
+
+            {/* If already signed in, also list the brands on this account below
+                the form so you can jump straight in without re-authenticating. */}
+            {account && (
+              <div className="mt-14 pt-10 border-t border-border">
             <header className="mb-8 text-center">
               <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>
                 Your brands
@@ -290,6 +294,8 @@ export default function BrandLoginPage() {
               <p className="mt-6 text-center text-[13.5px] text-ink-500">
                 No brands yet — set one up to get started.
               </p>
+            )}
+              </div>
             )}
           </>
         )}
