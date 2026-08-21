@@ -93,6 +93,13 @@ export async function handleProfileScrape(
 
   await persistCreator(extraction, vision, { isActive: true, geoSignals });
 
+  // Vision-tag the freshly-scraped post thumbnails while their signed IG CDN
+  // URLs are still valid, caching motifs in post_visual_tags. The daily trend
+  // ingest aggregates these into visual/aesthetic trend_signals ("stripes",
+  // "pastel palette") — it can't fetch the images itself because those URLs
+  // expire within hours of the crawl. Best-effort; never fails the job.
+  await tagPostVisuals(handle, extraction.recent_posts, llm);
+
   // Fire-and-forget audience inference enqueue (don't block this job).
   void queue.enqueueBackground({
     job_type: 'audience_inference',
@@ -101,6 +108,76 @@ export async function handleProfileScrape(
   });
 
   await fastDelay();
+}
+
+/**
+ * Vision-tag a creator's freshly-scraped post thumbnails into post_visual_tags,
+ * while the signed IG CDN URLs are still valid. The daily trend-ingest job then
+ * aggregates these cached tags into visual/aesthetic trend_signals — it can't
+ * fetch the images itself because the URLs expire within hours of the crawl.
+ * Best-effort and cached: already-tagged posts are skipped so re-crawls spend
+ * no tokens. Gated by SCRAPE_VISUAL_TAGGING=off for cost control.
+ */
+async function tagPostVisuals(
+  handle: string,
+  posts: RecentPost[],
+  llm: ReturnType<typeof getOpenAIClient>,
+): Promise<void> {
+  if (process.env.SCRAPE_VISUAL_TAGGING === 'off') return;
+  try {
+    // extractVisualMotifs handles ≤8 images per call; take the newest slice.
+    const candidates = (Array.isArray(posts) ? posts : [])
+      .filter((p): p is RecentPost & { platform_post_id: string; thumbnail_url: string } =>
+        Boolean(p.platform_post_id && p.thumbnail_url))
+      .slice(0, 8);
+    if (candidates.length === 0) return;
+
+    const db = getBolticClient();
+    const ids = candidates.map((p) => p.platform_post_id);
+
+    // Skip posts already in the cache so a re-crawl doesn't re-spend tokens.
+    let alreadyTagged = new Set<string>();
+    try {
+      const rows = await db.query<{ platform_post_id: string }>(
+        `SELECT platform_post_id FROM post_visual_tags WHERE platform_post_id = ANY($1::text[])`,
+        [ids],
+      );
+      alreadyTagged = new Set(rows.map((r) => r.platform_post_id));
+    } catch {
+      // Table not migrated on this DB yet → treat everything as untagged.
+    }
+
+    const toTag = candidates.filter((p) => !alreadyTagged.has(p.platform_post_id));
+    if (toTag.length === 0) return;
+
+    const motifs = await llm.extractVisualMotifs(
+      toTag.map((p) => ({ postId: p.platform_post_id, imageUrl: p.thumbnail_url })),
+    );
+
+    let withMotifs = 0;
+    for (const p of toTag) {
+      const tags = motifs[p.platform_post_id] ?? [];
+      try {
+        // Cache every result — empty tags too — so we don't retry a post whose
+        // image simply had no clear aesthetic (or was already gone).
+        await db.query(
+          `INSERT INTO post_visual_tags (platform_post_id, tags, tagged_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (platform_post_id) DO UPDATE SET tags = EXCLUDED.tags, tagged_at = NOW()`,
+          [p.platform_post_id, tags],
+        );
+        if (tags.length > 0) withMotifs += 1;
+      } catch (err) {
+        console.warn(
+          `[profile-scraper] ${handle}: visual-tag write failed for ${p.platform_post_id}`,
+          (err as Error).message,
+        );
+      }
+    }
+    console.log(`[profile-scraper] ${handle}: visual-tagged ${toTag.length} posts (${withMotifs} with motifs)`);
+  } catch (err) {
+    console.warn(`[profile-scraper] ${handle}: visual tagging failed`, (err as Error).message);
+  }
 }
 
 /**
