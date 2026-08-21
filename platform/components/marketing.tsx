@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BookDemoButton } from './book-demo';
+import { Doodle } from './doodles';
 import { useAgencyAccount } from '@/lib/use-agency-account';
 import { clearBrandSession } from '@/lib/brand-session';
 
@@ -356,8 +357,13 @@ export function MarketingFooter() {
     { h: 'About', links: ['Team', 'Contact', 'Privacy Policy', 'Terms'] },
   ];
   return (
-    <footer className="bg-[#0c0c0c] text-[#bbb] pt-14 pb-8">
-      <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
+    <footer className="relative overflow-hidden bg-[#0c0c0c] text-[#bbb] pt-14 pb-8">
+      {/* Floating doodles — the shared brand-book aesthetic, present site-wide via the footer. */}
+      <Doodle shape={0} color="#8B7BF7" className="ii-floatr pointer-events-none absolute left-[8%] top-8 h-8 w-8 opacity-25" style={{ ['--r' as string]: '10deg', animationDelay: '0s' }} />
+      <Doodle shape={1} color="#F472B6" className="ii-floatr pointer-events-none absolute right-[10%] top-12 h-7 w-7 opacity-20" style={{ ['--r' as string]: '-8deg', animationDelay: '1.2s' }} />
+      <Doodle shape={2} color="#38BDF8" className="ii-floatr pointer-events-none absolute left-[42%] bottom-10 h-10 w-10 opacity-15" style={{ ['--r' as string]: '6deg', animationDelay: '.6s' }} />
+      <Doodle shape={5} color="#FBBF24" className="ii-floatr pointer-events-none absolute right-[6%] bottom-8 h-8 w-8 opacity-20" style={{ ['--r' as string]: '-12deg', animationDelay: '2s' }} />
+      <div className="relative max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-2 mb-3">
             <BrandMark size={28} />

@@ -80,6 +80,9 @@ button, input, textarea, select {
 .ii-fadeup { animation: ii-fadeup .55s cubic-bezier(.22,.61,.36,1) forwards; }
 @keyframes ii-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .ii-float { animation: ii-float 4s ease-in-out infinite; }
+/* Rotation-aware float for the shared doodle set (holds a --r tilt while it bobs). */
+@keyframes ii-floatr { 0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); } 50% { transform: translateY(-9px) rotate(var(--r, 0deg)); } }
+.ii-floatr { animation: ii-floatr 6s ease-in-out infinite; transform: rotate(var(--r, 0deg)); }
 @keyframes ii-countup { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .ii-countup { animation: ii-countup .5s ease forwards; }
 
@@ -93,4 +96,5 @@ button, input, textarea, select {
 }
 @media (prefers-reduced-motion: reduce) {
   .ii-reveal { opacity: 1; transform: none; }
+  .ii-floatr { animation: none; }
 }

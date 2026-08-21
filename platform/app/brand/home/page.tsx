@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ACCENT, ACCENT_SOFT, MarketingNav, MarketingFooter } from '@/components/marketing';
+import { Doodle, DOODLE_HUES } from '@/components/doodles';
 import { LiveSearch } from '@/components/live-search';
 import { BrandSwitcher } from '@/components/brand-switcher';
 import { BrandPipelinePanel, SaveCreatorButton } from '@/components/brand-pipeline';
@@ -1090,20 +1091,9 @@ function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfil
   ];
   const sections = raw.filter((s): s is Section => s !== null);
 
-  // Playful per-card accents + hand-drawn doodles so the "brand book" feels
-  // alive rather than a static spec sheet. Each card cycles a colour + doodle.
-  const HUES = ['#6C4DF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EF4444', '#14B8A6', '#F97316'];
-  const DOODLES: ((c: string) => ReactNode)[] = [
-    (c) => <path d="M12 2c.6 4.6 3.4 7.4 8 8-4.6.6-7.4 3.4-8 8-.6-4.6-3.4-7.4-8-8 4.6-.6 7.4-3.4 8-8z" fill={c} />,
-    (c) => <path d="M12 3l2.6 5.5 5.9.6-4.4 4 1.2 5.9L12 21l-5.3 3 1.2-5.9-4.4-4 5.9-.6z" fill="none" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />,
-    (c) => <path d="M2 13c2.5-4.5 4.5 3.5 7 0s4.5-4.5 7 0 4.5 3.5 6 0" fill="none" stroke={c} strokeWidth="1.9" strokeLinecap="round" />,
-    (c) => <path d="M12 20s-6.8-4.3-8.7-8.6C2 8.5 4.2 6 7 6.9c1.6.5 2.4 1.9 3 2.9.6-1 1.4-2.4 3-2.9 2.8-.9 5 1.6 3.7 4.5C14.8 15.7 12 20 12 20z" fill="none" stroke={c} strokeWidth="1.6" />,
-    (c) => <g stroke={c} strokeWidth="1.6" strokeLinecap="round" fill="none"><circle cx="12" cy="12" r="4" /><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19" /></g>,
-    (c) => <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" fill="none" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />,
-    (c) => <g fill="none" stroke={c} strokeWidth="1.5"><circle cx="12" cy="7" r="3" /><circle cx="7" cy="14" r="3" /><circle cx="17" cy="14" r="3" /><circle cx="12" cy="13" r="1.8" fill={c} /></g>,
-    (c) => <path d="M4 16C8 8 13.5 6 19 7m0 0-4-2.2M19 7l-2.2 4.2" fill="none" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />,
-    (c) => <path d="M12 4c5 0 8 3.2 8 8s-3 8-8 8-8-3-8-8c0-3.6 2.4-6.7 6-7.6" fill="none" stroke={c} strokeWidth="1.7" strokeLinecap="round" />,
-  ];
+  // Playful per-card accents + hand-drawn doodles (shared set) so the "brand
+  // book" feels alive rather than a static spec sheet. Each card cycles a hue.
+  const HUES = DOODLE_HUES;
 
   const gridRef = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
@@ -1121,11 +1111,9 @@ function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfil
   return (
     <section className="mb-14">
       <style>{`
-        @keyframes iiFloat { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)); } 50% { transform: translateY(-9px) rotate(var(--r,0deg)); } }
-        .ii-float { animation: iiFloat 6s ease-in-out infinite; }
         .ii-dna-card { opacity: 0; transform: translateY(16px); }
         .ii-dna-card.ii-in { opacity: 1; transform: none; transition: opacity .55s cubic-bezier(.22,1,.36,1), transform .55s cubic-bezier(.22,1,.36,1); }
-        @media (prefers-reduced-motion: reduce) { .ii-float { animation: none; } .ii-dna-card { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .ii-dna-card { opacity: 1; transform: none; } }
       `}</style>
       <SectionHead
         eyebrow="Brand DNA"
@@ -1139,10 +1127,10 @@ function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfil
       <div className="rounded-[26px] overflow-hidden border border-[#eeeef6] shadow-[0_8px_40px_rgba(0,0,0,0.06)] bg-white">
         {/* Cover band with floating doodles */}
         <div className="relative overflow-hidden px-6 md:px-8 py-8 border-b border-[#f0f0f0]" style={{ background: ACCENT_SOFT }}>
-          <svg className="ii-float pointer-events-none absolute right-8 top-5 h-9 w-9 opacity-70" style={{ ['--r' as string]: '12deg', animationDelay: '0s' }} viewBox="0 0 24 24">{DOODLES[0]!('#6C4DF6')}</svg>
-          <svg className="ii-float pointer-events-none absolute right-24 top-10 h-6 w-6 opacity-60" style={{ ['--r' as string]: '-8deg', animationDelay: '1.2s' }} viewBox="0 0 24 24">{DOODLES[1]!('#EC4899')}</svg>
-          <svg className="ii-float pointer-events-none absolute right-1 bottom-3 h-16 w-16 opacity-40" style={{ ['--r' as string]: '6deg', animationDelay: '.6s' }} viewBox="0 0 24 24">{DOODLES[2]!('#8B5CF6')}</svg>
-          <svg className="ii-float pointer-events-none absolute left-1 -bottom-2 h-14 w-14 opacity-30" style={{ ['--r' as string]: '-14deg', animationDelay: '2s' }} viewBox="0 0 24 24">{DOODLES[7]!('#F59E0B')}</svg>
+          <Doodle shape={0} color="#6C4DF6" className="ii-floatr pointer-events-none absolute right-8 top-5 h-9 w-9 opacity-70" style={{ ['--r' as string]: '12deg', animationDelay: '0s' }} />
+          <Doodle shape={1} color="#EC4899" className="ii-floatr pointer-events-none absolute right-24 top-10 h-6 w-6 opacity-60" style={{ ['--r' as string]: '-8deg', animationDelay: '1.2s' }} />
+          <Doodle shape={2} color="#8B5CF6" className="ii-floatr pointer-events-none absolute right-1 bottom-3 h-16 w-16 opacity-40" style={{ ['--r' as string]: '6deg', animationDelay: '.6s' }} />
+          <Doodle shape={7} color="#F59E0B" className="ii-floatr pointer-events-none absolute left-1 -bottom-2 h-14 w-14 opacity-30" style={{ ['--r' as string]: '-14deg', animationDelay: '2s' }} />
           <div className="relative">
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: ACCENT }}>Brand guidelines</div>
             <h3 className="mt-1 text-[26px] md:text-[30px] font-bold tracking-tight text-[#111]">{brand}</h3>
@@ -1153,7 +1141,6 @@ function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfil
         <div ref={gridRef} className="grid sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((s, i) => {
             const hue = HUES[i % HUES.length]!;
-            const doodle = DOODLES[i % DOODLES.length]!;
             return (
               <div
                 key={s.label}
@@ -1163,7 +1150,7 @@ function BrandDnaGuidelines({ brand, dna }: { brand: string; dna: BrandDnaProfil
                 {/* growing accent bar */}
                 <span className="absolute left-0 top-7 bottom-7 w-[3px] rounded-full origin-top scale-y-0 opacity-0 transition-all duration-300 group-hover:scale-y-100 group-hover:opacity-100" style={{ background: hue }} />
                 {/* corner doodle */}
-                <svg className="pointer-events-none absolute right-5 top-5 h-7 w-7 opacity-25 transition-all duration-300 group-hover:opacity-90 group-hover:rotate-12 group-hover:scale-110" viewBox="0 0 24 24">{doodle(hue)}</svg>
+                <Doodle shape={i} color={hue} className="pointer-events-none absolute right-5 top-5 h-7 w-7 opacity-25 transition-all duration-300 group-hover:opacity-90 group-hover:rotate-12 group-hover:scale-110" />
                 <div className="text-[34px] font-bold leading-none tabular-nums opacity-30 transition-all duration-200 group-hover:opacity-70" style={{ color: hue }}>
                   {String(i + 1).padStart(2, '0')}
                 </div>

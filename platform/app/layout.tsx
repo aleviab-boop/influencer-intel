@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import localFont from 'next/font/local';
 import { ScrollMotion } from '@/components/scroll-motion';
+import { DoodleField } from '@/components/doodles';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -32,6 +33,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${fynd.variable}`}>
       <body className="antialiased min-h-screen bg-white text-[#111] font-sans">
         <ScrollMotion />
+        <DoodleField />
         {children}
       </body>
     </html>
