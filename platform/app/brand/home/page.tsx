@@ -155,7 +155,7 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
   };
 
   return (
-    <div className="mt-8 relative max-w-5xl text-left">
+    <div className="mt-8 relative w-full text-left">
       <div className="rounded-2xl bg-white border-2 transition-colors p-4 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] border-[#e3def9]">
         <div className="flex items-center gap-2">
           <div className="relative flex-1 min-w-0">
