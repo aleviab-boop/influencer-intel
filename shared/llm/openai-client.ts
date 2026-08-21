@@ -1027,12 +1027,44 @@ Be conservative — when unsure, use null or "unknown".`,
   }
 
   /**
+   * Fetch an image URL server-side and return it as a base64 data URL, or null
+   * if it can't be fetched / isn't an image / is too large. Uses a browser-like
+   * Referer so Instagram's hotlink-protected CDN serves the bytes (a direct fetch
+   * from a data-center IP works — the same approach /api/ig-image relies on).
+   * Capped at ~5 MB so a rogue URL can't blow up memory or the vision payload.
+   */
+  private async fetchImageAsDataUrl(url: string): Promise<string | null> {
+    const MAX_BYTES = 5 * 1024 * 1024;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Referer: 'https://www.instagram.com/',
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+            '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'image/avif,image/webp,image/*,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return null;
+      const ct = res.headers.get('content-type') ?? 'image/jpeg';
+      if (!ct.startsWith('image/')) return null;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length === 0 || buf.length > MAX_BYTES) return null;
+      return `data:${ct};base64,${buf.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Extract VISUAL / aesthetic motifs from a batch of Instagram post images,
    * so we can detect trends that carry no hashtag (e.g. "stripes", "pastel
    * palette", "y2k styling"). Each image is preceded by its post id. Returns a
    * map postId -> normalised tag list (lowercase, deduped). Best-effort: a bad /
    * expired image URL just yields no tags for that post; a failed call yields {}.
-   * Batched to ≤8 images (low detail) to keep the vision call cheap.
+   * Image bytes are fetched server-side and inlined (IG's CDN blocks OpenAI's own
+   * fetcher). Batched to ≤8 images (low detail) to keep the vision call cheap.
    */
   async extractVisualMotifs(
     items: Array<{ postId: string; imageUrl: string }>,
@@ -1044,6 +1076,17 @@ Be conservative — when unsure, use null or "unknown".`,
       typeof t === 'string'
         ? t.toLowerCase().trim().replace(/^#+/, '').replace(/\s+/g, ' ').slice(0, 30)
         : '';
+
+    // Instagram's media CDN is referer/hotlink-protected: handing the raw URL to
+    // OpenAI fails (its fetcher sends no IG referer → 403). So fetch the bytes
+    // ourselves with a browser-like Referer (the same trick /api/ig-image uses)
+    // and inline them as base64 data URLs. Posts whose image can't be fetched
+    // (expired signed URL, transient block) are skipped rather than sent blind.
+    const fetched = await Promise.all(
+      usable.map(async (it) => ({ postId: it.postId, dataUrl: await this.fetchImageAsDataUrl(it.imageUrl) })),
+    );
+    const withBytes = fetched.filter((f): f is { postId: string; dataUrl: string } => f.dataUrl !== null);
+    if (withBytes.length === 0) return {};
 
     const content: Array<Record<string, unknown>> = [
       {
@@ -1057,9 +1100,9 @@ Tag ONLY visual style. Do NOT tag objects, people, activities, brands, or on-ima
 Return ONLY JSON: {"results":[{"id":"<id>","tags":["stripes","pastel palette"]}]} — one entry per id.`,
       },
     ];
-    for (const it of usable) {
+    for (const it of withBytes) {
       content.push({ type: 'text', text: `id: ${it.postId}` });
-      content.push({ type: 'image_url', image_url: { url: it.imageUrl, detail: 'low' } });
+      content.push({ type: 'image_url', image_url: { url: it.dataUrl, detail: 'low' } });
     }
     try {
       const res = await this.client.chat.completions.create({
