@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface Parsed { location: string | null; genres: string[]; keywords: string[]; hashtags: string[] }
 interface Account { handle: string; full_name: string | null; follower_count: number | null; profile_pic_url: string | null; is_verified: boolean; is_private: boolean; byline: string | null }
@@ -108,8 +109,7 @@ export default function InstagramSearchPage() {
               <div className="px-4 py-2.5 border-b border-border text-[12px] text-ink-500">{accounts.length} accounts found on Instagram</div>
               {accounts.map((a) => (
                 <div key={a.handle} className="flex items-center gap-3 px-4 py-3 border-b border-border-soft last:border-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {a.profile_pic_url ? <img src={a.profile_pic_url} alt={a.handle} className="w-9 h-9 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" /> : <div className="w-9 h-9 rounded-full bg-[#eee] shrink-0" />}
+                  <CreatorAvatar handle={a.handle} name={a.full_name} pic={a.profile_pic_url} />
                   <div className="min-w-0 flex-1">
                     <div className="text-[13px] font-medium text-ink-900 truncate flex items-center gap-1.5">{a.full_name || `@${a.handle}`}{a.is_verified && <span style={{ color: ACCENT }}>✔</span>}</div>
                     <div className="text-[11px] text-ink-400 truncate">@{a.handle}{a.follower_count != null ? ` · ${k(a.follower_count)} followers` : ''}{a.byline ? ` · ${a.byline}` : ''}</div>

@@ -22,21 +22,33 @@ async function streamImage(picUrl: string): Promise<NextResponse | null> {
   let url: URL;
   try { url = new URL(picUrl); } catch { return null; }
   if (url.protocol !== 'https:' || !ALLOWED_HOST.test(url.hostname)) return null;
+  const headers = { Referer: 'https://www.instagram.com/', 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' };
+
+  // Direct fetch first — IG's media CDN serves images to any IP, so this works
+  // (and stays up even when the residential relay is down); relay is the fallback.
+  let imgRes: Response | null = null;
   try {
-    const imgRes = await igFetch(url.toString(), {
-      headers: { Referer: 'https://www.instagram.com/', 'User-Agent': UA, Accept: 'image/*,*/*;q=0.8' },
-    });
-    if (!imgRes.ok || !imgRes.body) return null;
-    return new NextResponse(imgRes.body, {
-      status: 200,
-      headers: {
-        'Content-Type': imgRes.headers.get('content-type') ?? 'image/jpeg',
-        'Cache-Control': 'public, max-age=86400, immutable',
-      },
-    });
+    const direct = await fetch(url.toString(), { headers });
+    if (direct.ok && direct.body) imgRes = direct;
   } catch {
-    return null;
+    /* fall through to the relay */
   }
+  if (!imgRes) {
+    try {
+      const relayed = await igFetch(url.toString(), { headers });
+      if (relayed.ok && relayed.body) imgRes = relayed;
+    } catch {
+      /* both hops failed */
+    }
+  }
+  if (!imgRes) return null;
+  return new NextResponse(imgRes.body, {
+    status: 200,
+    headers: {
+      'Content-Type': imgRes.headers.get('content-type') ?? 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400, immutable',
+    },
+  });
 }
 
 export async function GET(req: NextRequest) {

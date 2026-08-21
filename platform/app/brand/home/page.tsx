@@ -5,6 +5,7 @@ import { ACCENT, ACCENT_SOFT, MarketingNav, MarketingFooter } from '@/components
 import { LiveSearch } from '@/components/live-search';
 import { BrandSwitcher } from '@/components/brand-switcher';
 import { BrandPipelinePanel, SaveCreatorButton } from '@/components/brand-pipeline';
+import { CreatorAvatar } from '@/components/creator-avatar';
 import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandDnaProfile, type BrandCollaborator } from '@/lib/brand-session';
 import { useBrandPipeline } from '@/lib/use-brand-pipeline';
 import { addBrandToRoster } from '@/lib/agency-session';
@@ -192,43 +193,6 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
       <p className="mt-2.5 text-[13px] text-[#888]">
         Pre-scoped to {brand}. To search a particular username, use <span className="font-semibold" style={{ color: ACCENT }}>@username</span>
       </p>
-    </div>
-  );
-}
-
-// Creator avatar with the app's standard fallback chain: proxy the stored IG
-// CDN URL through /api/ig-image (those URLs are hotlink-blocked cross-origin, so
-// a raw <img src> shows a broken photo), then /api/ig-avatar by handle (a live
-// lookup), then a deterministic gradient initial. `stage` advances on each error.
-function CreatorAvatar({ handle, name, pic }: { handle: string; name?: string | null; pic?: string | null }) {
-  const [stage, setStage] = useState(0);
-  let h = 0;
-  for (let i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
-
-  const src =
-    stage === 0 && pic
-      ? `/api/ig-image?u=${encodeURIComponent(pic)}`
-      : stage <= 1
-        ? `/api/ig-avatar?handle=${encodeURIComponent(handle)}`
-        : null;
-
-  if (src) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={src}
-        alt={handle}
-        onError={() => setStage((s) => (s === 0 && pic ? 1 : 2))}
-        className="w-9 h-9 rounded-full object-cover shrink-0"
-      />
-    );
-  }
-  return (
-    <div
-      className="w-9 h-9 rounded-full shrink-0 grid place-items-center text-white text-[13px] font-semibold"
-      style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}
-    >
-      {(name || handle).charAt(0).toUpperCase()}
     </div>
   );
 }

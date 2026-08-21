@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface Creator {
   username: string;
@@ -216,14 +217,7 @@ export default function BrandCampaignsPage() {
                           rel="noreferrer"
                           className="flex items-center gap-3 rounded-xl bg-white border border-border px-3 py-2 hover:border-[#c9bdfb] transition-colors"
                         >
-                          <div className="w-9 h-9 rounded-full bg-ink-100 grid place-items-center text-[13px] font-semibold text-ink-500 overflow-hidden shrink-0">
-                            {cr.profile_pic_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={cr.profile_pic_url} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              cr.username.slice(0, 1).toUpperCase()
-                            )}
-                          </div>
+                          <CreatorAvatar handle={cr.username} name={cr.full_name} pic={cr.profile_pic_url} />
                           <div className="min-w-0 flex-1">
                             <div className="text-[13.5px] font-semibold text-ink-900 truncate">@{cr.username}</div>
                             <div className="text-[11.5px] text-ink-500">

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface Creator {
   id: string;
@@ -291,18 +292,7 @@ function Field({ label, children, className }: { label: string; children: React.
 }
 
 function Avatar({ c }: { c: Creator }) {
-  const [err, setErr] = useState(false);
-  let h = 0;
-  for (let i = 0; i < c.handle.length; i++) h = (h * 31 + c.handle.charCodeAt(i)) >>> 0;
-  if (c.profile_photo_url && !err) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={c.profile_photo_url} alt={c.handle} onError={() => setErr(true)} className="w-9 h-9 rounded-full object-cover shrink-0" />;
-  }
-  return (
-    <div className="w-9 h-9 rounded-full shrink-0 grid place-items-center text-white text-[13px] font-semibold" style={{ background: `linear-gradient(135deg, hsl(${h % 360} 55% 62%), hsl(${(h + 50) % 360} 55% 50%))` }}>
-      {(c.display_name || c.handle).charAt(0).toUpperCase()}
-    </div>
-  );
+  return <CreatorAvatar handle={c.handle} name={c.display_name} pic={c.profile_photo_url} />;
 }
 
 const sel = 'px-3 py-2.5 border border-border bg-white text-[13px] text-ink-800 rounded-lg focus:outline-none focus:border-ink-900 cursor-pointer';

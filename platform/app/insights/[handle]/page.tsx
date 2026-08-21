@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface ScrapedData {
   source: 'scraped';
@@ -225,9 +226,7 @@ export default function InsightsPage({ params }: { params: Promise<{ handle: str
         <div className="max-w-4xl mx-auto flex items-center gap-4">
           <Link href="/creators" className="text-[13px] text-[#999] hover:text-[#111]">&larr; Back</Link>
           <div className="flex items-center gap-3 flex-1">
-            {creator?.profile_photo_url && (
-              <img src={creator.profile_photo_url} alt="" className="w-9 h-9 rounded-full grayscale" />
-            )}
+            {handle && <CreatorAvatar handle={handle} name={creator?.display_name} pic={creator?.profile_photo_url} className="w-9 h-9 grayscale" />}
             <div>
               <h1 className="text-lg font-medium text-[#111]">@{handle}</h1>
               <p className="text-[12px] text-[#999]">

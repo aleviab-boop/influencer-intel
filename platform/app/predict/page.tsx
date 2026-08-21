@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
+import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface PredictionResult {
   bucket: string;
@@ -420,13 +421,7 @@ function PredictPage() {
           {lookupError && <p className="text-[13px] text-[#cc0000] mt-2">{lookupError}</p>}
           {creator && (
             <div className="mt-4 flex items-center gap-3 py-3 border-t border-[#f0f0f0]">
-              {creator.profile_photo_url ? (
-                <img src={creator.profile_photo_url} alt="" className="w-8 h-8 rounded-full grayscale" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-[#f0f0f0] flex items-center justify-center text-[#999] text-[12px]">
-                  {creator.handle[0]?.toUpperCase()}
-                </div>
-              )}
+              <CreatorAvatar handle={creator.handle} name={creator.display_name} pic={creator.profile_photo_url} className="w-8 h-8 grayscale" />
               <div className="flex-1">
                 <span className="text-[14px] font-medium text-[#111]">@{creator.handle}</span>
                 <span className="text-[13px] text-[#999] ml-2">
