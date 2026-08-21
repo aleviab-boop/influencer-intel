@@ -459,6 +459,14 @@ export default function BrandHomePage() {
         <div className="max-w-6xl mx-auto w-full px-6 pt-12 pb-12">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-2.5 flex-wrap">
+              <a
+                href="/"
+                aria-label="Back to home"
+                className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-[#666] hover:text-[#111] px-3 py-2 rounded-lg border border-[#e6e6ef] bg-white hover:border-[#d9d2f7] transition-colors"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform duration-200 group-hover:-translate-x-0.5"><path d="M15 18l-6-6 6-6" /></svg>
+                Back
+              </a>
               <span
                 className="inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold bg-white border border-[#ececff] shadow-sm"
                 style={{ color: ACCENT }}
