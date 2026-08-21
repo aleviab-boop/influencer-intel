@@ -580,10 +580,16 @@ export function LiveSearch({
   initialBucket = 'instagram',
   onSearchPrompt,
   pipeline,
+  hideInput = false,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
   initialMode?: 'db' | 'live' | 'crawl';
+  // Hide the component's own search box + recent chips. Used on the Brand home,
+  // where a single personalised prompt bar in the hero drives this finder via
+  // onSearchPrompt/initialPrompt — so rendering a second input here would be
+  // redundant. Results still render; the hero bar is the only search entry.
+  hideInput?: boolean;
   // Which source tab to open on (Lander). Persisted in the URL (?bucket=trends)
   // so a refresh restores the tab you were on instead of snapping back to
   // Instagram (which would re-run a live crawl).
@@ -1613,7 +1619,9 @@ export function LiveSearch({
 
   return (
     <div className="w-full">
-      {/* search box */}
+      {/* search box — suppressed on the Brand home, where the hero prompt bar is
+          the single search entry (hideInput). */}
+      {!hideInput && (
       <div className="rounded-2xl bg-white border-2 border-[#e3def9] p-4 shadow-[0_12px_50px_rgba(108,77,246,0.12)] focus-within:border-[#6C4DF6] transition-colors">
         {/* prompt + database-search magnifier (above the line) */}
         <div className="flex items-center gap-2">
@@ -1690,9 +1698,10 @@ export function LiveSearch({
           Tip: to look up a specific account, search its exact username with <span className="font-medium text-[#6C4DF6]">@username</span>
         </div>
       </div>
+      )}
 
       {/* recently searched — auto-tracked, click to re-run, × to forget */}
-      {recent.length > 0 && (
+      {!hideInput && recent.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-[12px] text-[#999]">Recent:</span>
           {recent.slice(0, RECENT_MAX).map((p) => (

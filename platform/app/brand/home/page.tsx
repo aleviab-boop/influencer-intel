@@ -761,9 +761,9 @@ export default function BrandHomePage() {
 
         {/* Scoped creator discovery — driven by the personalised prompt bar above */}
         <section ref={finderRef}>
-          <SectionHead eyebrow="Discover" title={`Find creators for ${session.brand}`} />
+          <SectionHead eyebrow="Discover" title={`Creators for ${session.brand}`} />
           <p className="text-[14px] text-[#666] -mt-2 mb-5 max-w-2xl">
-            Pre-scoped to your niche — search within {category || 'your space'} and we&apos;ll rank creators that fit.
+            Ranked from the prompt bar above — searched across AI-suggested handles, your database and live Instagram, pre-scoped to {category || 'your space'}.
           </p>
           <LiveSearch
             initialPrompt={finderPrompt}
@@ -771,6 +771,7 @@ export default function BrandHomePage() {
             initialBucket="instagram"
             pipeline={pipeline}
             onSearchPrompt={(q) => setQuery(q)}
+            hideInput
           />
         </section>
       </main>
