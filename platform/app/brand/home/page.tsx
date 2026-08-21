@@ -100,7 +100,43 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
   const examplesRef = useRef<string[]>(brandExamples(brand, dna));
   examplesRef.current = brandExamples(brand, dna);
   const typed = useTypewriter(examplesRef.current);
-  const suggestions = buildSuggestions(value);
+
+  // AI-backed, brand-grounded autocomplete. Debounced so it powers live typing
+  // without a call per keystroke; grounded on the brand's DNA so the ideas fit
+  // THIS brand. Falls back to the instant local suggestions when the AI list is
+  // empty (offline / mid-request / 1–2 chars typed).
+  const [aiSug, setAiSug] = useState<string[]>([]);
+  const dnaRef = useRef(dna);
+  dnaRef.current = dna;
+  useEffect(() => {
+    const q = value.trim();
+    // Skip the network for 1–2 chars (local completions are better there); still
+    // fetch brand-native STARTERS when the box is empty and focused.
+    if (q.length >= 1 && q.length < 3) {
+      setAiSug([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch('/api/brand/prompt-suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ brand, q, dna: dnaRef.current }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!cancelled) setAiSug(Array.isArray(d.suggestions) ? d.suggestions.slice(0, 6) : []);
+      } catch {
+        if (!cancelled) setAiSug([]);
+      }
+    }, q.length === 0 ? 0 : 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [value, brand]);
+
+  const suggestions = aiSug.length > 0 ? aiSug : buildSuggestions(value);
   const sugOpen = showSug && suggestions.length > 0;
 
   const go = () => {

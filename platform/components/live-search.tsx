@@ -3735,14 +3735,16 @@ function IconBtn({ children, onClick, title, disabled }: { children: React.React
 }
 
 function Avatar({ name, url, handle }: { name: string; url?: string | null; handle?: string | null }) {
-  // Image source falls through stages: stored photo (proxied) → live photo
-  // fetched by handle (for DB creators with no stored photo) → initials.
+  // Image source falls through stages, ordered by reliability: the handle-based
+  // proxy FIRST (it re-derives a fresh photo URL when the stored one has expired —
+  // stored IG CDN links are short-lived signed URLs, so trying them first just
+  // flashed a broken image), then the stored URL, then initials.
   const [stage, setStage] = useState(0);
   const cleanHandle = handle?.replace(/^@/, '');
 
   let src: string | null = null;
-  if (stage === 0 && url) src = `/api/ig-image?u=${encodeURIComponent(url)}`;
-  else if (stage < 2 && cleanHandle) src = `/api/ig-avatar?handle=${encodeURIComponent(cleanHandle)}`;
+  if (stage === 0 && cleanHandle) src = `/api/ig-avatar?handle=${encodeURIComponent(cleanHandle)}`;
+  else if (stage <= 1 && url) src = `/api/ig-image?u=${encodeURIComponent(url)}`;
 
   if (src) {
     // IG CDN blocks hotlinking — route through our server-side proxy.
@@ -3751,7 +3753,7 @@ function Avatar({ name, url, handle }: { name: string; url?: string | null; hand
       <img
         src={src}
         alt={name}
-        onError={() => setStage((s) => (s === 0 && url ? 1 : 2))}
+        onError={() => setStage((s) => s + 1)}
         className="w-9 h-9 rounded-full object-cover shrink-0 bg-[#eee]"
       />
     );

@@ -478,6 +478,78 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
   }
 
   /**
+   * Brand-aware creator-search prompt suggestions for the workspace prompt bar.
+   * Given the brand's DNA and whatever the user has typed so far, return a set of
+   * strong, ready-to-run creator-search briefs scoped to THIS brand (niche +
+   * audience + India-local flavour). When `partial` is empty it proposes starter
+   * searches; once the user starts typing it completes/sharpens their intent.
+   * Uses the FAST classification model (json out) so it can power live
+   * autocomplete. Best-effort — returns [] on any error so the caller can fall
+   * back to its local suggestions.
+   */
+  async suggestSearchPrompts(
+    input: {
+      brand: string;
+      category?: string | null;
+      audience?: string | null;
+      keywords?: string[];
+      archetypes?: string[];
+      partial?: string;
+    },
+    max = 6,
+  ): Promise<string[]> {
+    const dnaLines = [
+      `Brand: ${input.brand}`,
+      input.category ? `Category / niche: ${input.category}` : '',
+      input.audience ? `Target audience: ${input.audience}` : '',
+      input.keywords?.length ? `Keywords: ${input.keywords.slice(0, 10).join(', ')}` : '',
+      input.archetypes?.length ? `Creator archetypes they work with: ${input.archetypes.slice(0, 6).join(', ')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const typed = (input.partial ?? '').trim().slice(0, 120);
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.classificationModel,
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        messages: [
+          {
+            role: 'system',
+            content: `You write creator-DISCOVERY search prompts for an Indian influencer-marketing tool. Each prompt is a natural-language brief a brand types to FIND Instagram creators — e.g. "vegan skincare micro-influencers in Bangalore with 3%+ engagement".
+
+Rules:
+- India-first: assume Indian creators / cities unless told otherwise.
+- Make every prompt specific and ACTIONABLE — combine a niche + (a city OR the target audience) + a concrete filter (follower tier, engagement, barter-ready, language, or content format).
+- Ground every prompt in the brand's DNA below so the searches fit THIS brand, not generic ones.
+- Vary the angle across the set (different cities, micro vs mid-tier, formats, occasions, audience segments).
+- Keep each under ~90 characters. No hashtags, no @handles, no emojis, no numbering, no quotes.
+${typed ? '- The user has started typing; KEEP their words and complete/sharpen their intent into several strong finished briefs.' : ''}
+
+Respond with ONLY JSON: {"prompts":["...","..."]} — exactly ${max} prompts.`,
+          },
+          {
+            role: 'user',
+            content: typed
+              ? `${dnaLines}\n\nThe user has typed so far: "${typed}"\nComplete this into ${max} strong creator-search prompts.`
+              : `${dnaLines}\n\nSuggest ${max} strong starter creator-search prompts for this brand.`,
+          },
+        ],
+      });
+      const content = res.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(content) as { prompts?: unknown };
+      const list = Array.isArray(parsed.prompts) ? parsed.prompts : [];
+      return list
+        .filter((s): s is string => typeof s === 'string')
+        .map((s) => s.trim().replace(/^["'\s]*[-\d.)\s]*/, '').replace(/["']+$/, '').trim())
+        .filter((s) => s.length >= 4)
+        .slice(0, max);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Draft trend-driven campaign concepts for a brand. Uses the web-search model
    * so it grounds ideas in what's ACTUALLY trending for the niche right now
    * (seasonal moments, hot hashtags/audio, cultural events) rather than guessing
