@@ -3,6 +3,7 @@ import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient, type BrandCampaignConcept, type BrandDnaProfile } from '@influencer-intel/shared/llm';
 import { tokenize, type LiveProfile } from '@/lib/live-discovery';
 import { searchCreatorsInDb } from '@/lib/creator-db-search';
+import { isMeaningfulTrend, byTrendRelevance } from '@/lib/trend-quality';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -50,23 +51,28 @@ async function loadMeasuredTrends(category: string): Promise<string[]> {
   const tokens = category.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
   try {
     const rows = await getBolticClient().query<{
-      display_name: string; trend_type: string; phase: string;
+      identifier: string; display_name: string; trend_type: string; phase: string;
       velocity: string; usage_count_7d: number;
     }>(
-      `SELECT display_name, trend_type, phase, velocity::text AS velocity, usage_count_7d
+      `SELECT identifier, display_name, trend_type, phase, velocity::text AS velocity, usage_count_7d
          FROM trend_signals
         WHERE phase IN ('emerging','growing','peak')
           ${tokens.length ? 'AND (categories && $1::text[] OR categories IS NULL OR cardinality(categories) = 0)' : ''}
-        ORDER BY CASE phase WHEN 'emerging' THEN 0 WHEN 'growing' THEN 1 ELSE 2 END,
-                 velocity DESC
-        LIMIT 15`,
+        ORDER BY usage_count_7d DESC, velocity DESC
+        LIMIT 60`,
       tokens.length ? [tokens] : undefined,
     );
-    return rows.map((r) => {
-      const pct = Math.round(Number(r.velocity) * 100);
-      const growth = Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct}% wk-on-wk` : r.phase;
-      return `${r.display_name} — ${r.trend_type}, ${r.phase}, ${growth}, ${Number(r.usage_count_7d) || 0} posts/7d`;
-    });
+    // Drop engagement-bait / geo / spam hashtags and rank by real volume so the
+    // campaign model grounds on trends worth building a campaign around.
+    return rows
+      .filter(isMeaningfulTrend)
+      .sort(byTrendRelevance)
+      .slice(0, 15)
+      .map((r) => {
+        const pct = Math.round(Number(r.velocity) * 100);
+        const growth = Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct}% wk-on-wk` : r.phase;
+        return `${r.display_name} — ${r.trend_type}, ${r.phase}, ${growth}, ${Number(r.usage_count_7d) || 0} posts/7d`;
+      });
   } catch {
     return [];
   }
