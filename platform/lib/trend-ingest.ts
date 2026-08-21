@@ -99,7 +99,10 @@ export async function ingestTrendSignals(
   } = {},
 ): Promise<TrendIngestReport> {
   const creatorLimit = Math.max(1, Math.min(opts.creatorLimit ?? 5000, 50_000));
-  const windowDays = Math.max(1, Math.min(opts.windowDays ?? 7, 60));
+  // Default to a 7-day rolling window for live daily crawling, but allow up to
+  // 180 so trend math still works on batch/historical corpora where posts are
+  // spread over months rather than a fresh daily feed.
+  const windowDays = Math.max(1, Math.min(opts.windowDays ?? 7, 180));
   const minCount = Math.max(2, opts.minCount ?? 3);
   const withVisual = opts.withVisual === true;
   const visualBudget = Math.max(0, Math.min(opts.visualBudget ?? 120, 500));
@@ -114,8 +117,8 @@ export async function ingestTrendSignals(
     `SELECT id, primary_category, genre, niche, recent_posts
        FROM creators
       WHERE recent_posts IS NOT NULL
-        AND jsonb_typeof(recent_posts) = 'array'
-        AND jsonb_array_length(recent_posts) > 0
+        AND jsonb_typeof(recent_posts::jsonb) = 'array'
+        AND jsonb_array_length(recent_posts::jsonb) > 0
       ORDER BY updated_at DESC NULLS LAST
       LIMIT ${creatorLimit}`,
   );
