@@ -74,13 +74,13 @@ export interface BrandDnaInput {
 
 export interface BrandDnaProfile {
   brand: string;              // echoed brand name
-  summary: string;            // 1–2 line "who they are"
+  summary: string;            // 2–3 sentence "who they are" dossier
   category: string;           // primary niche, e.g. "ayurvedic skincare"
-  positioning: string;        // premium/value/etc + market stance
-  values: string[];           // core brand values
+  positioning: string;        // market tier + differentiation + competitive stance (2–3 sentences)
+  values: string[];           // core brand values (descriptive phrases)
   personality: string[];      // tone/voice adjectives
-  target_audience: string;    // who they sell to
-  aesthetic: string;          // visual style / look & feel
+  target_audience: string;    // demographics + psychographics (2–3 sentences)
+  aesthetic: string;          // visual style / look & feel (1–2 sentences)
   content_pillars: string[];  // recurring content themes
   keywords: string[];         // discovery keywords for search
   creator_archetypes: string[]; // creator types that fit the brand
@@ -689,14 +689,16 @@ Return ${max} distinct campaigns.`,
 
     const hasScrape = Boolean(input.siteText || input.igBio || igCaptions.length);
     const content = await this.webSearch(
-      `You are a brand strategist for an INDIAN influencer-marketing platform. Distil a concise, factual "Brand DNA" profile that will drive creator-campaign planning.${
+      `You are a senior brand strategist for an INDIAN influencer-marketing platform. Write a polished, detailed "Brand DNA" dossier that reads like a professional brand book and will drive creator-campaign planning.${
         hasScrape
           ? ' The brief below includes REAL scraped content from the brand\'s own website and Instagram — treat it as ground truth and base the DNA primarily on it. Use web search only to fill gaps or confirm.'
           : ' Search the web for the brand\'s website and social profiles.'
-      } Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best inference from the category.
+      } Base it on what you actually find; do not invent facts. If something is genuinely unknowable, give your best, clearly-reasoned inference from the category.
+
+Write in a professional, third-person register: full, well-formed sentences with proper capitalisation and punctuation. Do NOT use casual fragments, lowercase sentence starts, hashtags, or emoji in the prose fields.
 Respond with ONLY a JSON object, no prose and no markdown fences:
-{"summary":"1-2 lines on who they are","category":"primary niche","positioning":"premium/value/etc + market stance","values":["..."],"personality":["tone adjectives"],"target_audience":"who they sell to","aesthetic":"visual style","content_pillars":["themes"],"keywords":["discovery keywords"],"creator_archetypes":["creator types that fit"],"competitors":["named peers"],"opportunities":["concrete, specific ways this brand could market or grow better via creators/social"]}
-Keep arrays to 3-7 items, India-relevant where applicable. "opportunities" must be actionable and specific to THIS brand, not generic advice.`,
+{"summary":"2-3 full sentences on who the brand is, what it makes/sells, and what makes it distinctive","category":"primary niche, e.g. 'Beauty & Personal Care E-commerce'","positioning":"2-3 sentences covering market tier (premium/mass/value), core differentiation, and competitive stance","values":["4-6 core values, each a short descriptive phrase, not a single bare word"],"personality":["4-6 tone/voice descriptors"],"target_audience":"2-3 sentences covering both demographics AND psychographics: who they are, what they care about, and how they discover/shop","aesthetic":"1-2 sentences describing the visual identity — colour palette, imagery style, and typographic feel","content_pillars":["4-6 recurring content themes, each a short phrase"],"keywords":["5-7 discovery keywords / hashtags"],"creator_archetypes":["4-6 creator types that fit, each described specifically rather than one word"],"competitors":["3-6 named peers"],"opportunities":["3-5 concrete, specific ways THIS brand could market or grow better via creators/social, each a full actionable sentence"]}
+Keep arrays within the stated ranges, India-relevant where applicable. "opportunities" must be actionable and specific to THIS brand, not generic advice.`,
       brief,
     );
     return this.parseBrandDna(content, input.brand);
