@@ -13,6 +13,7 @@
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';
+import { getOpenAIClient } from '@influencer-intel/shared/llm';
 import type { RecentPost } from '@influencer-intel/shared/types';
 
 export interface TrendIngestReport {
@@ -20,8 +21,22 @@ export interface TrendIngestReport {
   posts_scanned: number;      // posts inside the 2×window range
   hashtags_tracked: number;   // distinct hashtags that cleared the threshold
   formats_tracked: number;    // distinct post formats
+  visual_tracked: number;     // distinct visual motifs (only when withVisual)
+  posts_visually_tagged: number; // post images sent to the vision model this run
   signals_upserted: number;   // rows written to trend_signals
   window_days: number;        // the current-vs-prior comparison window
+}
+
+// Split an array into fixed-size chunks (batching DB param lists + vision calls).
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// "pastel palette" -> "Pastel Palette" for a readable trend display_name.
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 interface CreatorRow {
@@ -71,11 +86,23 @@ function classifyPhase(current: number, prior: number, velocity: number): string
  * either window are written, so we don't flood the table with one-off tags.
  */
 export async function ingestTrendSignals(
-  opts: { creatorLimit?: number; windowDays?: number; minCount?: number } = {},
+  opts: {
+    creatorLimit?: number;
+    windowDays?: number;
+    minCount?: number;
+    // Also derive VISUAL/aesthetic trends by vision-tagging post thumbnails.
+    // Off by default — it makes (budgeted) OpenAI vision calls.
+    withVisual?: boolean;
+    // Max NEW post images to send to the vision model this run (cached posts are
+    // free). Bounds cost/latency; coverage grows across runs as the cache fills.
+    visualBudget?: number;
+  } = {},
 ): Promise<TrendIngestReport> {
   const creatorLimit = Math.max(1, Math.min(opts.creatorLimit ?? 5000, 50_000));
   const windowDays = Math.max(1, Math.min(opts.windowDays ?? 7, 60));
   const minCount = Math.max(2, opts.minCount ?? 3);
+  const withVisual = opts.withVisual === true;
+  const visualBudget = Math.max(0, Math.min(opts.visualBudget ?? 120, 500));
   const db = getBolticClient();
 
   const now = Date.now();
@@ -95,6 +122,10 @@ export async function ingestTrendSignals(
 
   const hashtags = new Map<string, Bucket>();
   const formats = new Map<string, Bucket>();
+  // Posts (with a thumbnail, in the 2×window range) that are candidates for
+  // visual tagging. Deduped by post id; keeps the timing + categories so the
+  // motif aggregation uses the same current-vs-prior windowing as hashtags.
+  const visualPosts = new Map<string, { imageUrl: string; when: number; cats: string[] }>();
   let postsScanned = 0;
 
   const bump = (
@@ -144,17 +175,26 @@ export async function ingestTrendSignals(
       // Content format from post_type.
       const fmt = normaliseFormat(p.post_type);
       if (fmt) bump(formats, fmt.id, fmt.label, ts, cats);
+
+      // Queue the post image for visual-motif tagging (deduped by post id).
+      if (withVisual && p.thumbnail_url && p.platform_post_id && !visualPosts.has(p.platform_post_id)) {
+        visualPosts.set(p.platform_post_id, { imageUrl: p.thumbnail_url, when: ts, cats });
+      }
     }
   }
 
   // Upsert the identifiers that cleared the volume threshold in either window.
-  const upsert = async (trendType: 'hashtag' | 'format', map: Map<string, Bucket>): Promise<number> => {
+  const upsert = async (
+    trendType: 'hashtag' | 'format' | 'visual',
+    map: Map<string, Bucket>,
+    limits: { minCount: number; cap: number },
+  ): Promise<number> => {
     let written = 0;
     // Rank by current usage so we cap the write volume to the liveliest trends.
     const ranked = [...map.entries()]
-      .filter(([, b]) => b.count_current >= minCount || b.count_prior >= minCount)
+      .filter(([, b]) => b.count_current >= limits.minCount || b.count_prior >= limits.minCount)
       .sort((a, b) => b[1].count_current - a[1].count_current)
-      .slice(0, trendType === 'hashtag' ? 300 : 20);
+      .slice(0, limits.cap);
 
     for (const [id, b] of ranked) {
       const velocity = (b.count_current - b.count_prior) / Math.max(b.count_prior, 1);
@@ -196,15 +236,85 @@ export async function ingestTrendSignals(
     return written;
   };
 
-  const hashtagsWritten = await upsert('hashtag', hashtags);
-  const formatsWritten = await upsert('format', formats);
+  const hashtagsWritten = await upsert('hashtag', hashtags, { minCount, cap: 300 });
+  const formatsWritten = await upsert('format', formats, { minCount, cap: 20 });
+
+  // ── Visual / aesthetic motifs ────────────────────────────────────────────
+  // Vision-tag post thumbnails (budgeted + cached), then aggregate the motifs
+  // exactly like hashtags so image-only trends surface with velocity + phase.
+  const visuals = new Map<string, Bucket>();
+  let postsVisuallyTagged = 0;
+  let visualsWritten = 0;
+  if (withVisual && visualPosts.size > 0) {
+    const ids = [...visualPosts.keys()];
+    const cachedTags = new Map<string, string[]>();
+
+    // 1. Load already-tagged posts from the cache (chunked to bound param count).
+    for (const idChunk of chunk(ids, 500)) {
+      try {
+        const rows = await db.query<{ platform_post_id: string; tags: string[] }>(
+          `SELECT platform_post_id, tags FROM post_visual_tags
+            WHERE platform_post_id = ANY($1::text[])`,
+          [idChunk],
+        );
+        for (const r of rows) cachedTags.set(r.platform_post_id, Array.isArray(r.tags) ? r.tags : []);
+      } catch (err) {
+        console.error('[trend-ingest] visual cache read failed', err);
+      }
+    }
+
+    // 2. Tag NEW posts up to the budget — newest first, so fresh trends get
+    //    covered before we spend on backfill. Cache every result (empty too).
+    const untagged = ids.filter((id) => !cachedTags.has(id));
+    untagged.sort((a, b) => visualPosts.get(b)!.when - visualPosts.get(a)!.when);
+    const toTag = untagged.slice(0, visualBudget);
+    const openai = getOpenAIClient();
+    for (const batch of chunk(toTag, 8)) {
+      const items = batch.map((id) => ({ postId: id, imageUrl: visualPosts.get(id)!.imageUrl }));
+      let res: Record<string, string[]> = {};
+      try {
+        res = await openai.extractVisualMotifs(items);
+      } catch (err) {
+        console.error('[trend-ingest] visual tagging failed', err);
+      }
+      for (const id of batch) {
+        const tags = res[id] ?? [];
+        cachedTags.set(id, tags);
+        postsVisuallyTagged += 1;
+        try {
+          await db.query(
+            `INSERT INTO post_visual_tags (platform_post_id, tags, tagged_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (platform_post_id) DO UPDATE SET tags = EXCLUDED.tags, tagged_at = NOW()`,
+            [id, tags],
+          );
+        } catch (err) {
+          console.error(`[trend-ingest] visual cache write failed for ${id}`, err);
+        }
+      }
+    }
+
+    // 3. Aggregate every candidate that has tags (cached or newly tagged).
+    for (const id of ids) {
+      const tags = cachedTags.get(id);
+      if (!tags || tags.length === 0) continue;
+      const p = visualPosts.get(id)!;
+      for (const tag of tags) bump(visuals, tag, titleCase(tag), p.when, p.cats);
+    }
+
+    // Visual coverage is budget-limited, so counts run lower than hashtags —
+    // use a gentler threshold and a modest cap.
+    visualsWritten = await upsert('visual', visuals, { minCount: 2, cap: 60 });
+  }
 
   return {
     creators_scanned: creators.length,
     posts_scanned: postsScanned,
     hashtags_tracked: hashtagsWritten,
     formats_tracked: formatsWritten,
-    signals_upserted: hashtagsWritten + formatsWritten,
+    visual_tracked: visualsWritten,
+    posts_visually_tagged: postsVisuallyTagged,
+    signals_upserted: hashtagsWritten + formatsWritten + visualsWritten,
     window_days: windowDays,
   };
 }

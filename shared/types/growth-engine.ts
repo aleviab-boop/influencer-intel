@@ -136,7 +136,7 @@ export interface MonitoringUpdate {
 
 export interface TrendSignal {
   id: string;
-  trend_type: 'audio' | 'format' | 'hashtag' | 'topic';
+  trend_type: 'audio' | 'format' | 'hashtag' | 'topic' | 'visual';
   identifier: string;
   display_name: string;
   phase: 'emerging' | 'growing' | 'peak' | 'saturated' | 'declining';
@@ -155,7 +155,7 @@ export interface TrendSignal {
 // their day-to-day baseline distribution × how trend-aligned the content is.
 
 export interface MatchedTrend {
-  trend_type: 'audio' | 'format' | 'hashtag' | 'topic';
+  trend_type: 'audio' | 'format' | 'hashtag' | 'topic' | 'visual';
   display_name: string;
   phase: 'emerging' | 'growing' | 'peak' | 'saturated' | 'declining';
   velocity: number;

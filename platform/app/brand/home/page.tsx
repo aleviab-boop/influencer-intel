@@ -585,7 +585,12 @@ export default function BrandHomePage() {
                         key={`${t.trend_type}-${t.display_name}`}
                         className="rounded-2xl bg-white border border-[#eee] px-4 py-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.05)]"
                       >
-                        <div className="text-[14px] font-semibold text-[#111]">{t.display_name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-[14px] font-semibold text-[#111]">{t.display_name}</div>
+                          <span className="text-[9.5px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                            {t.trend_type === 'visual' ? 'look' : t.trend_type}
+                          </span>
+                        </div>
                         <div className="text-[12px] text-[#888] capitalize">
                           {t.phase} · {Number.isFinite(vel) ? `${vel >= 0 ? '+' : ''}${vel}%` : t.trend_type} · {Number(t.usage_count_7d) || 0} posts/7d
                         </div>

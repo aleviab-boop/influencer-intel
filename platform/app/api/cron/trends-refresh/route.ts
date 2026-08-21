@@ -21,7 +21,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const report = await ingestTrendSignals();
+    // Include visual/aesthetic motifs (vision-tagged, budgeted + cached) so
+    // hashtag-less trends like "stripes" or "pastel palette" get tracked too.
+    const report = await ingestTrendSignals({ withVisual: true, visualBudget: 120 });
     return NextResponse.json({ ok: true, ...report });
   } catch (err) {
     console.error('[cron] trends-refresh failed:', err);

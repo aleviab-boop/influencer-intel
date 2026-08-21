@@ -1027,6 +1027,64 @@ Be conservative — when unsure, use null or "unknown".`,
   }
 
   /**
+   * Extract VISUAL / aesthetic motifs from a batch of Instagram post images,
+   * so we can detect trends that carry no hashtag (e.g. "stripes", "pastel
+   * palette", "y2k styling"). Each image is preceded by its post id. Returns a
+   * map postId -> normalised tag list (lowercase, deduped). Best-effort: a bad /
+   * expired image URL just yields no tags for that post; a failed call yields {}.
+   * Batched to ≤8 images (low detail) to keep the vision call cheap.
+   */
+  async extractVisualMotifs(
+    items: Array<{ postId: string; imageUrl: string }>,
+  ): Promise<Record<string, string[]>> {
+    const usable = items.filter((i) => i.postId && i.imageUrl).slice(0, 8);
+    if (usable.length === 0) return {};
+
+    const norm = (t: unknown): string =>
+      typeof t === 'string'
+        ? t.toLowerCase().trim().replace(/^#+/, '').replace(/\s+/g, ' ').slice(0, 30)
+        : '';
+
+    const content: Array<Record<string, unknown>> = [
+      {
+        type: 'text',
+        text: `Each image below is an Instagram post, preceded by its id. For EACH image, return 2-4 short lowercase VISUAL-MOTIF tags describing only the AESTHETIC — pick from these kinds:
+- pattern / print: e.g. "stripes", "polka dots", "floral print", "checks", "animal print", "tie dye"
+- colour palette: e.g. "pastel palette", "monochrome", "earth tones", "neon", "all black", "jewel tones"
+- fashion / styling aesthetic: e.g. "y2k", "cottagecore", "old money", "streetwear", "athleisure", "coquette", "minimalist", "maximalist"
+- visual treatment / setting: e.g. "film grain", "golden hour", "studio flash", "outdoor natural light"
+Tag ONLY visual style. Do NOT tag objects, people, activities, brands, or on-image text. Use canonical, singular-ish forms so the same trend doesn't fragment (prefer "stripes" over "striped shirt"). If an image can't be read, return an empty tags array for it.
+Return ONLY JSON: {"results":[{"id":"<id>","tags":["stripes","pastel palette"]}]} — one entry per id.`,
+      },
+    ];
+    for (const it of usable) {
+      content.push({ type: 'text', text: `id: ${it.postId}` });
+      content.push({ type: 'image_url', image_url: { url: it.imageUrl, detail: 'low' } });
+    }
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.outreachModel, // gpt-4o has vision
+        response_format: { type: 'json_object' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        messages: [{ role: 'user', content: content as any }],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(raw) as { results?: Array<{ id?: string; tags?: unknown }> };
+      const out: Record<string, string[]> = {};
+      for (const r of parsed.results ?? []) {
+        if (!r.id) continue;
+        const tags = Array.isArray(r.tags)
+          ? Array.from(new Set(r.tags.map(norm).filter((t) => t.length >= 3))).slice(0, 4)
+          : [];
+        out[r.id] = tags;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Generate per-creator reasoning for a shortlist position.
    * Uses gpt-4o (quality matters here for brand trust).
    */

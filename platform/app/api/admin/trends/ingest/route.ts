@@ -19,6 +19,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       creatorLimit: typeof body?.creatorLimit === 'number' ? body.creatorLimit : undefined,
       windowDays: typeof body?.windowDays === 'number' ? body.windowDays : undefined,
       minCount: typeof body?.minCount === 'number' ? body.minCount : undefined,
+      withVisual: body?.withVisual === true,
+      visualBudget: typeof body?.visualBudget === 'number' ? body.visualBudget : undefined,
     });
     return NextResponse.json({ ok: true, ...report });
   } catch (err) {
