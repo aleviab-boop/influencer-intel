@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listPrograms, createProgram } from '@/lib/programs-service';
+import { listPrograms, listProgramsByBrandName, createProgram } from '@/lib/programs-service';
 import { getSession } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
 // GET /api/programs → ProgramSummary[]
-// A signed-in brand sees its own campaigns (+ shared/unassigned demo ones);
-// logged-out preview keeps the global agency view.
-export async function GET() {
+// ?brand=<name>  → strict brand-workspace view: ONLY that brand's own campaigns
+//                  (localStorage brand session has no auth brand_id, so we scope
+//                  by name and deliberately exclude the shared agency demo pool).
+// otherwise      → signed-in brand sees its own (+ shared/unassigned demo ones);
+//                  logged-out preview keeps the global agency view.
+export async function GET(req: NextRequest) {
   try {
+    const brand = req.nextUrl.searchParams.get('brand');
+    if (brand && brand.trim()) {
+      const programs = await listProgramsByBrandName(brand.trim());
+      return NextResponse.json({ programs });
+    }
     const session = await getSession();
     const programs = await listPrograms(session?.brand_id);
     return NextResponse.json({ programs });
@@ -35,6 +43,7 @@ export async function POST(req: NextRequest) {
       requirements: typeof body.requirements === 'string' && body.requirements.trim() ? body.requirements.trim() : null,
       source_prompt: typeof body.source_prompt === 'string' ? body.source_prompt : null,
       brand_id: session?.brand_id ?? null,
+      brand_name: typeof body.brand === 'string' && body.brand.trim() ? body.brand.trim() : null,
       budget,
       start_date: date(body.start_date),
       end_date: date(body.end_date),

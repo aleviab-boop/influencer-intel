@@ -51,6 +51,26 @@ export async function listPrograms(brandId?: string | null): Promise<ProgramSumm
   );
 }
 
+// Strict, brand-NAME-scoped listing for the brand workspace. Unlike
+// listPrograms (which folds in the shared brand_id-IS-NULL agency-demo pool),
+// this returns ONLY the programs a given brand created — so a brand's
+// workspace shows its own campaigns and never the agency lander's seed data.
+export async function listProgramsByBrandName(brandName: string): Promise<ProgramSummary[]> {
+  const db = getBolticClient();
+  return db.query<ProgramSummary>(
+    `SELECT p.*, p.start_date::text AS start_date, p.end_date::text AS end_date,
+            COUNT(pr.id)::int AS recruit_count,
+            COUNT(pr.id) FILTER (WHERE pr.status = 'recruited')::int AS recruited_count,
+            COALESCE(SUM(pr.rate) FILTER (WHERE pr.status <> 'declined'), 0)::float AS spent
+     FROM programs p
+     LEFT JOIN program_recruits pr ON pr.program_id = p.id
+     WHERE lower(p.brand_name) = lower($1)
+     GROUP BY p.id
+     ORDER BY p.created_at DESC`,
+    [brandName],
+  );
+}
+
 /**
  * Ownership gate for a single program, mirroring creatorMayAccess on the
  * creator side. No brand session → preview/demo, always allowed. With a
@@ -72,6 +92,7 @@ export async function createProgram(input: {
   requirements?: string | null;
   source_prompt?: string | null;
   brand_id?: string | null;
+  brand_name?: string | null;
   budget?: number | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -84,6 +105,7 @@ export async function createProgram(input: {
     .slice(0, 60);
   return db.insert<Program>('programs', {
     brand_id: input.brand_id ?? null,
+    brand_name: input.brand_name ?? null,
     name: input.name,
     slug,
     description: input.description ?? null,

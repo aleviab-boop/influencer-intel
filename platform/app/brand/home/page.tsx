@@ -884,7 +884,7 @@ function BrandCampaignManager({ brand }: { brand: string }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch('/api/programs');
+      const r = await fetch('/api/programs?brand=' + encodeURIComponent(brand));
       const d = await r.json().catch(() => ({}));
       setPrograms(Array.isArray(d.programs) ? d.programs : []);
     } catch {
@@ -892,7 +892,7 @@ function BrandCampaignManager({ brand }: { brand: string }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [brand]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -905,6 +905,7 @@ function BrandCampaignManager({ brand }: { brand: string }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          brand,
           name: form.name.trim(),
           description: form.description.trim() || undefined,
           requirements: form.requirements.trim() || undefined,
