@@ -617,9 +617,17 @@ export default function BrandHomePage() {
                     <div key={i} className="rounded-[26px] bg-white border border-[#eeeef6] shadow-[0_8px_40px_rgba(0,0,0,0.06)] overflow-hidden">
                       <div className="p-6 md:p-7">
                         <div className="flex items-start justify-between gap-4 flex-wrap">
-                          <div>
-                            <h3 className="text-[19px] font-bold tracking-tight text-[#111]">{c.title}</h3>
-                            <p className="mt-1.5 text-[14px] text-[#555] leading-relaxed">{c.angle}</p>
+                          <div className="flex items-start gap-3.5 min-w-0">
+                            <span
+                              className="shrink-0 mt-0.5 w-8 h-8 rounded-xl grid place-items-center text-[13px] font-bold"
+                              style={{ background: ACCENT_SOFT, color: ACCENT }}
+                            >
+                              {String(i + 1).padStart(2, '0')}
+                            </span>
+                            <div className="min-w-0">
+                              <h3 className="text-[19px] font-bold tracking-tight text-[#111]">{c.title}</h3>
+                              <p className="mt-1.5 text-[14px] text-[#555] leading-relaxed">{c.angle}</p>
+                            </div>
                           </div>
                           <div className="flex gap-2 flex-wrap">
                             {c.campaign_type && <Tag>{c.campaign_type}</Tag>}
@@ -636,7 +644,10 @@ export default function BrandHomePage() {
                           </div>
                         )}
                         {c.deliverables && (
-                          <p className="mt-4 text-[13px] text-[#555]"><span className="font-semibold text-[#333]">Deliverables:</span> {c.deliverables}</p>
+                          <div className="mt-4 rounded-2xl border border-[#f0f0f0] bg-[#fafafc] px-4 py-3">
+                            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-[#999]">Deliverables</div>
+                            <p className="mt-1 text-[13px] text-[#555] leading-relaxed">{c.deliverables}</p>
+                          </div>
                         )}
                         {c.hashtags?.length > 0 && (
                           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -647,8 +658,19 @@ export default function BrandHomePage() {
                         )}
                       </div>
                       <div className="border-t border-[#f0f0f0] bg-[#fafafc] px-6 md:px-7 py-5">
-                        <div className="text-[12px] font-semibold uppercase tracking-wider text-[#999] mb-3">
-                          Suggested creators {c.creators?.length ? `(${c.creators.length})` : ''}
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <div className="text-[12px] font-semibold uppercase tracking-wider text-[#999]">
+                            Suggested creators {c.creators?.length ? `(${c.creators.length})` : ''}
+                          </div>
+                          {(c.creator_query || c.title) && (
+                            <button
+                              onClick={() => runSearch(c.creator_query || c.title)}
+                              className="text-[12.5px] font-semibold hover:opacity-80 shrink-0"
+                              style={{ color: ACCENT }}
+                            >
+                              Find creators for this campaign →
+                            </button>
+                          )}
                         </div>
                         {c.creators?.length ? (
                           <div className="grid sm:grid-cols-2 gap-2.5">
