@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
 
   let concepts: BrandCampaignConcept[] = [];
   try {
-    concepts = await getOpenAIClient().suggestBrandCampaigns(input, 4);
+    concepts = await getOpenAIClient().suggestBrandCampaigns(input, 6);
   } catch (err) {
     console.error('[brand/campaign-ideas] generation failed:', err);
     return NextResponse.json({ error: 'Could not generate campaign ideas. Try again.' }, { status: 502 });

@@ -47,6 +47,7 @@ export interface BrandCampaignConcept {
   campaign_type: string;      // 'barter' | 'paid' | 'UGC' | 'ambassador'
   hashtags: string[];         // suggested campaign hashtags
   deliverables: string;       // what each creator delivers
+  content_ideas: string[];    // concrete post/reel ideas creators could make
   creator_query: string;      // plain-English query to shortlist creators
 }
 
@@ -583,9 +584,10 @@ Rules:
 - Concepts must be practical for creator marketing in India (barter drops, UGC, paid reels, ambassador programs).
 - Keep it India-relevant: Indian festivals, cities, audience.
 - For each concept include a "creator_query": a short plain-English search string (niche + audience + city words) that a creator-database search would use to find the right influencers — e.g. "skincare micro influencer mumbai women".
+- For each concept also include "content_ideas": 3-4 concrete, ready-to-shoot post/reel ideas a creator could actually make for this campaign — each a short specific hook or scenario (e.g. "30-second GRWM using the serum before a monsoon wedding"), NOT generic advice.
 Respond with ONLY a JSON object, no prose and no markdown fences:
-{"campaigns":[{"title":"...","angle":"one line","trend":{"name":"#Tag or audio/topic","type":"hashtag|audio|topic|format","why_now":"..."},"format":"Reel series|GRWM|Talking-head|...","campaign_type":"barter|paid|UGC|ambassador","hashtags":["#a","#b"],"deliverables":"what each creator posts","creator_query":"niche audience city words"}]}
-At most ${max} campaigns.`,
+{"campaigns":[{"title":"...","angle":"one line","trend":{"name":"#Tag or audio/topic","type":"hashtag|audio|topic|format","why_now":"..."},"format":"Reel series|GRWM|Talking-head|...","campaign_type":"barter|paid|UGC|ambassador","hashtags":["#a","#b"],"deliverables":"what each creator posts","content_ideas":["specific reel idea 1","specific reel idea 2","specific reel idea 3"],"creator_query":"niche audience city words"}]}
+Return ${max} distinct campaigns.`,
       brief,
     );
     return this.parseCampaignConcepts(content, max);
@@ -610,6 +612,7 @@ At most ${max} campaigns.`,
         campaign_type: asStr(c.campaign_type),
         hashtags: asArr(c.hashtags),
         deliverables: asStr(c.deliverables),
+        content_ideas: asArr(c.content_ideas).slice(0, 5),
         creator_query: asStr(c.creator_query),
       };
     };

@@ -27,6 +27,7 @@ interface Campaign {
   campaign_type: string;
   hashtags: string[];
   deliverables: string;
+  content_ideas?: string[];
   creator_query: string;
   creators: Creator[];
 }
@@ -647,6 +648,24 @@ export default function BrandHomePage() {
                           <div className="mt-4 rounded-2xl border border-[#f0f0f0] bg-[#fafafc] px-4 py-3">
                             <div className="text-[10.5px] font-semibold uppercase tracking-wider text-[#999]">Deliverables</div>
                             <p className="mt-1 text-[13px] text-[#555] leading-relaxed">{c.deliverables}</p>
+                          </div>
+                        )}
+                        {(c.content_ideas?.length ?? 0) > 0 && (
+                          <div className="mt-4">
+                            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-[#999] mb-2">Content ideas</div>
+                            <ul className="space-y-2">
+                              {c.content_ideas!.map((idea, k) => (
+                                <li key={k} className="flex gap-2.5 text-[13.5px] text-[#444] leading-relaxed">
+                                  <span
+                                    className="shrink-0 mt-0.5 w-5 h-5 rounded-full grid place-items-center text-[10.5px] font-bold"
+                                    style={{ background: ACCENT_SOFT, color: ACCENT }}
+                                  >
+                                    {k + 1}
+                                  </span>
+                                  <span>{idea}</span>
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
                         {c.hashtags?.length > 0 && (
