@@ -7,6 +7,7 @@ import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
 import { BrandMark, AccountMenu } from '@/components/marketing';
 import { BookDemoButton } from '@/components/book-demo';
+import { Doodle } from '@/components/doodles';
 import { buildSuggestions } from '@/lib/suggestions';
 
 // Reelax-style influencer-marketing landing page, themed for Influencer Intel
@@ -274,7 +275,14 @@ function Hero({ onSearch }: { onSearch: (q: string) => void }) {
         className="absolute inset-0 -z-10"
         style={{ background: `radial-gradient(820px 360px at 50% -8%, ${ACCENT_SOFT}, rgba(255,255,255,0))` }}
       />
-      <div className="max-w-4xl mx-auto px-6 pt-16 pb-16 text-center">
+      {/* Hand-drawn doodles framing the hero — the shared brand-book aesthetic. */}
+      <Doodle shape={0} color="#6C4DF6" className="ii-floatr pointer-events-none absolute left-[6%] top-16 h-9 w-9 opacity-70 hidden sm:block" style={{ ['--r' as string]: '-12deg', animationDelay: '0s' }} />
+      <Doodle shape={1} color="#EC4899" className="ii-floatr pointer-events-none absolute right-[8%] top-12 h-8 w-8 opacity-60 hidden sm:block" style={{ ['--r' as string]: '10deg', animationDelay: '1.1s' }} />
+      <Doodle shape={5} color="#F59E0B" className="ii-floatr pointer-events-none absolute left-[12%] top-1/2 h-7 w-7 opacity-55 hidden md:block" style={{ ['--r' as string]: '8deg', animationDelay: '.6s' }} />
+      <Doodle shape={2} color="#8B5CF6" className="ii-floatr pointer-events-none absolute right-[10%] top-[46%] h-10 w-10 opacity-45 hidden md:block" style={{ ['--r' as string]: '-6deg', animationDelay: '1.8s' }} />
+      <Doodle shape={8} color="#14B8A6" className="ii-floatr pointer-events-none absolute left-[20%] bottom-8 h-6 w-6 opacity-45 hidden lg:block" style={{ ['--r' as string]: '14deg', animationDelay: '2.4s' }} />
+      <Doodle shape={7} color="#3B82F6" className="ii-floatr pointer-events-none absolute right-[18%] bottom-10 h-8 w-8 opacity-45 hidden lg:block" style={{ ['--r' as string]: '-10deg', animationDelay: '.9s' }} />
+      <div className="relative max-w-4xl mx-auto px-6 pt-16 pb-16 text-center">
         <span
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[13px] font-medium mb-6 bg-white border border-[#ececff] shadow-sm"
           style={{ color: ACCENT }}
