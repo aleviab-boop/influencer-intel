@@ -6,6 +6,33 @@ import { InlineError } from '@/components/skeleton';
 
 interface NewsItem { title: string; link: string; source: string; date: string; image: string; logo: string }
 interface TrendItem { title: string; traffic: string; link: string }
+// First-party Instagram trends, derived from our own crawl (trend_signals).
+interface IgTrend {
+  trend_type: 'audio' | 'format' | 'hashtag' | 'topic' | 'visual';
+  display_name: string;
+  phase: 'emerging' | 'growing' | 'peak' | 'saturated' | 'declining';
+  velocity: number;
+  usage_count_7d: number;
+  categories: string[];
+}
+
+// Display metadata per trend type — label + a small glyph. Order here is the
+// order groups render in (formats first: that's the "are Reels winning" signal).
+const IG_TYPE_META: { key: IgTrend['trend_type']; label: string; glyph: string }[] = [
+  { key: 'format', label: 'Content formats', glyph: '🎬' },
+  { key: 'hashtag', label: 'Hashtags', glyph: '#' },
+  { key: 'visual', label: 'Visual aesthetics', glyph: '🎨' },
+  { key: 'topic', label: 'Topics', glyph: '💬' },
+  { key: 'audio', label: 'Audio', glyph: '🎵' },
+];
+// Lifecycle phase → dot colour + human label.
+const PHASE_META: Record<IgTrend['phase'], { c: string; label: string }> = {
+  emerging: { c: '#3b82f6', label: 'Emerging' },
+  growing: { c: '#10b981', label: 'Growing' },
+  peak: { c: '#6C4DF6', label: 'Peak' },
+  saturated: { c: '#f59e0b', label: 'Saturated' },
+  declining: { c: '#94a3b8', label: 'Cooling' },
+};
 
 function ago(date: string): string {
   const t = new Date(date).getTime();
@@ -20,6 +47,8 @@ function ago(date: string): string {
 export default function TrendingPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [trends, setTrends] = useState<TrendItem[]>([]);
+  const [igTrends, setIgTrends] = useState<IgTrend[]>([]);
+  const [igLoading, setIgLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,8 +67,23 @@ export default function TrendingPage() {
     }
   }
 
+  // First-party Instagram trends — independent of the news feed. Best-effort:
+  // the board just stays empty if the crawl hasn't produced signals yet.
+  async function loadIgTrends() {
+    setIgLoading(true);
+    try {
+      const d = await fetch('/api/trends?limit=40', { cache: 'no-store' }).then((r) => r.json());
+      setIgTrends(Array.isArray(d.trends) ? d.trends : []);
+    } catch {
+      setIgTrends([]);
+    } finally {
+      setIgLoading(false);
+    }
+  }
+
   useEffect(() => {
     load().finally(() => setLoading(false));
+    void loadIgTrends();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,6 +123,63 @@ export default function TrendingPage() {
               </button>
             </div>
           </div>
+        </section>
+
+        {/* First-party Instagram trends — our differentiator vs. the Google feed */}
+        <section className="max-w-6xl mx-auto px-6 pt-10">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[18px]">📸</span>
+            <h2 className="text-[18px] font-bold">Trending on Instagram</h2>
+          </div>
+          <p className="text-[13px] text-[#888] mb-5">
+            Straight from the creators we track — which formats, hashtags and aesthetics are gaining momentum right now.
+          </p>
+          {igLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-44 rounded-2xl bg-[#f5f4fb] animate-pulse" />
+              ))}
+            </div>
+          ) : igTrends.length === 0 ? (
+            <div className="text-[14px] text-[#888] border border-dashed border-[#e3def9] rounded-2xl p-6 bg-[#faf9ff]">
+              We&apos;re still gathering Instagram trend data from the creators we track — this board fills in as our crawl runs.
+            </div>
+          ) : (
+            <>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {IG_TYPE_META.map((meta) => {
+                  const group = igTrends.filter((t) => t.trend_type === meta.key).slice(0, 8);
+                  if (group.length === 0) return null;
+                  return (
+                    <div key={meta.key} className="rounded-2xl border border-[#eee] bg-white p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-7 h-7 rounded-lg grid place-items-center text-[13px] font-bold" style={{ background: ACCENT_SOFT, color: ACCENT }}>{meta.glyph}</span>
+                        <span className="text-[13px] font-bold text-ink-900">{meta.label}</span>
+                      </div>
+                      <ul className="space-y-2">
+                        {group.map((t, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: PHASE_META[t.phase].c }} title={PHASE_META[t.phase].label} />
+                            <span className="text-[13px] text-[#222] truncate flex-1">{t.display_name}</span>
+                            <span className="text-[11px] text-[#aaa] tabular-nums shrink-0">{t.usage_count_7d > 0 ? `${t.usage_count_7d}× / wk` : PHASE_META[t.phase].label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Phase legend */}
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#999]">
+                {(Object.keys(PHASE_META) as IgTrend['phase'][]).map((p) => (
+                  <span key={p} className="inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: PHASE_META[p].c }} />
+                    {PHASE_META[p].label}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
         <section className="max-w-6xl mx-auto px-6 py-10 grid lg:grid-cols-[1.7fr_1fr] gap-8">
