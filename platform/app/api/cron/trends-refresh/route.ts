@@ -22,8 +22,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   try {
     // Include visual/aesthetic motifs (vision-tagged, budgeted + cached) so
-    // hashtag-less trends like "stripes" or "pastel palette" get tracked too.
-    const report = await ingestTrendSignals({ withVisual: true, visualBudget: 120 });
+    // hashtag-less trends like "stripes" or "pastel palette" get tracked too,
+    // and caption topics (LLM-tagged subject, budgeted + cached) so the "what's
+    // viral right now" board has real trending topics — not just hashtags.
+    const report = await ingestTrendSignals({
+      withVisual: true,
+      visualBudget: 120,
+      withTopics: true,
+      topicBudget: 400,
+    });
     return NextResponse.json({ ok: true, ...report });
   } catch (err) {
     console.error('[cron] trends-refresh failed:', err);

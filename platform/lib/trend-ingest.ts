@@ -22,7 +22,9 @@ export interface TrendIngestReport {
   hashtags_tracked: number;   // distinct hashtags that cleared the threshold
   formats_tracked: number;    // distinct post formats
   visual_tracked: number;     // distinct visual motifs (only when withVisual)
+  topics_tracked: number;     // distinct caption topics (only when withTopics)
   posts_visually_tagged: number; // post images sent to the vision model this run
+  posts_topically_tagged: number; // captions sent to the topic model this run
   signals_upserted: number;   // rows written to trend_signals
   window_days: number;        // the current-vs-prior comparison window
 }
@@ -96,6 +98,11 @@ export async function ingestTrendSignals(
     // Max NEW post images to send to the vision model this run (cached posts are
     // free). Bounds cost/latency; coverage grows across runs as the cache fills.
     visualBudget?: number;
+    // Also derive TOPIC trends by LLM-tagging the SUBJECT of each caption
+    // ("grwm", "budget travel"). Text-only, so far cheaper than the visual pass.
+    withTopics?: boolean;
+    // Max NEW captions to send to the topic model this run (cached ones are free).
+    topicBudget?: number;
   } = {},
 ): Promise<TrendIngestReport> {
   const creatorLimit = Math.max(1, Math.min(opts.creatorLimit ?? 5000, 50_000));
@@ -106,6 +113,8 @@ export async function ingestTrendSignals(
   const minCount = Math.max(2, opts.minCount ?? 3);
   const withVisual = opts.withVisual === true;
   const visualBudget = Math.max(0, Math.min(opts.visualBudget ?? 120, 500));
+  const withTopics = opts.withTopics === true;
+  const topicBudget = Math.max(0, Math.min(opts.topicBudget ?? 400, 2000));
   const db = getBolticClient();
 
   const now = Date.now();
@@ -129,6 +138,9 @@ export async function ingestTrendSignals(
   // visual tagging. Deduped by post id; keeps the timing + categories so the
   // motif aggregation uses the same current-vs-prior windowing as hashtags.
   const visualPosts = new Map<string, { imageUrl: string; when: number; cats: string[] }>();
+  // Posts (with a caption) that are candidates for topic tagging. Deduped by post
+  // id; keeps timing + categories so topic aggregation uses the same windowing.
+  const topicPosts = new Map<string, { caption: string; when: number; cats: string[] }>();
   let postsScanned = 0;
 
   const bump = (
@@ -183,12 +195,18 @@ export async function ingestTrendSignals(
       if (withVisual && p.thumbnail_url && p.platform_post_id && !visualPosts.has(p.platform_post_id)) {
         visualPosts.set(p.platform_post_id, { imageUrl: p.thumbnail_url, when: ts, cats });
       }
+
+      // Queue the caption for topic tagging (deduped by post id). Needs a real
+      // caption; a bare handle or a couple of emojis carries no topic.
+      if (withTopics && p.platform_post_id && p.caption && p.caption.trim().length >= 8 && !topicPosts.has(p.platform_post_id)) {
+        topicPosts.set(p.platform_post_id, { caption: p.caption, when: ts, cats });
+      }
     }
   }
 
   // Upsert the identifiers that cleared the volume threshold in either window.
   const upsert = async (
-    trendType: 'hashtag' | 'format' | 'visual',
+    trendType: 'hashtag' | 'format' | 'visual' | 'topic',
     map: Map<string, Bucket>,
     limits: { minCount: number; cap: number },
   ): Promise<number> => {
@@ -310,14 +328,84 @@ export async function ingestTrendSignals(
     visualsWritten = await upsert('visual', visuals, { minCount: 2, cap: 60 });
   }
 
+  // ── Topics ────────────────────────────────────────────────────────────────
+  // LLM-tag each caption's SUBJECT (budgeted + cached), then aggregate exactly
+  // like hashtags so genuine "what's trending right now" topics surface with
+  // velocity + phase. Text-only, so the per-run budget can be much higher than
+  // the vision pass.
+  const topics = new Map<string, Bucket>();
+  let postsTopicallyTagged = 0;
+  let topicsWritten = 0;
+  if (withTopics && topicPosts.size > 0) {
+    const ids = [...topicPosts.keys()];
+    const cachedTags = new Map<string, string[]>();
+
+    // 1. Load already-tagged captions from the cache (chunked to bound params).
+    for (const idChunk of chunk(ids, 500)) {
+      try {
+        const rows = await db.query<{ platform_post_id: string; tags: string[] }>(
+          `SELECT platform_post_id, tags FROM post_topic_tags
+            WHERE platform_post_id = ANY($1::text[])`,
+          [idChunk],
+        );
+        for (const r of rows) cachedTags.set(r.platform_post_id, Array.isArray(r.tags) ? r.tags : []);
+      } catch (err) {
+        console.error('[trend-ingest] topic cache read failed', err);
+      }
+    }
+
+    // 2. Tag NEW captions up to the budget — newest first, so fresh trends get
+    //    covered before we spend on backfill. Cache every result (empty too).
+    const untagged = ids.filter((id) => !cachedTags.has(id));
+    untagged.sort((a, b) => topicPosts.get(b)!.when - topicPosts.get(a)!.when);
+    const toTag = untagged.slice(0, topicBudget);
+    const openai = getOpenAIClient();
+    for (const batch of chunk(toTag, 25)) {
+      const items = batch.map((id) => ({ postId: id, caption: topicPosts.get(id)!.caption }));
+      let res: Record<string, string[]> = {};
+      try {
+        res = await openai.extractCaptionTopics(items);
+      } catch (err) {
+        console.error('[trend-ingest] topic tagging failed', err);
+      }
+      for (const id of batch) {
+        const tags = res[id] ?? [];
+        cachedTags.set(id, tags);
+        postsTopicallyTagged += 1;
+        try {
+          await db.query(
+            `INSERT INTO post_topic_tags (platform_post_id, tags, tagged_at)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (platform_post_id) DO UPDATE SET tags = EXCLUDED.tags, tagged_at = NOW()`,
+            [id, tags],
+          );
+        } catch (err) {
+          console.error(`[trend-ingest] topic cache write failed for ${id}`, err);
+        }
+      }
+    }
+
+    // 3. Aggregate every candidate that has tags (cached or newly tagged).
+    for (const id of ids) {
+      const tags = cachedTags.get(id);
+      if (!tags || tags.length === 0) continue;
+      const p = topicPosts.get(id)!;
+      for (const tag of tags) bump(topics, tag, titleCase(tag), p.when, p.cats);
+    }
+
+    topicsWritten = await upsert('topic', topics, { minCount: 3, cap: 120 });
+  }
+
   return {
     creators_scanned: creators.length,
     posts_scanned: postsScanned,
     hashtags_tracked: hashtagsWritten,
     formats_tracked: formatsWritten,
     visual_tracked: visualsWritten,
+    topics_tracked: topicsWritten,
     posts_visually_tagged: postsVisuallyTagged,
-    signals_upserted: hashtagsWritten + formatsWritten + visualsWritten,
+    posts_topically_tagged: postsTopicallyTagged,
+    signals_upserted: hashtagsWritten + formatsWritten + visualsWritten + topicsWritten,
     window_days: windowDays,
   };
 }

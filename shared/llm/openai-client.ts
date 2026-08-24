@@ -1130,6 +1130,66 @@ Return ONLY JSON: {"results":[{"id":"<id>","tags":["stripes","pastel palette"]}]
   }
 
   /**
+   * Extract trending TOPIC tags from a batch of Instagram captions — the SUBJECT
+   * of each post ("grwm", "budget travel", "street food", "gym transformation"),
+   * as opposed to a hashtag or a visual motif. Text-only and heavily batched, so
+   * it's an order of magnitude cheaper than the vision pass — we can run ~20
+   * captions per call on gpt-4o-mini. Returns postId -> up to 3 canonical, short,
+   * lowercase topic tags. Captions that carry no clear topic get an empty array
+   * (cached by the ingest so they're never re-sent). Best-effort: any parse/API
+   * failure yields {} for the batch rather than throwing.
+   */
+  async extractCaptionTopics(
+    items: Array<{ postId: string; caption: string }>,
+  ): Promise<Record<string, string[]>> {
+    const usable = items
+      .map((i) => ({ postId: i.postId, caption: (i.caption ?? '').replace(/\s+/g, ' ').trim().slice(0, 500) }))
+      .filter((i) => i.postId && i.caption.length >= 8)
+      .slice(0, 25);
+    if (usable.length === 0) return {};
+
+    const norm = (t: unknown): string =>
+      typeof t === 'string'
+        ? t.toLowerCase().trim().replace(/^#+/, '').replace(/[^a-z0-9 &+-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32)
+        : '';
+
+    const instruction = `Each line below is an Instagram post caption, preceded by its id. For EACH id, return 1-3 short lowercase TOPIC tags naming the SUBJECT of the post — what it's actually about — so we can see which topics are trending.
+Good topics: content genres and subjects like "grwm", "get ready with me", "budget travel", "street food", "skincare routine", "gym transformation", "day in my life", "unboxing", "recipe", "study with me", "diwali fashion", "wedding outfit", "product review", "morning routine", "car review", "makeup tutorial".
+Rules:
+- Tag the SUBJECT/genre, NOT hashtags, NOT visual aesthetics (no "pastel", "stripes"), NOT the brand name, NOT emojis.
+- Use canonical, singular-ish forms so the same topic doesn't fragment (prefer "street food" over "eating street food in delhi").
+- 2-4 words max per tag. Lowercase. No '#'.
+- If a caption has no clear topic (just emojis, a handle, one word), return an empty tags array for it.
+Return ONLY JSON: {"results":[{"id":"<id>","topics":["grwm","skincare routine"]}]} — one entry per id.`;
+
+    const lines = usable.map((it) => `id ${it.postId}: ${it.caption}`).join('\n');
+
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.classificationModel, // gpt-4o-mini — text-only, cheap
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: instruction },
+          { role: 'user', content: lines },
+        ],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(raw) as { results?: Array<{ id?: string; topics?: unknown }> };
+      const out: Record<string, string[]> = {};
+      for (const r of parsed.results ?? []) {
+        if (!r.id) continue;
+        const topics = Array.isArray(r.topics)
+          ? Array.from(new Set(r.topics.map(norm).filter((t) => t.length >= 3))).slice(0, 3)
+          : [];
+        out[String(r.id)] = topics;
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  }
+
+  /**
    * Generate per-creator reasoning for a shortlist position.
    * Uses gpt-4o (quality matters here for brand trust).
    */

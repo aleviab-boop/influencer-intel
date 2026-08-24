@@ -21,6 +21,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       minCount: typeof body?.minCount === 'number' ? body.minCount : undefined,
       withVisual: body?.withVisual === true,
       visualBudget: typeof body?.visualBudget === 'number' ? body.visualBudget : undefined,
+      withTopics: body?.withTopics === true,
+      topicBudget: typeof body?.topicBudget === 'number' ? body.topicBudget : undefined,
     });
     return NextResponse.json({ ok: true, ...report });
   } catch (err) {
