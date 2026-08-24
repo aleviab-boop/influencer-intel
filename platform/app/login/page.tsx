@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
+import { SUPPORT_CONTACT } from '@/components/legal';
 
 type Role = 'brand' | 'agency' | 'influencer' | 'admin';
 
@@ -293,7 +294,7 @@ export default function LoginPage() {
               <label className="block">
                 <span className="flex items-center justify-between text-[12px] font-medium text-ink-500 mb-1.5">
                   <span>Password</span>
-                  <a href="#" className="hover:underline font-normal" style={{ color: ACCENT }}>Forgot?</a>
+                  <a href={`mailto:${SUPPORT_CONTACT}?subject=${encodeURIComponent('Password reset request')}`} className="hover:underline font-normal" style={{ color: ACCENT }}>Forgot?</a>
                 </span>
                 <div className="relative">
                   <input

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { LiveSearch } from '@/components/live-search';
 import { Showcase } from '@/components/showcase';
-import { BrandMark, AccountMenu } from '@/components/marketing';
+import { BrandMark, AccountMenu, MarketingFooter } from '@/components/marketing';
 import { BookDemoButton } from '@/components/book-demo';
 import { Doodle } from '@/components/doodles';
 import { buildSuggestions } from '@/lib/suggestions';
@@ -156,7 +156,7 @@ function LanderContent() {
           </>
         )}
       </main>
-      <Footer />
+      <MarketingFooter />
     </div>
   );
 }
@@ -818,41 +818,6 @@ function FAQ() {
         </div>
       </div>
     </section>
-  );
-}
-
-function Footer() {
-  const cols = [
-    { h: 'Product', links: ['Influencer Database', 'Campaign Management', 'Comment to DM', 'Competitor Analysis', 'Search', 'Payouts'] },
-    { h: 'Resources', links: ['Authenticity Score', 'ER Calculator', 'Influencer directories', 'Case studies'] },
-    { h: 'About', links: ['Team', 'Contact', 'Privacy Policy', 'Terms'] },
-  ];
-  return (
-    <footer className="bg-[#0c0c0c] text-[#bbb] pt-14 pb-8">
-      <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <BrandMark size={28} />
-            <span className="text-[15px] font-bold text-white">Influencer Intel</span>
-          </div>
-          <p className="text-[13px] text-[#777] leading-relaxed">India’s AI-native InfluencerOS for brands.</p>
-        </div>
-        {cols.map((c) => (
-          <div key={c.h}>
-            <div className="text-[13px] font-semibold text-white mb-3">{c.h}</div>
-            <ul className="space-y-2 text-[13px]">
-              {c.links.map((l) => (
-                <li key={l}><a href="#" className="hover:text-white">{l}</a></li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      <div className="max-w-6xl mx-auto px-6 mt-12 pt-6 border-t border-[#222] flex items-center justify-between text-[12px] text-[#666]">
-        <span>© 2026 Influencer Intel</span>
-        <span className="flex gap-4"><a href="#" className="hover:text-white">Instagram</a><a href="#" className="hover:text-white">LinkedIn</a></span>
-      </div>
-    </footer>
   );
 }
 

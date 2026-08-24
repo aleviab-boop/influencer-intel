@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT } from '@/components/marketing';
 
 export const LEGAL_CONTACT = 'privacy@influencerintel.com';
+export const SUPPORT_CONTACT = 'support@influencerintel.com';
 
 // Shared shell for the legal/policy pages (Privacy, Terms, Data deletion).
 // Server component — the content is static; MarketingNav handles its own state.

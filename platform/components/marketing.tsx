@@ -334,20 +334,29 @@ export function MarketingNav() {
   );
 }
 
+// Company social profiles. TODO: replace with the real handles once the
+// accounts exist — kept as constants so both footers stay in sync.
+export const SOCIAL_INSTAGRAM = 'https://www.instagram.com/influencerintel';
+export const SOCIAL_LINKEDIN = 'https://www.linkedin.com/company/influencer-intel';
+
 function footerHref(label: string): string {
   const map: Record<string, string> = {
     'Authenticity Score': '/tools/fake-follower-checker',
     'ER Calculator': '/tools/er-calculator',
     'Influencer Database': '/influencer-database',
+    'Influencer directories': '/creators',
     'Campaign Management': '/campaigns',
     'Comment to DM': '/comment-to-dm',
     'Competitor Analysis': '/brand-mentions',
     'Search': '/influencer-search',
     'Payouts': '/payouts',
+    'Case studies': '/lander',
+    'Team': '/lander',
+    'Contact': '/book-demo',
     'Privacy Policy': '/privacy',
     'Terms': '/terms',
   };
-  return map[label] ?? '#';
+  return map[label] ?? '/lander';
 }
 
 export function MarketingFooter() {
@@ -384,7 +393,10 @@ export function MarketingFooter() {
       </div>
       <div className="max-w-6xl mx-auto px-6 mt-12 pt-6 border-t border-[#222] flex items-center justify-between text-[12px] text-[#666]">
         <span>© 2026 Influencer Intel</span>
-        <span className="flex gap-4"><a href="#" className="hover:text-white">Instagram</a><a href="#" className="hover:text-white">LinkedIn</a></span>
+        <span className="flex gap-4">
+          <a href={SOCIAL_INSTAGRAM} target="_blank" rel="noopener noreferrer" className="hover:text-white">Instagram</a>
+          <a href={SOCIAL_LINKEDIN} target="_blank" rel="noopener noreferrer" className="hover:text-white">LinkedIn</a>
+        </span>
       </div>
     </footer>
   );
