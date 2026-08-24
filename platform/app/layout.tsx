@@ -19,9 +19,44 @@ const fynd = localFont({
   display: 'swap',
 });
 
+const SITE_URL = 'https://influencer-intel-platform.vercel.app';
+const SITE_DESC =
+  'India’s AI-native influencer marketing platform — discover credibility-scored creators, predict campaign performance, run outreach, and manage payouts, all in one place.';
+
 export const metadata: Metadata = {
-  title: 'Influencer Intel — Discover, Predict, Monitor',
-  description: 'Find the right influencer. Predict their next hit.',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Influencer Intel — Discover, Predict, Monitor',
+    template: '%s · Influencer Intel',
+  },
+  description: SITE_DESC,
+  applicationName: 'Influencer Intel',
+  keywords: [
+    'influencer marketing',
+    'creator discovery',
+    'India influencers',
+    'influencer database',
+    'campaign management',
+    'influencer analytics',
+    'creator payouts',
+    'influencer outreach',
+  ],
+  authors: [{ name: 'Influencer Intel' }],
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    siteName: 'Influencer Intel',
+    title: 'Influencer Intel — Discover, Predict, Monitor',
+    description: SITE_DESC,
+    url: SITE_URL,
+    locale: 'en_IN',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Influencer Intel — Discover, Predict, Monitor',
+    description: SITE_DESC,
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
