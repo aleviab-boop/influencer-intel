@@ -244,7 +244,7 @@ export const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
   { label: 'Brand Collaborations', href: '/brand-mentions', icon: 'instagram' },
-  { label: 'Influencer Database', href: '/database', icon: 'database' },
+  { label: 'Influencer Database', href: '/influencer-database', icon: 'database' },
   { label: 'Campaign Analytics', href: '/campaign-analytics', icon: 'clock' },
   { label: 'Media Management', href: '/media-management', icon: 'video' },
   { label: 'Influencer Payouts', href: '/influencer-payouts', icon: 'payout' },
