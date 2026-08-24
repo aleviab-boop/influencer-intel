@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 
 interface Payout { program_id: string; creator_id: string; program_name: string; handle: string; display_name: string | null; rate: number | string | null; paid: boolean }
 const n = (v: number | string | null): number => (v == null ? 0 : Number(v) || 0);
@@ -11,9 +12,17 @@ const inr = (v: number): string => '₹' + Math.round(v).toLocaleString('en-IN')
 export default function InfluencerPayoutsFeature() {
   const [rows, setRows] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    fetch('/api/payouts').then((r) => r.json()).then((d) => setRows(d.payouts ?? [])).catch(() => {}).finally(() => setLoading(false));
+  const [error, setError] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(false);
+    fetch('/api/payouts')
+      .then((r) => { if (!r.ok) throw new Error('bad_status'); return r.json(); })
+      .then((d) => setRows(d.payouts ?? []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, []);
+  useEffect(() => { load(); }, [load]);
 
   const committed = rows.reduce((s, r) => s + n(r.rate), 0);
   const paid = rows.filter((r) => r.paid).reduce((s, r) => s + n(r.rate), 0);
@@ -37,6 +46,8 @@ export default function InfluencerPayoutsFeature() {
         <section className="max-w-5xl mx-auto px-6 py-10">
           {loading ? (
             <div className="flex items-center justify-center py-20"><div className="w-9 h-9 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
+          ) : error ? (
+            <InlineError message="We couldn’t load payouts right now." onRetry={load} />
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

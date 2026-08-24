@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 
 interface Creator { id: string; handle: string; display_name: string | null; follower_count: number | string | null; primary_category: string | null; engagement_rate: number | string | null; cred_score: string | null; is_verified: boolean | null }
 
@@ -13,14 +14,19 @@ export default function InfluencerDatabaseFeature() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(false);
     fetch('/api/creators?limit=8&sort=followers')
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error('bad_status'); return r.json(); })
       .then((d) => { setCreators(d.creators ?? []); setTotal(d.total ?? null); })
-      .catch(() => {})
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
@@ -44,6 +50,10 @@ export default function InfluencerDatabaseFeature() {
           </div>
           {loading ? (
             <div className="flex items-center justify-center py-20"><div className="w-9 h-9 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
+          ) : error ? (
+            <InlineError message="We couldn’t load the creator database right now." onRetry={load} />
+          ) : creators.length === 0 ? (
+            <div className="py-14 text-center rounded-2xl border border-dashed border-border text-sm text-ink-400">No creators to show yet.</div>
           ) : (
             <div className="rounded-2xl bg-white border border-border shadow-card overflow-hidden">
               <div className="hidden sm:grid grid-cols-[2fr_1.2fr_0.9fr_0.9fr] px-4 py-2.5 bg-[#f7f7fb] text-[11px] uppercase tracking-wider text-ink-400 font-semibold">

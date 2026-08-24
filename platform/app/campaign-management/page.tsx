@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 
 interface Program { id: string; name: string; status: string; recruit_count: number; recruited_count: number; budget: number | string | null; spent: number | string | null }
 const n = (v: number | string | null): number => (v == null ? 0 : Number(v) || 0);
@@ -12,9 +13,17 @@ const STATUS_C: Record<string, string> = { active: '#10b981', paused: '#f59e0b',
 export default function CampaignManagementFeature() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    fetch('/api/programs').then((r) => r.json()).then((d) => setPrograms(d.programs ?? [])).catch(() => {}).finally(() => setLoading(false));
+  const [error, setError] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(false);
+    fetch('/api/programs')
+      .then((r) => { if (!r.ok) throw new Error('bad_status'); return r.json(); })
+      .then((d) => setPrograms(d.programs ?? []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, []);
+  useEffect(() => { load(); }, [load]);
 
   const active = programs.filter((p) => p.status === 'active').length;
   const recruited = programs.reduce((s, p) => s + p.recruit_count, 0);
@@ -38,6 +47,8 @@ export default function CampaignManagementFeature() {
         <section className="max-w-5xl mx-auto px-6 py-10">
           {loading ? (
             <div className="flex items-center justify-center py-20"><div className="w-9 h-9 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
+          ) : error ? (
+            <InlineError message="We couldn’t load your campaigns right now." onRetry={load} />
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">

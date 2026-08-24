@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 
 interface Totals { campaigns: number; creators: number; reach: number; spend: number; avg_quality: number }
 interface Perf { id: string; name: string; status: string; recruits: number; reach: number; spend: number }
@@ -19,14 +20,21 @@ const STATUS_C: Record<string, string> = { active: '#10b981', paused: '#f59e0b',
 export default function CampaignAnalyticsPage() {
   const [data, setData] = useState<{ totals: Totals; per_campaign: Perf[]; outcomes: Outcome[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [period, setPeriod] = useState<Period>('all');
   const [metric, setMetric] = useState<'likes' | 'views'>('likes');
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
-    fetch(`/api/analytics?period=${period}`).then((r) => r.json()).then(setData).catch(() => {}).finally(() => setLoading(false));
+    setError(false);
+    fetch(`/api/analytics?period=${period}`)
+      .then((r) => { if (!r.ok) throw new Error('bad_status'); return r.json(); })
+      .then(setData)
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, [period]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => { setMounted(false); const t = setTimeout(() => setMounted(true), 50); return () => clearTimeout(t); }, [metric, data]);
 
@@ -66,8 +74,8 @@ export default function CampaignAnalyticsPage() {
 
           {loading ? (
             <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
-          ) : !data ? (
-            <div className="text-sm text-rose-700">Failed to load analytics.</div>
+          ) : error || !data ? (
+            <InlineError message="We couldn’t load analytics right now." onRetry={load} />
           ) : (
             <>
               {/* live stats */}
