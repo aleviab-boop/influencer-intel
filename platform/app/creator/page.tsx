@@ -28,6 +28,17 @@ interface Connection {
   expired?: boolean;
   days_until_expiry?: number | null;
 }
+interface PostSuggestion {
+  type: 'topic' | 'format';
+  label: string;
+  phase: string;
+  velocity: number;
+  usage_count_7d: number;
+  why_now: string;
+  rationale: string;
+  you_do_it: boolean;
+  prompt: string;
+}
 interface Overview {
   available: boolean;
   notifications: { action_count: number; total: number };
@@ -115,6 +126,7 @@ export default function CreatorPortal() {
   const [setup, setSetup] = useState<{ score: number; done_count: number; total_count: number; next: { label: string; href: string } | null } | null>(null);
   const [connection, setConnection] = useState<Connection | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [whatToPost, setWhatToPost] = useState<PostSuggestion[]>([]);
   const [syncing, setSyncing] = useState(false);
 
   // Resolve handle from URL (?handle=) or localStorage on first load; surface
@@ -181,6 +193,15 @@ export default function CreatorPortal() {
       .catch(() => {});
   }, []);
 
+  // "What to post now" — rising niche trends the creator under-uses. Best-effort:
+  // the section just stays hidden if there's nothing to suggest yet.
+  const loadWhatToPost = useCallback((h: string) => {
+    fetch(`/api/creator/what-to-post?handle=${encodeURIComponent(h.replace(/^@/, ''))}`)
+      .then((x) => x.json())
+      .then((d) => setWhatToPost(Array.isArray(d?.suggestions) ? d.suggestions : []))
+      .catch(() => setWhatToPost([]));
+  }, []);
+
   const disconnectIg = useCallback(async () => {
     if (!handle) return;
     if (!window.confirm('Disconnect Instagram? We’ll stop pulling live insights and delete the stored access token. Your saved profile stays.')) return;
@@ -197,10 +218,11 @@ export default function CreatorPortal() {
       await fetch(`/api/creator/connection?handle=${encodeURIComponent(handle.replace(/^@/, ''))}`, { method: 'POST' }).catch(() => {});
       await Promise.all([loadProfile(handle), loadConnection(handle)]);
       loadOverview(handle);
+      loadWhatToPost(handle);
     } finally {
       setSyncing(false);
     }
-  }, [handle, syncing, loadProfile, loadConnection, loadOverview]);
+  }, [handle, syncing, loadProfile, loadConnection, loadOverview, loadWhatToPost]);
 
   useEffect(() => {
     if (!handle) return;
@@ -216,12 +238,13 @@ export default function CreatorPortal() {
           .then((d) => { if (d?.available) setSetup(d); })
           .catch(() => {});
         loadOverview(handle);
+      loadWhatToPost(handle);
         void loadConnection(handle);
       } finally {
         setLoading(false);
       }
     })();
-  }, [handle, loadApplications, loadConnection, loadProfile, loadOverview]);
+  }, [handle, loadApplications, loadConnection, loadProfile, loadOverview, loadWhatToPost]);
 
   // Keep the dashboard fresh without a manual reload: whenever the creator
   // returns to this tab (focus / visibility) we re-pull the light read-only
@@ -241,6 +264,7 @@ export default function CreatorPortal() {
       void loadConnection(handle);
       void loadApplications(handle).catch(() => {});
       loadOverview(handle);
+      loadWhatToPost(handle);
     };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
@@ -248,7 +272,7 @@ export default function CreatorPortal() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [handle, loadProfile, loadConnection, loadApplications, loadOverview]);
+  }, [handle, loadProfile, loadConnection, loadApplications, loadOverview, loadWhatToPost]);
 
   function signIn() {
     const h = input.trim().replace(/^@/, '');
@@ -416,6 +440,52 @@ export default function CreatorPortal() {
               <QuickLink href={`/creator/settings?handle=${encodeURIComponent(profile.handle)}`} label="Settings" desc="Edit your profile" icon={ICONS.settings} />
               <QuickLink href={`/creator/campaigns?handle=${encodeURIComponent(profile.handle)}`} label="Campaigns" desc="Browse & apply" icon={ICONS.campaigns} />
             </div>
+
+            {/* What to post now — rising niche trends this creator under-uses */}
+            {whatToPost.length > 0 && (
+              <section className="mb-8">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[16px]" aria-hidden>✨</span>
+                  <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-400">What to post now</h2>
+                </div>
+                <p className="text-[12.5px] text-ink-400 mb-3">Rising in your niche — and gaps in what you&apos;ve been posting.</p>
+                <div className="grid sm:grid-cols-2 gap-2.5">
+                  {whatToPost.map((s, i) => (
+                    <div key={`${s.type}-${s.label}-${i}`} className="rounded-2xl bg-white border border-border shadow-card p-4 flex flex-col">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[9.5px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: ACCENT_SOFT, color: ACCENT }}>
+                          {s.type}
+                        </span>
+                        <span className="text-[14px] font-semibold text-ink-900 capitalize truncate">{s.label}</span>
+                        {!s.you_do_it && (
+                          <span className="ml-auto text-[9.5px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0" style={{ background: '#e7f8f0', color: '#0f9d6a' }}>
+                            new for you
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[12.5px] text-ink-600">{s.why_now}</div>
+                      <div className="text-[12px] text-ink-400 mt-0.5">{s.rationale}</div>
+                      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/70">
+                        <Link
+                          href={`/tools/content-ideas?prompt=${encodeURIComponent(s.prompt)}`}
+                          className="text-[12.5px] font-semibold inline-flex items-center gap-1 hover:opacity-80"
+                          style={{ color: ACCENT }}
+                        >
+                          Get post ideas
+                          <span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
+                        </Link>
+                        <Link
+                          href={`/creator/reel-predictor?handle=${encodeURIComponent(profile.handle)}`}
+                          className="text-[12.5px] font-medium text-ink-500 hover:text-ink-900"
+                        >
+                          Forecast it
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* My applications */}
             {applications.length > 0 && (
