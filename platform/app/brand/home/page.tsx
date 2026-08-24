@@ -258,6 +258,10 @@ export default function BrandHomePage() {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [trends, setTrends] = useState<Trend[]>([]);
+  // Trending TOPICS specifically (the actionable "what to make content about"
+  // signal) — surfaced ahead of the mixed format/hashtag chips and clickable
+  // straight into a creator search.
+  const [topicTrends, setTopicTrends] = useState<Trend[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Brand DNA (re)analysis, driven from the empty state when a workspace has no DNA.
   const [dnaRunning, setDnaRunning] = useState(false);
@@ -350,7 +354,18 @@ export default function BrandHomePage() {
       };
       let rows = firstWord ? await tryFetch(`category=${encodeURIComponent(firstWord)}&limit=10`) : [];
       if (rows.length === 0) rows = await tryFetch('limit=10');
-      if (!cancelled) setTrends(rows);
+
+      // Trending topics for this niche — the "what to make" signal. Fetched
+      // separately (type=topic) so it's guaranteed present and not outranked by
+      // high-volume hashtags in the mixed set.
+      let topics = firstWord ? await tryFetch(`type=topic&category=${encodeURIComponent(firstWord)}&limit=8`) : [];
+      if (topics.length === 0) topics = await tryFetch('type=topic&limit=8');
+
+      if (!cancelled) {
+        setTopicTrends(topics);
+        // Drop topics from the mixed chips so they aren't shown twice.
+        setTrends(rows.filter((t) => t.trend_type !== 'topic'));
+      }
     })();
     return () => {
       cancelled = true;
@@ -583,10 +598,54 @@ export default function BrandHomePage() {
             )}
 
             {/* Trending in your niche */}
-            {trends.length > 0 && (
+            {(topicTrends.length > 0 || trends.length > 0) && (
               <section className="mb-14">
                 <SectionHead eyebrow="Stay in the loop" title="Trending in your space" />
-                <div className="flex flex-wrap gap-2.5">
+
+                {/* Topics to build on — clickable straight into a creator search */}
+                {topicTrends.length > 0 && (
+                  <div className="mb-5">
+                    <div className="text-[13px] font-semibold text-[#555] mb-2.5">
+                      Topics to build a campaign on
+                      <span className="ml-1.5 font-normal text-[#aaa]">— tap to find creators already posting about it</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2.5">
+                      {topicTrends.map((t) => {
+                        const vel = Math.round(Number(t.velocity) * 100);
+                        const rising = Number(t.velocity) > 0.1;
+                        return (
+                          <button
+                            key={`topic-${t.display_name}`}
+                            onClick={() => runSearch(t.display_name)}
+                            className="group text-left rounded-2xl bg-white border border-[#eee] px-4 py-2.5 shadow-[0_6px_24px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#c9bdfb] hover:shadow-[0_12px_34px_rgba(108,77,246,0.12)]"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="text-[14px] font-semibold text-[#111] capitalize">{t.display_name}</div>
+                              {rising && (
+                                <span className="text-[9.5px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: '#e7f8f0', color: '#0f9d6a' }}>
+                                  rising
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[12px] text-[#888] capitalize">
+                              {t.phase} · {Number.isFinite(vel) ? `${vel >= 0 ? '+' : ''}${vel}%` : 'topic'} · {Number(t.usage_count_7d) || 0} posts/7d
+                            </div>
+                            <div className="mt-1 text-[11.5px] font-medium opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: ACCENT }}>
+                              Find creators →
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {trends.length > 0 && (
+                  <>
+                    {topicTrends.length > 0 && (
+                      <div className="text-[13px] font-semibold text-[#555] mb-2.5">Formats, hashtags & looks gaining momentum</div>
+                    )}
+                    <div className="flex flex-wrap gap-2.5">
                   {trends.map((t) => {
                     const vel = Math.round(Number(t.velocity) * 100);
                     return (
@@ -606,7 +665,9 @@ export default function BrandHomePage() {
                       </div>
                     );
                   })}
-                </div>
+                    </div>
+                  </>
+                )}
               </section>
             )}
 
