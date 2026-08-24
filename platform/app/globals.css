@@ -86,6 +86,16 @@ button, input, textarea, select {
 @keyframes ii-countup { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .ii-countup { animation: ii-countup .5s ease forwards; }
 
+/* Skeleton shimmer — a sweeping highlight over placeholder blocks while a
+   route's bundle/data loads. Used by the loading.tsx route fallbacks. */
+@keyframes ii-shimmer { from { background-position: -200% 0; } to { background-position: 200% 0; } }
+.ii-skel {
+  background: linear-gradient(90deg, #eeecf6 25%, #f6f4fc 37%, #eeecf6 63%);
+  background-size: 200% 100%;
+  animation: ii-shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
 /* Global scroll-reveal (driven by ScrollMotion). Sections rise + fade in as
    they enter the viewport. JS adds .ii-reveal (hidden), then .ii-inview. */
 .ii-reveal { opacity: 0; transform: translateY(22px); will-change: opacity, transform; }
@@ -97,4 +107,5 @@ button, input, textarea, select {
 @media (prefers-reduced-motion: reduce) {
   .ii-reveal { opacity: 1; transform: none; }
   .ii-floatr { animation: none; }
+  .ii-skel { animation: none; }
 }
