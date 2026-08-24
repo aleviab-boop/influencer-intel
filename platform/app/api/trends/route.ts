@@ -7,7 +7,14 @@ export async function GET(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
   const phase = url.searchParams.get('phase');
   const category = url.searchParams.get('category');
-  const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 50);
+  // Optional trend_type filter (e.g. ?type=topic for the "what's viral" board).
+  // Accepts a comma list; anything outside the known set is ignored.
+  const KNOWN_TYPES = new Set(['audio', 'format', 'hashtag', 'topic', 'visual']);
+  const types = (url.searchParams.get('type') ?? '')
+    .split(',')
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => KNOWN_TYPES.has(t));
+  const limit = Math.min(Number(url.searchParams.get('limit') ?? 20), 100);
 
   const db = getBolticClient();
   let whereClause = 'WHERE 1=1';
@@ -20,6 +27,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (category) {
     queryParams.push(category);
     whereClause += ` AND $${queryParams.length} = ANY(categories)`;
+  }
+  if (types.length > 0) {
+    queryParams.push(types);
+    whereClause += ` AND trend_type = ANY($${queryParams.length})`;
   }
 
   // Over-fetch by volume, then drop engagement-bait / geo / spam hashtags and

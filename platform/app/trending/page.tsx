@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { InlineError } from '@/components/skeleton';
 
@@ -127,9 +128,18 @@ export default function TrendingPage() {
 
         {/* First-party Instagram trends — our differentiator vs. the Google feed */}
         <section className="max-w-6xl mx-auto px-6 pt-10">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[18px]">📸</span>
-            <h2 className="text-[18px] font-bold">Trending on Instagram</h2>
+          <div className="flex items-center justify-between gap-3 mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[18px]">📸</span>
+              <h2 className="text-[18px] font-bold">Trending on Instagram</h2>
+            </div>
+            <Link
+              href="/trending/topics"
+              className="inline-flex items-center gap-1 text-[13px] font-semibold shrink-0 hover:underline"
+              style={{ color: ACCENT }}
+            >
+              What&apos;s viral right now →
+            </Link>
           </div>
           <p className="text-[13px] text-[#888] mb-5">
             Straight from the creators we track — which formats, hashtags and aesthetics are gaining momentum right now.
