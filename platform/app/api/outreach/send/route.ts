@@ -64,29 +64,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!EMAIL_RE.test(recipient)) {
     return NextResponse.json({ error: 'a valid recipient email is required' }, { status: 400 });
   }
-  if (!emailEnabled()) {
-    // No server-side sender configured — tell the client to hand off to the
-    // user's own mail app (Gmail compose / mailto) instead of failing. The
-    // draft goes out from the user's real address; we don't log it as a 'sent'
-    // here since we can't confirm they hit send.
-    return NextResponse.json(
-      { ok: false, needs_handoff: true, error: 'Email sending is not configured — open in your mail app instead.' },
-      { status: 503 },
-    );
-  }
-
   // Stamp the sending agency (when signed in) so the pipeline can scope each
   // creator's outreach history to the account that sent it. Null for the
   // anonymous discovery flow — those sends just aren't account-attributed.
   const account = await getAgencySession();
   const accountId = account?.account_id ?? null;
+  const db = getBolticClient();
+
+  if (!emailEnabled()) {
+    // No server-side sender configured — the client hands the draft off to the
+    // user's own mail app (Gmail compose / mailto). The draft goes out from the
+    // user's real address, so this IS a tracked contact, but not a confirmed
+    // 'sent' (we can't know they hit send) — log it as 'handoff' so it shows up
+    // in the outreach history with honest state, then signal the client.
+    let id: string | null = null;
+    try {
+      const rows = await db.query<{ id: string }>(
+        `INSERT INTO outreach_messages
+           (handle, creator_id, program_id, account_id, channel, recipient, subject, body, status)
+         VALUES ($1, $2, $3, $4, 'email', $5, $6, $7, 'handoff')
+         RETURNING id`,
+        [handle, creatorId, programId, accountId, recipient, subject.slice(0, 300), message],
+      );
+      id = rows[0]?.id ?? null;
+    } catch (err) {
+      console.error('[outreach/send] handoff log write failed:', err);
+    }
+    return NextResponse.json(
+      { ok: false, needs_handoff: true, id, error: 'Email sending is not configured — open in your mail app instead.' },
+      { status: 503 },
+    );
+  }
 
   // Send first (no meta → skips the creator opt-out gate + email_log; this is
   // first-contact outreach, not a subscribed notification). We keep our own
   // audit in outreach_messages instead.
   const sent = await sendEmail({ to: recipient, subject, html: outreachHtml(message) });
 
-  const db = getBolticClient();
   try {
     const rows = await db.query<{ id: string }>(
       `INSERT INTO outreach_messages

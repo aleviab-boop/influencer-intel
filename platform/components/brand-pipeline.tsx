@@ -558,7 +558,14 @@ function PipelineRow({
                 <li key={h.id} className="text-[12px] text-ink-600 flex items-start gap-2">
                   <span
                     className="shrink-0 mt-0.5 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded"
-                    style={{ background: h.status === 'sent' ? '#dcfce7' : '#fee2e2', color: h.status === 'sent' ? '#15803d' : '#b91c1c' }}
+                    style={
+                      h.status === 'sent'
+                        ? { background: '#dcfce7', color: '#15803d' }
+                        : h.status === 'handoff'
+                          ? { background: '#fef3c7', color: '#b45309' }
+                          : { background: '#fee2e2', color: '#b91c1c' }
+                    }
+                    title={h.status === 'handoff' ? 'Handed off to your mail app — confirm it was sent' : h.status}
                   >
                     {h.channel}
                   </span>
