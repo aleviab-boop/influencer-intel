@@ -414,31 +414,39 @@ export function MarketingNav() {
 export const SOCIAL_INSTAGRAM = 'https://www.instagram.com/influencerintel';
 export const SOCIAL_LINKEDIN = 'https://www.linkedin.com/company/influencer-intel';
 
+// Every footer label maps to a real, public destination — feature landings for
+// product links, the /tools pages for free tools, and the legal/company pages.
 function footerHref(label: string): string {
   const map: Record<string, string> = {
+    // Product
+    'Influencer Database': '/influencer-database',
+    'Influencer Search': '/influencer-search',
+    'Campaign Management': '/campaign-management',
+    'Comment to DM': '/comment-to-dm',
+    'Competitor Analysis': '/competitor-analysis',
+    'Influencer Payouts': '/influencer-payouts',
+    // Free tools
     'Authenticity Score': '/tools/fake-follower-checker',
     'ER Calculator': '/tools/er-calculator',
-    'Influencer Database': '/influencer-database',
-    'Influencer directories': '/creators',
-    'Campaign Management': '/campaigns',
-    'Comment to DM': '/comment-to-dm',
-    'Competitor Analysis': '/brand-mentions',
-    'Search': '/influencer-search',
-    'Payouts': '/payouts',
-    'Case studies': '/lander',
-    'Team': '/lander',
+    'Content Ideas': '/tools/content-ideas',
+    'Reply Assistant': '/tools/reply-assistant',
+    // Company
+    'For Influencers': '/for-influencers',
+    'Pricing': '/pricing',
+    'Trending': '/trending',
     'Contact': '/book-demo',
     'Privacy Policy': '/privacy',
     'Terms': '/terms',
+    'Data deletion': '/data-deletion',
   };
   return map[label] ?? '/lander';
 }
 
 export function MarketingFooter() {
   const cols = [
-    { h: 'Product', links: ['Influencer Database', 'Campaign Management', 'Comment to DM', 'Competitor Analysis', 'Search', 'Payouts'] },
-    { h: 'Resources', links: ['Authenticity Score', 'ER Calculator', 'Influencer directories', 'Case studies'] },
-    { h: 'About', links: ['Team', 'Contact', 'Privacy Policy', 'Terms'] },
+    { h: 'Product', links: ['Influencer Database', 'Influencer Search', 'Campaign Management', 'Comment to DM', 'Competitor Analysis', 'Influencer Payouts'] },
+    { h: 'Free tools', links: ['Authenticity Score', 'ER Calculator', 'Content Ideas', 'Reply Assistant'] },
+    { h: 'Company', links: ['For Influencers', 'Pricing', 'Trending', 'Contact', 'Privacy Policy', 'Terms', 'Data deletion'] },
   ];
   return (
     <footer className="relative overflow-hidden bg-[#0c0c0c] text-[#bbb] pt-14 pb-8">
