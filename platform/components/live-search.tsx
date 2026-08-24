@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildSuggestions } from '@/lib/suggestions';
+import { openGmailCompose } from '@/lib/mail-compose';
 import { brandSafety } from '@/lib/creator-metrics';
 import { SaveCreatorButton } from '@/components/brand-pipeline';
 import type { useBrandPipeline } from '@/lib/use-brand-pipeline';
@@ -661,7 +662,7 @@ export function LiveSearch({
   const [draftFollowup, setDraftFollowup] = useState(false);
   const [copied, setCopied] = useState(false);
   // one-click email send (Phase 5): 'idle' | 'sending' | 'sent' | 'error'
-  const [emailSend, setEmailSend] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [emailSend, setEmailSend] = useState<'idle' | 'sending' | 'sent' | 'error' | 'handoff'>('idle');
   const [emailSendErr, setEmailSendErr] = useState<string | null>(null);
   // bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1053,6 +1054,14 @@ export function LiveSearch({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) {
+        // No server-side sender → hand off to the user's own Gmail: open a
+        // pre-filled compose tab so the draft goes out from their address.
+        if (d.needs_handoff) {
+          openGmailCompose(p.email, 'Collaboration with you', draftText);
+          setEmailSend('handoff');
+          markContacted(p.username);
+          return;
+        }
         setEmailSend('error');
         setEmailSendErr(d.error || 'Could not send. Try Copy instead.');
         return;
@@ -2336,12 +2345,12 @@ export function LiveSearch({
                   draftFor.email ? (
                     <button
                       onClick={() => void sendOutreachEmail(draftFor)}
-                      disabled={draftLoading || !draftText || emailSend === 'sending' || emailSend === 'sent'}
+                      disabled={draftLoading || !draftText || emailSend === 'sending' || emailSend === 'sent' || emailSend === 'handoff'}
                       className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-60 flex items-center gap-2"
                       style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
                     >
                       {emailSend === 'sending' && <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                      {emailSend === 'sent' ? 'Sent ✓' : emailSend === 'sending' ? 'Sending…' : '✉ Send email'}
+                      {emailSend === 'sent' ? 'Sent ✓' : emailSend === 'handoff' ? 'Opened in Gmail ✓' : emailSend === 'sending' ? 'Sending…' : '✉ Send email'}
                     </button>
                   ) : (
                     <span className="px-4 py-2 text-[12px] text-[#999]">No email on file — use Copy</span>
@@ -2376,6 +2385,9 @@ export function LiveSearch({
               )}
               {draftChannel === 'email' && emailSend === 'sent' && draftFor.email && (
                 <p className="mt-2 text-[11px] text-emerald-600 text-right">Sent to {draftFor.email} — logged to outreach history.</p>
+              )}
+              {draftChannel === 'email' && emailSend === 'handoff' && draftFor.email && (
+                <p className="mt-2 text-[11px] text-emerald-600 text-right">Opened a Gmail draft to {draftFor.email} — hit send there. @{draftFor.username} moved to Contacted.</p>
               )}
               {draftChannel === 'email' && emailSend === 'error' && (
                 <p className="mt-2 text-[11px] text-rose-600 text-right">{emailSendErr}</p>

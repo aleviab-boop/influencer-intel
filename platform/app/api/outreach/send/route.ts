@@ -65,8 +65,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'a valid recipient email is required' }, { status: 400 });
   }
   if (!emailEnabled()) {
+    // No server-side sender configured — tell the client to hand off to the
+    // user's own mail app (Gmail compose / mailto) instead of failing. The
+    // draft goes out from the user's real address; we don't log it as a 'sent'
+    // here since we can't confirm they hit send.
     return NextResponse.json(
-      { error: 'Email sending is not configured on this environment.' },
+      { ok: false, needs_handoff: true, error: 'Email sending is not configured — open in your mail app instead.' },
       { status: 503 },
     );
   }

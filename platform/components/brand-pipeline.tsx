@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { openGmailCompose } from '@/lib/mail-compose';
 import {
   PIPELINE_STATUSES,
   type PipelineStatus,
@@ -607,7 +608,7 @@ function ContactModal({
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [recipient, setRecipient] = useState(snapEmail);
-  const [send, setSend] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [send, setSend] = useState<'idle' | 'sending' | 'sent' | 'error' | 'handoff'>('idle');
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -669,6 +670,11 @@ function ContactModal({
       const d = await r.json().catch(() => ({}));
       if (r.ok && d.ok) {
         setSend('sent');
+        await pipeline.updateStatus(item.handle, 'contacted');
+      } else if (d.needs_handoff) {
+        // No server-side sender → open the user's own Gmail with the draft.
+        openGmailCompose(recipient, `Collaboration with ${brand}`, draft);
+        setSend('handoff');
         await pipeline.updateStatus(item.handle, 'contacted');
       } else {
         setSend('error');
@@ -741,6 +747,9 @@ function ContactModal({
           {send === 'sent' && (
             <p className="text-[12.5px] text-emerald-600">Sent to {recipient} — logged, and {item.handle} moved to Contacted.</p>
           )}
+          {send === 'handoff' && (
+            <p className="text-[12.5px] text-emerald-600">Opened a Gmail draft to {recipient} — hit send there. {item.handle} moved to Contacted.</p>
+          )}
           {copied && channel === 'dm' && (
             <p className="text-[12.5px] text-emerald-600">Copied — the DM opened in a new tab. Paste &amp; send, {item.handle} moved to Contacted.</p>
           )}
@@ -759,11 +768,11 @@ function ContactModal({
           {channel === 'email' ? (
             <button
               onClick={() => void sendEmailNow()}
-              disabled={loading || !draft || !EMAIL_RE.test(recipient) || send === 'sending' || send === 'sent'}
+              disabled={loading || !draft || !EMAIL_RE.test(recipient) || send === 'sending' || send === 'sent' || send === 'handoff'}
               className="px-4 py-2 rounded-lg text-white text-[13px] font-semibold disabled:opacity-50"
               style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
             >
-              {send === 'sending' ? 'Sending…' : send === 'sent' ? 'Sent ✓' : 'Send email'}
+              {send === 'sending' ? 'Sending…' : send === 'sent' ? 'Sent ✓' : send === 'handoff' ? 'Opened in Gmail ✓' : 'Send email'}
             </button>
           ) : (
             <button
@@ -907,6 +916,11 @@ function BulkContactModal({
         if (res.ok && d.ok) {
           setRows((p) => ({ ...p, [k]: { ...p[k]!, state: 'sent' } }));
           await pipeline.updateStatus(it.handle, 'contacted');
+        } else if (d.needs_handoff) {
+          // Can't fan out N Gmail tabs from a bulk run — skip and point the user
+          // to the single-send modal, which hands off to their Gmail one draft
+          // at a time.
+          setRows((p) => ({ ...p, [k]: { ...p[k]!, state: 'skipped', error: 'Email not configured — open this creator individually to send via Gmail.' } }));
         } else {
           setRows((p) => ({ ...p, [k]: { ...p[k]!, state: 'failed', error: d.error || 'Send failed' } }));
         }
