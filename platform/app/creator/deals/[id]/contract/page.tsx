@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, Suspense, use } from 'react';
+import { useCallback, useEffect, useState, Suspense, use } from 'react';
 import Link from 'next/link';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { SignPanel } from '@/components/sign-panel';
 
 interface Clause { n: number; heading: string; body: string[] }
 interface Party { role: string; name: string; detail: string | null }
-interface Signature { party: string; name: string; signed: boolean; signed_label: string | null }
+interface Signature { party_key: 'brand' | 'creator'; party: string; name: string; signed: boolean; signed_label: string | null; explicit: boolean }
 interface Contract {
   available: boolean;
   id: string;
@@ -43,16 +44,21 @@ function ContractView({ id }: { id: string }) {
   const [data, setData] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const reload = useCallback(async () => {
+    try {
+      const d = (await fetch(`/api/creator/contract?deal=${encodeURIComponent(id)}`).then((r) => r.json())) as Contract;
+      setData(d);
+    } catch {
+      setData({ available: false } as Contract);
+    }
+  }, [id]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const h = (params.get('handle') || (typeof localStorage !== 'undefined' ? localStorage.getItem('creator_handle') : null) || '').trim();
     setHandle(h || null);
-    fetch(`/api/creator/contract?deal=${encodeURIComponent(id)}`)
-      .then((r) => r.json())
-      .then((d: Contract) => setData(d))
-      .catch(() => setData({ available: false } as Contract))
-      .finally(() => setLoading(false));
-  }, [id]);
+    reload().finally(() => setLoading(false));
+  }, [reload]);
 
   const backHref = `/creator/deals/${encodeURIComponent(id)}${handle ? `?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : ''}`;
 
@@ -78,6 +84,8 @@ function ContractView({ id }: { id: string }) {
   }
 
   const st = STATUS_STYLE[data.status];
+  const mySig = data.signatures.find((s) => s.party_key === 'creator');
+  const theirSig = data.signatures.find((s) => s.party_key === 'brand');
 
   return (
     <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
@@ -90,6 +98,24 @@ function ContractView({ id }: { id: string }) {
           Save as PDF
         </button>
       </div>
+
+      {mySig && !mySig.explicit && (
+        <SignPanel
+          heading="Sign this agreement"
+          subline={theirSig?.explicit ? `${theirSig.name} has signed. Add your signature to make it binding.` : 'Type your full legal name to add your signature.'}
+          defaultName={mySig.name && mySig.name !== 'Creator' ? mySig.name : ''}
+          onSign={async (name) => {
+            const res = await fetch('/api/creator/contract', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ deal: id, signer_name: name }),
+            });
+            const j = (await res.json().catch(() => ({}))) as { ok?: boolean };
+            if (!res.ok || !j.ok) throw new Error('sign_failed');
+            await reload();
+          }}
+        />
+      )}
 
       {/* Contract sheet */}
       <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-card overflow-hidden print:shadow-none print:rounded-none">
@@ -149,7 +175,7 @@ function ContractView({ id }: { id: string }) {
               <div className="h-9 flex items-end">
                 {s.signed
                   ? <span className="text-[15px] font-semibold" style={{ color: ACCENT, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>{s.name}</span>
-                  : <span className="text-[12px] text-ink-300">Awaiting acceptance</span>}
+                  : <span className="text-[12px] text-ink-300">Awaiting signature</span>}
               </div>
               <div className="mt-1 border-t border-border pt-1.5 flex items-center justify-between">
                 <span className="text-[12.5px] text-ink-700">{s.name}</span>

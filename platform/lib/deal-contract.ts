@@ -28,6 +28,15 @@ export interface DealContractInput {
   note: string | null;
   created_at: string | null;  // ISO
   accepted_at: string | null; // ISO — recruit updated_at, when they committed
+  // Explicit e-signatures recorded via the sign action (migration 046). When a
+  // party has signed, it overrides the lifecycle-derived default for that party.
+  signOffs?: DealSignOff[];
+}
+
+export interface DealSignOff {
+  party: 'brand' | 'creator';
+  signer_name: string;
+  signed_at: string; // ISO
 }
 
 export interface ContractClause {
@@ -55,10 +64,12 @@ export interface DealContract {
   summary: { label: string; value: string }[];
   clauses: ContractClause[];
   signatures: {
-    party: string;   // who signs
+    party_key: 'brand' | 'creator';  // which side this signature belongs to
+    party: string;   // who signs (display label)
     name: string;
     signed: boolean;
-    signed_label: string | null;  // "Accepted 3 Feb 2026" / null
+    signed_label: string | null;  // "Signed 3 Feb 2026" / null
+    explicit: boolean;  // true when a real e-signature was recorded (vs. derived)
   }[];
   footnote: string;
 }
@@ -226,22 +237,58 @@ export function buildDealContract(d: DealContractInput, todayISO: string): DealC
   ];
 
   // ---- Signature block ------------------------------------------------------
-  // Acceptance in-app IS the signature: the Client issued the invite; the
-  // Creator accepted it. A draft (unaccepted) shows both as unsigned.
-  const signed = state !== 'draft';
-  const acceptedLabel = d.accepted_at ? `Accepted ${dateLabel(d.accepted_at.slice(0, 10))}` : (signed ? 'Accepted' : null);
+  // Two layers of consent, in priority order:
+  //  1. An EXPLICIT e-signature (migration 046) — a party typed their name and
+  //     affirmed the terms. This is authoritative and shows the typed name.
+  //  2. Otherwise, the lifecycle default: acceptance in-app implies consent
+  //     (the Client issued the invite; the Creator accepted it). A draft
+  //     (unaccepted) shows both as unsigned.
+  const signOffs = d.signOffs ?? [];
+  const signOffFor = (party: 'brand' | 'creator'): DealSignOff | undefined =>
+    signOffs.find((s) => s.party === party);
+
+  const derivedSigned = state !== 'draft';
+  const acceptedLabel = d.accepted_at ? `Accepted ${dateLabel(d.accepted_at.slice(0, 10))}` : (derivedSigned ? 'Accepted' : null);
   const issuedLabel = d.created_at ? `Issued ${dateLabel(d.created_at.slice(0, 10))}` : 'Issued';
 
+  function signatureFor(party: 'brand' | 'creator', label: string, fallbackName: string, derivedLabel: string | null) {
+    const explicit = signOffFor(party);
+    if (explicit) {
+      return {
+        party_key: party,
+        party: label,
+        name: explicit.signer_name || fallbackName,
+        signed: true,
+        signed_label: `Signed ${dateLabel(explicit.signed_at.slice(0, 10))}`,
+        explicit: true,
+      };
+    }
+    return {
+      party_key: party,
+      party: label,
+      name: fallbackName,
+      signed: derivedSigned,
+      signed_label: derivedSigned ? derivedLabel : null,
+      explicit: false,
+    };
+  }
+
   const signatures = [
-    { party: 'For the Client', name: brandName, signed, signed_label: signed ? issuedLabel : null },
-    { party: 'The Creator', name: creatorName, signed, signed_label: acceptedLabel },
+    signatureFor('brand', 'For the Client', brandName, issuedLabel),
+    signatureFor('creator', 'The Creator', creatorName, acceptedLabel),
   ];
 
-  const footnote = state === 'draft'
+  const anyExplicit = signOffs.length > 0;
+  const bothExplicit = !!signOffFor('brand') && !!signOffFor('creator');
+  const footnote = state === 'draft' && !anyExplicit
     ? 'This is a draft agreement generated from the invitation. It takes effect once the Creator accepts the deal.'
     : state === 'completed'
       ? 'This agreement has been fulfilled and the Fee settled in full.'
-      : 'This agreement is in force. Both parties accepted its terms in Influencer Intel.';
+      : bothExplicit
+        ? 'This agreement has been electronically signed by both parties in Influencer Intel.'
+        : anyExplicit
+          ? 'This agreement has been electronically signed. It takes full effect once both parties sign.'
+          : 'This agreement is in force. Both parties accepted its terms in Influencer Intel.';
 
   return {
     available: true,

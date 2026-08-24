@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { getSession } from '@/lib/auth';
 import { brandMayAccessProgram } from '@/lib/programs-service';
-import { buildDealContract, type DealContractInput } from '@/lib/deal-contract';
+import { buildDealContract, type DealContractInput, type DealSignOff } from '@/lib/deal-contract';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +10,18 @@ const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+interface SignRow { party: 'brand' | 'creator'; signer_name: string; signed_at: string }
+
+async function loadSignOffs(recruitId: string): Promise<DealSignOff[]> {
+  const db = getBolticClient();
+  const rows = await db.query<SignRow>(
+    `SELECT party, signer_name, signed_at::text AS signed_at
+       FROM deal_signatures WHERE recruit_id = $1`,
+    [recruitId],
+  );
+  return rows.map((r) => ({ party: r.party, signer_name: r.signer_name, signed_at: r.signed_at }));
+}
 
 interface Row {
   id: string;
@@ -91,10 +103,68 @@ export async function GET(request: Request): Promise<NextResponse> {
       note: r.note,
       created_at: r.created_at,
       accepted_at: r.updated_at,
+      signOffs: await loadSignOffs(r.id),
     };
 
     return NextResponse.json(buildDealContract(input, new Date().toISOString()));
   } catch (err) {
     return NextResponse.json({ available: false, reason: 'db_error', error: (err as Error).message }, { status: 200 });
+  }
+}
+
+/**
+ * POST /api/brand/contract  { program, creator, signer_name }
+ *
+ * Records the BRAND's explicit e-signature (party = 'brand') on the agreement,
+ * resolved by (program, creator) like the GET. Ownership-guarded to the signed-in
+ * brand. Idempotent upsert — one signature per party per deal.
+ */
+export async function POST(request: Request): Promise<NextResponse> {
+  let body: { program?: string; creator?: string; signer_name?: string };
+  try {
+    body = (await request.json()) as { program?: string; creator?: string; signer_name?: string };
+  } catch {
+    return NextResponse.json({ ok: false, reason: 'bad_json' }, { status: 400 });
+  }
+
+  const programId = (body.program ?? '').trim();
+  const creatorId = (body.creator ?? '').trim();
+  const signerName = (body.signer_name ?? '').trim();
+  if (!programId || !creatorId) {
+    return NextResponse.json({ ok: false, reason: 'missing_params' }, { status: 400 });
+  }
+  if (signerName.length < 2 || signerName.length > 120) {
+    return NextResponse.json({ ok: false, reason: 'bad_name' }, { status: 400 });
+  }
+
+  const db = getBolticClient();
+  try {
+    const rows = await db.query<{ id: string; program_brand_id: string | null }>(
+      `SELECT pr.id, p.brand_id AS program_brand_id
+         FROM program_recruits pr
+         JOIN programs p ON p.id = pr.program_id
+        WHERE pr.program_id = $1 AND pr.creator_id = $2
+        LIMIT 1`,
+      [programId, creatorId],
+    );
+    const r = rows[0];
+    if (!r) return NextResponse.json({ ok: false, reason: 'not_found' }, { status: 404 });
+
+    const session = await getSession();
+    if (!brandMayAccessProgram(r.program_brand_id, session?.brand_id)) {
+      return NextResponse.json({ ok: false, reason: 'forbidden' }, { status: 403 });
+    }
+
+    await db.query(
+      `INSERT INTO deal_signatures (recruit_id, party, signer_name)
+       VALUES ($1, 'brand', $2)
+       ON CONFLICT (recruit_id, party)
+       DO UPDATE SET signer_name = EXCLUDED.signer_name, signed_at = now()`,
+      [r.id, signerName],
+    );
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ ok: false, reason: 'db_error', error: (err as Error).message }, { status: 500 });
   }
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, Suspense, use } from 'react';
+import { useCallback, useEffect, useState, Suspense, use } from 'react';
 import Link from 'next/link';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { SignPanel } from '@/components/sign-panel';
 
 interface Clause { n: number; heading: string; body: string[] }
 interface Party { role: string; name: string; detail: string | null }
-interface Signature { party: string; name: string; signed: boolean; signed_label: string | null }
+interface Signature { party_key: 'brand' | 'creator'; party: string; name: string; signed: boolean; signed_label: string | null; explicit: boolean }
 interface Contract {
   available: boolean;
   id: string;
@@ -43,17 +44,22 @@ function BrandContractView({ programId }: { programId: string }) {
   const [data, setData] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const reload = useCallback(async (cid: string) => {
+    try {
+      const d = (await fetch(`/api/brand/contract?program=${encodeURIComponent(programId)}&creator=${encodeURIComponent(cid)}`).then((r) => r.json())) as Contract;
+      setData(d);
+    } catch {
+      setData({ available: false } as Contract);
+    }
+  }, [programId]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const cid = (params.get('creator') || '').trim();
     setCreatorId(cid || null);
     if (!cid) { setLoading(false); return; }
-    fetch(`/api/brand/contract?program=${encodeURIComponent(programId)}&creator=${encodeURIComponent(cid)}`)
-      .then((r) => r.json())
-      .then((d: Contract) => setData(d))
-      .catch(() => setData({ available: false } as Contract))
-      .finally(() => setLoading(false));
-  }, [programId]);
+    reload(cid).finally(() => setLoading(false));
+  }, [programId, reload]);
 
   const backHref = `/campaigns/${encodeURIComponent(programId)}/submissions`;
 
@@ -79,6 +85,8 @@ function BrandContractView({ programId }: { programId: string }) {
   }
 
   const st = STATUS_STYLE[data.status];
+  const mySig = data.signatures.find((s) => s.party_key === 'brand');
+  const theirSig = data.signatures.find((s) => s.party_key === 'creator');
 
   return (
     <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
@@ -91,6 +99,24 @@ function BrandContractView({ programId }: { programId: string }) {
           Save as PDF
         </button>
       </div>
+
+      {creatorId && mySig && !mySig.explicit && (
+        <SignPanel
+          heading="Sign this agreement"
+          subline={theirSig?.explicit ? `${theirSig.name} has signed. Add your countersignature to make it binding.` : 'Type your full legal name to sign on behalf of the brand.'}
+          defaultName={mySig.name && mySig.name !== 'Brand' ? mySig.name : ''}
+          onSign={async (name) => {
+            const res = await fetch('/api/brand/contract', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ program: programId, creator: creatorId, signer_name: name }),
+            });
+            const j = (await res.json().catch(() => ({}))) as { ok?: boolean };
+            if (!res.ok || !j.ok) throw new Error('sign_failed');
+            await reload(creatorId);
+          }}
+        />
+      )}
 
       {/* Contract sheet */}
       <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-card overflow-hidden print:shadow-none print:rounded-none">
@@ -150,7 +176,7 @@ function BrandContractView({ programId }: { programId: string }) {
               <div className="h-9 flex items-end">
                 {s.signed
                   ? <span className="text-[15px] font-semibold" style={{ color: ACCENT, fontFamily: 'Georgia, serif', fontStyle: 'italic' }}>{s.name}</span>
-                  : <span className="text-[12px] text-ink-300">Awaiting acceptance</span>}
+                  : <span className="text-[12px] text-ink-300">Awaiting signature</span>}
               </div>
               <div className="mt-1 border-t border-border pt-1.5 flex items-center justify-between">
                 <span className="text-[12.5px] text-ink-700">{s.name}</span>
