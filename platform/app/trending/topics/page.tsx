@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { InlineError } from '@/components/skeleton';
+import { cleanTrendCategories } from '@/lib/trend-quality';
 
 // A single trending topic, derived from the SUBJECT of the captions our crawl
 // sees across the creators we track (trend_signals where trend_type='topic').
@@ -69,7 +70,10 @@ export default function TrendingTopicsPage() {
       const r = await fetch('/api/trends?type=topic&limit=80', { cache: 'no-store' });
       if (!r.ok) throw new Error('bad status');
       const d = await r.json();
-      setTopics(Array.isArray(d.trends) ? d.trends : []);
+      const raw: Topic[] = Array.isArray(d.trends) ? d.trends : [];
+      // Sanitise categories up front so chips, filters and row labels all read
+      // clean niches — never leftover hashtags/handles from creator niche fields.
+      setTopics(raw.map((t) => ({ ...t, categories: cleanTrendCategories(t.categories) })));
     } catch {
       setErr(true);
     } finally {

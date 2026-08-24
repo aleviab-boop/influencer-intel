@@ -40,6 +40,43 @@ const JUNK_HASHTAGS = new Set<string>([
   'relationship', 'motivation', 'bossbabe', 'goals', 'vibes', 'vibe', 'daily', 'new',
 ]);
 
+// Non-niche category values that leak in from creators' raw primary_category /
+// genre / niche fields — platform filler, self-descriptions and placeholders
+// that aren't a content niche a brand would filter on.
+const CATEGORY_JUNK = new Set<string>([
+  'other', 'others', 'general', 'misc', 'none', 'na', 'n/a', 'unknown',
+  'publication', 'digital creator', 'digitalcreator', 'creator', 'influencer',
+  'public figure', 'personal blog', 'blogger', 'artist', 'entrepreneur',
+]);
+
+/**
+ * Clean the `categories` array on a trend for display. Creators' niche fields
+ * are messy — they carry leftover hashtags ("#ootd"), personal handles, digits
+ * and generic self-labels ("digital creator", "other"). Strip those so the
+ * trend board shows real niches (beauty, fashion, fitness, travel…) and nothing
+ * that reads like scraped noise. Order + original casing are preserved; dupes
+ * (case-insensitive) are collapsed.
+ */
+export function cleanTrendCategories(cats: unknown): string[] {
+  if (!Array.isArray(cats)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of cats) {
+    if (typeof raw !== 'string') continue;
+    const c = raw.trim();
+    const key = c.toLowerCase();
+    if (!c || seen.has(key)) continue;
+    if (c.startsWith('#') || c.includes('@')) continue; // hashtag / handle leak
+    if (/\d/.test(c)) continue;                           // has a digit → not a niche
+    if (c.length < 3 || c.length > 24) continue;
+    if (/[^\x00-\x7f]/.test(c)) continue;                 // non-ASCII spam
+    if (CATEGORY_JUNK.has(key) || JUNK_HASHTAGS.has(key.replace(/\s+/g, ''))) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 /** Row shape the quality checks need (a subset of TrendSignal). */
 export interface TrendQualityRow {
   trend_type: string;
