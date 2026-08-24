@@ -59,6 +59,42 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+// Structured data (schema.org) — an Organization + WebSite graph so search
+// engines can show a richer knowledge panel and a sitelinks search box. Injected
+// site-wide via the root layout.
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: 'Influencer Intel',
+      url: SITE_URL,
+      logo: `${SITE_URL}/icon`,
+      description: SITE_DESC,
+      sameAs: [
+        'https://www.instagram.com/influencerintel',
+        'https://www.linkedin.com/company/influencer-intel',
+      ],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      name: 'Influencer Intel',
+      url: SITE_URL,
+      publisher: { '@id': `${SITE_URL}/#organization` },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: {
+          '@type': 'EntryPoint',
+          urlTemplate: `${SITE_URL}/influencer-search?prompt={search_term_string}`,
+        },
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -67,6 +103,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${fynd.variable}`}>
       <body className="antialiased min-h-screen bg-white text-[#111] font-sans">
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
         <ScrollMotion />
         <DoodleField />
         {children}
