@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 
 interface NewsItem { title: string; link: string; source: string; date: string; image: string; logo: string }
 interface TrendItem { title: string; traffic: string; link: string }
@@ -93,8 +94,10 @@ export default function TrendingPage() {
                   <div key={i} className="h-20 rounded-xl bg-[#f5f4fb] animate-pulse" />
                 ))}
               </div>
-            ) : err || news.length === 0 ? (
-              <div className="text-[14px] text-[#888] border border-[#eee] rounded-xl p-6">Couldn&apos;t load news right now. Try again shortly.</div>
+            ) : err ? (
+              <InlineError message="We couldn’t load trending news right now." onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} />
+            ) : news.length === 0 ? (
+              <div className="text-[14px] text-[#888] border border-[#eee] rounded-xl p-6">No news to show right now.</div>
             ) : (
               <div className="space-y-3">
                 {news.map((n, i) => (

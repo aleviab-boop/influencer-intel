@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface Creator {
@@ -61,6 +62,7 @@ export default function DatabasePage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -82,14 +84,16 @@ export default function DatabasePage() {
   // First page (also re-runs whenever filters/sort change).
   const load = useCallback(() => {
     setLoading(true);
+    setError(false);
     return fetch(`/api/creators?${buildParams(0).toString()}`)
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error('bad_status'); return r.json(); })
       .then((d) => {
         const list: Creator[] = d.creators ?? [];
         setCreators(list);
         setTotal(d.total ?? null);
         setHasMore(list.length >= PAGE_SIZE);
       })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [buildParams]);
 
@@ -145,6 +149,8 @@ export default function DatabasePage() {
         {/* Results */}
         {loading && creators.length === 0 ? (
           <div className="flex items-center justify-center py-24"><div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /></div>
+        ) : error && creators.length === 0 ? (
+          <InlineError message="We couldn’t load the creator database right now." onRetry={() => void load()} />
         ) : creators.length === 0 ? (
           <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">No creators match these filters. Try widening your search.</div>
         ) : (

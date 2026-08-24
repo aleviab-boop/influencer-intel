@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { InlineError } from '@/components/skeleton';
 
 interface PayoutMethod {
   id: string;
@@ -45,6 +46,7 @@ const TYPE_LABEL: Record<string, string> = { upi: 'UPI', bank: 'Bank transfer', 
 export default function PayoutsPage() {
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'paid'>('all');
   const [methods, setMethods] = useState<PayoutMethod[]>([]);
   const [adding, setAdding] = useState(false);
@@ -53,10 +55,14 @@ export default function PayoutsPage() {
 
   async function load() {
     setLoading(true);
+    setError(false);
     try {
       const r = await fetch('/api/payouts');
+      if (!r.ok) throw new Error('bad_status');
       const d = await r.json();
       setRows(d.payouts ?? []);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -190,6 +196,8 @@ export default function PayoutsPage() {
           <div className="flex items-center justify-center py-24">
             <div className="w-10 h-10 rounded-full border-[3px] border-[#ece9fb] border-t-[#6C4DF6] animate-spin" />
           </div>
+        ) : error ? (
+          <InlineError message="We couldn’t load payouts right now." onRetry={() => void load()} />
         ) : rows.length === 0 ? (
           <div className="text-sm text-ink-400 py-20 text-center rounded-2xl border border-dashed border-border bg-white">
             No payouts yet. Set creator rates on a campaign and they’ll appear here.
