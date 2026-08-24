@@ -293,11 +293,31 @@ export function FeatureIcon({ name }: { name: string }) {
   }
 }
 
+const NAV_LINKS: { label: string; href: string }[] = [
+  { label: 'Home', href: '/lander' },
+  { label: 'Trending', href: '/trending' },
+  { label: 'Pricing', href: '/pricing' },
+  { label: 'For Influencers', href: '/for-influencers' },
+];
+
 export function MarketingNav() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [featuresOpen, setFeaturesOpen] = useState(false);
+
+  // Lock body scroll while the mobile sheet is open.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [mobileOpen]);
+
+  const closeMobile = () => { setMobileOpen(false); setFeaturesOpen(false); };
+
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
-        <Link href="/lander" className="flex items-center gap-2">
+        <Link href="/lander" className="flex items-center gap-2" onClick={closeMobile}>
           <BrandMark size={30} />
           <span className="text-[15px] font-bold tracking-tight">Influencer Intel</span>
         </Link>
@@ -326,10 +346,65 @@ export function MarketingNav() {
           <Link href="/for-influencers" className="hover:text-[#111]">For Influencers</Link>
         </nav>
         <div className="flex items-center gap-3">
-          <BookDemoButton />
+          <span className="hidden sm:inline-flex"><BookDemoButton /></span>
           <AccountMenu />
+          {/* Hamburger — mobile only */}
+          <button
+            onClick={() => setMobileOpen((o) => !o)}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
+            className="md:hidden w-9 h-9 grid place-items-center rounded-lg text-[#333] hover:bg-[#f2effc] transition-colors"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              {mobileOpen ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* Mobile menu sheet */}
+      {mobileOpen && (
+        <div className="md:hidden">
+          <div className="fixed inset-0 top-16 z-30 bg-black/20" onClick={closeMobile} />
+          <div className="relative z-40 border-t border-[#eee] bg-white max-h-[calc(100vh-4rem)] overflow-y-auto">
+            <nav className="px-5 py-3">
+              {NAV_LINKS.map((l) => (
+                <Link key={l.label} href={l.href} onClick={closeMobile}
+                  className="block py-3 text-[15px] font-medium text-[#222] border-b border-[#f3f3f3] hover:text-[var(--ii-accent)] transition-colors">
+                  {l.label}
+                </Link>
+              ))}
+
+              {/* Collapsible Features */}
+              <button
+                onClick={() => setFeaturesOpen((o) => !o)}
+                aria-expanded={featuresOpen}
+                className="w-full flex items-center justify-between py-3 text-[15px] font-medium text-[#222] border-b border-[#f3f3f3]"
+              >
+                Features
+                <svg className={`w-4 h-4 transition-transform ${featuresOpen ? 'rotate-180' : ''}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 6l4 4 4-4" />
+                </svg>
+              </button>
+              {featuresOpen && (
+                <div className="py-1 pl-1">
+                  {FEATURE_MENU.map((f) => (
+                    <Link key={f.label} href={f.href} onClick={closeMobile}
+                      className="flex items-center gap-3 py-2.5 text-[14px] text-[#444] hover:text-[var(--ii-accent)] transition-colors">
+                      <span style={{ color: ACCENT }}><FeatureIcon name={f.icon} /></span>
+                      {f.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              <div className="pt-4 pb-2">
+                <BookDemoButton className="w-full px-4 py-2.5 rounded-lg text-white text-[14px] font-medium text-center transition-all hover:brightness-105" />
+              </div>
+            </nav>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
