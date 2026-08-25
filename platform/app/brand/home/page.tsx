@@ -495,9 +495,15 @@ export default function BrandHomePage() {
             {/* A brand account logs out entirely; an agency just switches brand. */}
             <button
               onClick={async () => {
-                if (isBrand) await logout();
                 clearBrandSession();
-                window.location.href = '/brand/login';
+                if (isBrand) {
+                  // Full log out → back to the role chooser.
+                  await logout();
+                  window.location.href = '/login';
+                } else {
+                  // Agency just drops the active brand to pick another.
+                  window.location.href = '/brand/login';
+                }
               }}
               className="text-[13px] font-medium text-[#666] hover:text-[#111] px-3.5 py-2 rounded-lg border border-[#e6e6ef] bg-white hover:border-[#d9d2f7] transition-colors"
             >

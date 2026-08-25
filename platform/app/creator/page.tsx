@@ -311,6 +311,8 @@ export default function CreatorPortal() {
     window.history.replaceState(null, '', `/creator?handle=${encodeURIComponent(h)}`);
     setHandle(h);
   }
+  // Local reset — clears the handle and returns to the entry screen WITHOUT
+  // leaving /creator (used by "Try another handle").
   function signOut() {
     localStorage.removeItem('creator_handle');
     // Clear the cookie session too, else the next load re-authenticates.
@@ -319,6 +321,13 @@ export default function CreatorPortal() {
     setHandle(null);
     setProfile(null);
     setInput('');
+  }
+
+  // Full log out — clears the session and lands on the role chooser.
+  function logOut() {
+    localStorage.removeItem('creator_handle');
+    void fetch('/api/creator/session', { method: 'DELETE' }).catch(() => { /* ignore */ });
+    window.location.href = '/login';
   }
 
   // ---- Sign-in screen ----
@@ -382,7 +391,7 @@ export default function CreatorPortal() {
                 {/* soft light sheen */}
                 <div className="absolute inset-0" style={{ background: 'radial-gradient(130% 160% at 90% -40%, rgba(255,255,255,0.4), transparent 55%)' }} />
                 <button
-                  onClick={signOut}
+                  onClick={logOut}
                   className="absolute top-4 right-4 z-10 rounded-full border border-white/30 bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/90 backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/20 hover:text-white"
                 >
                   Sign out

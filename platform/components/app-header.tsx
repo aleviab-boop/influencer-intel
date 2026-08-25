@@ -59,7 +59,8 @@ export function AppHeader() {
       body: JSON.stringify({ action: 'sign_out' }),
     });
     setSession({ authenticated: false });
-    window.location.reload();
+    // Signed-out users belong on the role chooser, not this page.
+    window.location.href = '/login';
   }
 
   return (
