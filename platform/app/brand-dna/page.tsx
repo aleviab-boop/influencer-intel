@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { setBrandSession } from '@/lib/brand-session';
 import { addBrandToRoster } from '@/lib/agency-session';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface BrandDna {
   brand: string;
@@ -92,7 +93,8 @@ export default function BrandDnaPage() {
     : '/brand-campaigns';
 
   return (
-    <div className="min-h-screen bg-[#fafafc] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen bg-[#fafafc] font-sans">
+      <PageDoodles className="-z-10" />
       <div className="max-w-5xl mx-auto px-6 py-10">
         <header className="mb-8">
           <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>

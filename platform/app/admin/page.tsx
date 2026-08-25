@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ACCENT, StatCard, PageHeader, LiveBadge, useTrend } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Stats {
   creators: { total: number; active: number };
@@ -40,7 +41,8 @@ export default function AdminDashboardPage() {
   const queueTrend = useTrend(stats?.jobs.queued);
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Dashboard"
         subtitle="Live overview of the scraper, the creator database, and agency activity."

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader, LiveBadge, StatCard, ACCENT } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface ModelStatus {
   id: string;
@@ -191,7 +192,8 @@ export default function MlPage() {
   const views = byId('views');
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="ML Models"
         subtitle="The trained layer behind the views & likes predictor. A ridge regression fit on every creator's real post history — learning how format and caption move a post off that creator's own baseline."

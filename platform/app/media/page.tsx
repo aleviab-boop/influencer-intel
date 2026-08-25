@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 type AssetStatus = 'draft' | 'in_review' | 'approved' | 'changes';
 type AssetType = 'reel' | 'image' | 'carousel' | 'story';
@@ -65,7 +66,8 @@ export default function MediaPage() {
   const visible = filter === 'all' ? assets : assets.filter((a) => a.status === filter);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         <div className="flex items-end justify-between mb-6 flex-wrap gap-3">

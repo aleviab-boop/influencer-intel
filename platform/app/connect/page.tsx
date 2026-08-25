@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppHeader } from '@/components/app-header';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface ConfigStatus {
   configured: boolean;
@@ -52,7 +53,8 @@ function ConnectContent() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="relative isolate overflow-hidden min-h-screen bg-canvas">
+      <PageDoodles className="-z-10" />
       <AppHeader />
       <main className="max-w-3xl mx-auto px-6 py-10">
         <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Integrations</div>

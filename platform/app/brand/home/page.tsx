@@ -7,6 +7,7 @@ import { LiveSearch } from '@/components/live-search';
 import { BrandSwitcher } from '@/components/brand-switcher';
 import { BrandPipelinePanel, SaveCreatorButton } from '@/components/brand-pipeline';
 import { CreatorAvatar } from '@/components/creator-avatar';
+import { PageDoodles } from '@/components/page-doodles';
 import { useBrandSession, updateBrandSession, clearBrandSession, brandScopePrompt, type BrandDnaProfile, type BrandCollaborator } from '@/lib/brand-session';
 import { useBrandPipeline } from '@/lib/use-brand-pipeline';
 import { addBrandToRoster } from '@/lib/agency-session';
@@ -462,7 +463,8 @@ export default function BrandHomePage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white text-[#111] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-white text-[#111] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
 
       {/* Brand hero — mirrors the lander's radial-gradient headline band, with a

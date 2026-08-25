@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PageHeader, LiveBadge } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Cell { niche: string; count: number }
 interface Row { city: string; total: number; cells: Cell[] }
@@ -39,7 +40,8 @@ export default function CoveragePage() {
   }, []);
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Coverage"
         subtitle="Creators in the database by niche and city. Red cells are gaps — crawl those next."

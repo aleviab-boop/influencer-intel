@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface BriefRow {
   id: string;
@@ -147,7 +148,8 @@ export default function BriefsPage() {
   }, [briefs, q, filter]);
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="relative isolate overflow-hidden min-h-screen bg-white">
+      <PageDoodles className="-z-10" />
       <AppHeader />
 
       <section className="max-w-6xl mx-auto px-6 pt-10 pb-6">

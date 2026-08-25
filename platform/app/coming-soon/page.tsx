@@ -2,10 +2,12 @@
 
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 export default function ComingSoonPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-white font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1">
         <section className="relative overflow-hidden">

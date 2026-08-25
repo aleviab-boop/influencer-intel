@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Draft {
   brief_creator_id: string;
@@ -77,7 +78,8 @@ export default function OutreachPage({ params }: { params: Promise<{ id: string 
     });
 
   return (
-    <main className="min-h-screen bg-canvas">
+    <main className="relative isolate overflow-hidden min-h-screen bg-canvas">
+      <PageDoodles className="-z-10" />
       <AppHeader />
 
       <section className="max-w-6xl mx-auto px-6 pt-8 pb-4">

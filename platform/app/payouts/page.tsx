@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MarketingNav, ACCENT } from '@/components/marketing';
 import { InlineError } from '@/components/skeleton';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface PayoutMethod {
   id: string;
@@ -123,7 +124,8 @@ export default function PayoutsPage() {
   const visible = rows.filter((r) => (filter === 'pending' ? !r.paid : filter === 'paid' ? r.paid : true));
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Influencer Payouts</div>

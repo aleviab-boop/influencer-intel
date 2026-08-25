@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface ProgramSummary {
   id: string;
@@ -105,7 +106,8 @@ export default function CampaignsPage() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-9">
         {/* Title */}

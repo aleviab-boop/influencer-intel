@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 type Tab = 'signup' | 'login';
 
@@ -64,7 +65,8 @@ export default function CreatorJoinPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fff' }}>
+    <div className="relative isolate overflow-hidden" style={{ minHeight: '100vh', background: '#fff' }}>
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="max-w-md mx-auto px-6 py-14">
         <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: ACCENT }}>

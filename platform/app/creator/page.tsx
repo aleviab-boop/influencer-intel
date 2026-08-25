@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Profile {
   handle: string;
@@ -372,7 +373,8 @@ export default function CreatorPortal() {
 
   // ---- Dashboard ----
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-8">
         {loading && !profile ? (

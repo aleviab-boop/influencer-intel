@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { StatCard, PageHeader } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface ProgramSummary {
   id: string;
@@ -105,7 +106,8 @@ export default function AdminCampaignsPage() {
   );
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Campaigns"
         subtitle="Named recruitment campaigns. Shortlist creators from search into a campaign, then move them through the pipeline and track budget."

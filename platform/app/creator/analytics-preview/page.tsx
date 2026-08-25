@@ -6,6 +6,7 @@ import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { evaluateDeal, type DealVerdictKey } from '@/lib/deal-evaluator';
 import { scoreAudienceFit, type FitLabel } from '@/lib/audience-fit';
 import { buildWeeklyPlan, TAG_LABEL, type ActionTag, type WeeklyPlan } from '@/lib/weekly-plan';
+import { PageDoodles } from '@/components/page-doodles';
 
 /* -------------------------------------------------------------------------
  * Creator "My Analytics" dashboard — the creator portal's analytics page,
@@ -1163,7 +1164,8 @@ function AnalyticsPreview() {
 
 function Shell({ children, backHref = '/creator' }: { children: React.ReactNode; backHref?: string }) {
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-5xl mx-auto w-full px-5 sm:px-6 py-8">
         <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">

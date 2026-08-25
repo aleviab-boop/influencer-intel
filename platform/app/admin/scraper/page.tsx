@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { LiveSearch } from '@/components/live-search';
 import { StatCard, PageHeader, LiveBadge, useTrend } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Stats {
   creators: { total: number; active: number };
@@ -156,7 +157,8 @@ export default function AdminScraperPage() {
   const queueTrend = useTrend(stats?.jobs.queued);
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Scraper"
         subtitle="The browser worker crawls Instagram and stores every creator to the database. Search below to crawl a niche live."

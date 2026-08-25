@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { suggestRateCard } from '@/lib/media-kit';
+import { PageDoodles } from '@/components/page-doodles';
 
 /* -------------------------------------------------------------------------
  * Creator media kit — a shareable, brand-pitch-ready one-pager auto-built
@@ -131,7 +132,8 @@ function MediaKit() {
   const audienceTotal = (arr: [string, number][]): number => arr.reduce((s, [, v]) => s + v, 0) || 1;
 
   return (
-    <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
+      <PageDoodles className="-z-10" />
       {/* Action bar — hidden when printing */}
       <div className="max-w-3xl mx-auto mb-4 flex items-center justify-between gap-3 print:hidden">
         <a href="/creator/analytics-preview" className="group inline-flex items-center gap-1 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"><span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Analytics</a>

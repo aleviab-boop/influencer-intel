@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface JobRow {
   id: string;
@@ -65,7 +66,8 @@ export default function ResearchPage() {
   }
 
   return (
-    <main className="min-h-screen bg-canvas">
+    <main className="relative isolate overflow-hidden min-h-screen bg-canvas">
+      <PageDoodles className="-z-10" />
       <AppHeader />
 
       <section className="max-w-4xl mx-auto px-6 pt-10 pb-6">

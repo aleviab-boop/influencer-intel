@@ -6,6 +6,7 @@ import { AppHeader } from '@/components/app-header';
 import type { Creator, ShortlistCreatorView } from '@influencer-intel/shared/types';
 import { CreatorCard } from '@/components/creator-card';
 import { scoreAuthenticity } from '@/lib/authenticity';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface SimilarCreator {
   id: string;
@@ -38,7 +39,8 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ handle
   }, [handle]);
 
   return (
-    <main className="min-h-screen bg-canvas">
+    <main className="relative isolate overflow-hidden min-h-screen bg-canvas">
+      <PageDoodles className="-z-10" />
       <AppHeader />
       <section className="max-w-6xl mx-auto px-6 pt-8 pb-16">
         <Link

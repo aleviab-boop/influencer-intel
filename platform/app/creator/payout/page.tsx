@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 type Method = 'upi' | 'bank';
 type ErrKey = 'method' | 'upi_id' | 'account_holder' | 'account_number' | 'ifsc';
@@ -102,7 +103,8 @@ function Payout() {
   const backHref = handle ? `/creator/settings?handle=${encodeURIComponent(handle.replace(/^@/, ''))}` : '/creator/settings';
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-xl mx-auto w-full px-6 py-8">
         <Link href={backHref} className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors duration-200 mb-5">

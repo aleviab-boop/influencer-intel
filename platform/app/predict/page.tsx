@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
 import { CreatorAvatar } from '@/components/creator-avatar';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface PredictionResult {
   bucket: string;
@@ -363,7 +364,8 @@ function PredictPage() {
   }
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="relative isolate overflow-hidden min-h-screen bg-white">
+      <PageDoodles className="-z-10" />
       <AppHeader />
 
       <div className="max-w-2xl mx-auto px-6 pt-10 pb-20">

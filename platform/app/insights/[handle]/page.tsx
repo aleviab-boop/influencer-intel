@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CreatorAvatar } from '@/components/creator-avatar';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface ScrapedData {
   source: 'scraped';
@@ -220,7 +221,8 @@ export default function InsightsPage({ params }: { params: Promise<{ handle: str
   const isConnected = insights?.source === 'connected';
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="relative isolate overflow-hidden min-h-screen bg-white">
+      <PageDoodles className="-z-10" />
       {/* Header */}
       <header className="border-b border-[#e5e5e5] px-6 py-5">
         <div className="max-w-4xl mx-auto flex items-center gap-4">

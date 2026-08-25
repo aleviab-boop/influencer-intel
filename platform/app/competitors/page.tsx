@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Creator {
   id: string;
@@ -60,7 +61,8 @@ export default function CompetitorsPage() {
   const aPct = total ? Math.round((aN / total) * 100) : 0;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         <div className="text-[11px] uppercase tracking-wider text-ink-400 mb-1">Competitor Analysis</div>

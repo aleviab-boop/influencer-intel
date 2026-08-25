@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { StatCard, PageHeader, useTrend } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Activity {
   recent: Array<{ id: string; prompt: string; result_count: number; created_at: string }>;
@@ -32,7 +33,8 @@ export default function AdminAgencyPage() {
   const trend = useTrend(data?.totals.last_24h);
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Agency"
         subtitle="What agencies are searching on the lander — every prompt hits the database the scraper builds."

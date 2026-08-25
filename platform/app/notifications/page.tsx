@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 type Kind = 'needs_review' | 'ready_to_pay' | 'accepted' | 'declined' | 'awaiting_response' | 'overdue';
 
@@ -66,7 +67,8 @@ export default function BrandNotificationsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
         <Link href="/lander" className="group inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-500 hover:text-ink-900 mb-5 transition-colors duration-200">

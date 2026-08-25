@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface PlanInfo { name: string; price: number; credits: string }
 const PLANS: Record<string, PlanInfo> = {
@@ -69,7 +70,8 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-white font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1">
         <div className="max-w-5xl mx-auto px-6 py-10 grid md:grid-cols-[1.4fr_1fr] gap-8 items-start">

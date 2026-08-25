@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface SavedCreator {
   username: string;
@@ -77,7 +78,8 @@ export default function SavedCreatorsPage() {
   }, [saved, brief]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-9">
         <button onClick={() => router.back()} className="mb-5 inline-flex items-center gap-1 text-[13px] font-medium text-ink-500 hover:text-ink-900 transition-colors">

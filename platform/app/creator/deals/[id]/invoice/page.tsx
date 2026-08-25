@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense, use } from 'react';
 import Link from 'next/link';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface InvoiceLine { description: string; qty: number; rate: number; amount: number }
 interface Invoice {
@@ -92,7 +93,8 @@ function InvoiceView({ id }: { id: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
+      <PageDoodles className="-z-10" />
       {/* Action bar — hidden when printing */}
       <div className="max-w-2xl mx-auto mb-4 flex items-center justify-between gap-3 print:hidden">
         <Link href={backHref} className="group inline-flex items-center gap-1 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"><span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Deal</Link>

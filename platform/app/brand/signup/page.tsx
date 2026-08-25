@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { setBrandSession, type BrandDnaProfile } from '@/lib/brand-session';
 import { addBrandToRoster } from '@/lib/agency-session';
+import { PageDoodles } from '@/components/page-doodles';
 
 // Dedicated brand signup: create a real credentialed account for a single brand
 // (account_type='brand'), then analyse its DNA and drop straight into the
@@ -110,7 +111,8 @@ export default function BrandSignupPage() {
     step === 'account' ? 'Creating your account…' : step === 'dna' ? 'Analysing your brand…' : 'Create brand account';
 
   return (
-    <div className="min-h-screen bg-[#fafafc] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen bg-[#fafafc] font-sans">
+      <PageDoodles className="-z-10" />
       <div className="max-w-lg mx-auto px-6 py-14">
         <header className="mb-7 text-center">
           <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>

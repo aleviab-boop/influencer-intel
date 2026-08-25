@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface StatementMonth { key: string; label: string; gross: number; deals: number }
 interface StatementBrand { brand: string; gross: number; deals: number; pct: number }
@@ -77,7 +78,8 @@ function Statement() {
   const maxMonth = data ? Math.max(1, ...data.months.map((m) => m.gross)) : 1;
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <div className="print:hidden"><MarketingNav /></div>
       <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-8">
         <div className="print:hidden">

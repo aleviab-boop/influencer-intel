@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 type ReviewState = 'approved' | 'changes' | 'pending';
 
@@ -61,7 +62,8 @@ const STATE_C: Record<ReviewState, { c: string; b: string; label: string }> = {
 export default function CampaignSubmissionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-8">
         <Review id={id} />

@@ -6,6 +6,7 @@ import {
   type ReportProfile, brandFit, authenticityReport, reelForecast, personaLine,
   competitorConflicts, authenticityFlag,
 } from '@/lib/creator-report';
+import { PageDoodles } from '@/components/page-doodles';
 import {
   fmt, inr, expectedErFloor, engagementRate, estimatedRate, postingInsight, contentThemes, tierWord,
 } from '@/lib/creator-metrics';
@@ -58,7 +59,8 @@ export default function CreatorReportPage() {
   const reels = profile.recent.filter((p) => p.thumbnail).slice(0, 6);
 
   return (
-    <div className="min-h-screen bg-[#f4f2ff] py-8 px-4 print:bg-white print:p-0">
+    <div className="relative isolate overflow-hidden min-h-screen bg-[#f4f2ff] py-8 px-4 print:bg-white print:p-0">
+      <PageDoodles className="-z-10" />
       <style>{`@media print { .no-print { display:none !important; } @page { size: A4; margin: 12mm; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
 
       {/* toolbar */}

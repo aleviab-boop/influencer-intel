@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppHeader } from '@/components/app-header';
 import type { ShortlistCreatorView } from '@influencer-intel/shared/types';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface BriefResp {
   brief: { id: string; raw_text: string };
@@ -107,7 +108,8 @@ export default function ComparePage({ params }: { params: Promise<{ id: string }
   const compare = data?.creators.filter((c) => selected.has(c.brief_creator_id)) ?? [];
 
   return (
-    <main className="min-h-screen bg-canvas">
+    <main className="relative isolate overflow-hidden min-h-screen bg-canvas">
+      <PageDoodles className="-z-10" />
       <AppHeader />
 
       <section className="max-w-7xl mx-auto px-6 pt-8 pb-4">

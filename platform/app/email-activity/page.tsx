@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface EmailRow {
   id: string;
@@ -70,7 +71,8 @@ export default function EmailActivityFeature() {
   const shown = filter === 'all' ? rows : rows.filter((r) => r.kind === filter);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-white font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1">
         <section className="relative overflow-hidden border-b border-[#eee]">

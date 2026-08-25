@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PageDoodles } from '@/components/page-doodles';
 
 const ACCENT = '#6C4DF6';
 
@@ -255,7 +256,8 @@ export default function MetricsPage() {
   const zeroRate = searchTotal ? Math.round((sb.zero / searchTotal) * 100) : 0;
 
   return (
-    <div className="p-8 max-w-[1400px] mx-auto">
+    <div className="relative isolate overflow-hidden p-8 max-w-[1400px] mx-auto">
+      <PageDoodles className="-z-10" />
       {/* header */}
       <div className="flex items-center gap-3 mb-1">
         <h1 className="text-[28px] font-bold tracking-tight">Metrics</h1>

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { MarketingNav, ACCENT } from '@/components/marketing';
 import { InlineError } from '@/components/skeleton';
 import { CreatorAvatar } from '@/components/creator-avatar';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Creator {
   id: string;
@@ -115,7 +116,8 @@ export default function DatabasePage() {
   const hasFilters = useMemo(() => !!(debouncedQ || category || tier || verified), [debouncedQ, category, tier, verified]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         <div className="flex items-end justify-between flex-wrap gap-3 mb-1">

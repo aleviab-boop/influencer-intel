@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, Suspense, use } from 'react';
 import Link from 'next/link';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { SignPanel } from '@/components/sign-panel';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Clause { n: number; heading: string; body: string[] }
 interface Party { role: string; name: string; detail: string | null }
@@ -89,7 +90,8 @@ function BrandContractView({ programId }: { programId: string }) {
   const theirSig = data.signatures.find((s) => s.party_key === 'creator');
 
   return (
-    <div className="min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen bg-[#f5f4f8] py-8 px-4 font-sans">
+      <PageDoodles className="-z-10" />
       {/* Action bar — hidden when printing */}
       <div className="max-w-2xl mx-auto mb-4 flex items-center justify-between gap-3 print:hidden">
         <Link href={backHref} className="group inline-flex items-center gap-1 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"><span className="inline-block transition-transform duration-300 group-hover:-translate-x-0.5">←</span> Campaign</Link>

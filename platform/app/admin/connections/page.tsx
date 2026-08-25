@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageHeader, LiveBadge, StatCard } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 type Health = 'active' | 'expiring' | 'expired' | 'error' | 'inactive';
 
@@ -75,7 +76,8 @@ export default function ConnectionsPage() {
   const s = data?.summary;
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Connections"
         subtitle="Every creator that connected Instagram, and the health of their token. Reconnect accounts before live insights silently stop."

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { StatCard, PageHeader } from '@/components/admin-ui';
+import { PageDoodles } from '@/components/page-doodles';
 
 type Period = '7d' | '30d' | '90d' | 'all';
 interface KV { k: string; n: number }
@@ -57,7 +58,8 @@ export default function AdminAnalyticsPage() {
   const camp = data?.campaigns;
 
   return (
-    <div className="px-8 py-7">
+    <div className="relative isolate overflow-hidden px-8 py-7">
+      <PageDoodles className="-z-10" />
       <PageHeader
         title="Analytics"
         subtitle="Two views in one: the creator database (inventory, quality, coverage) and the recruitment funnel + campaign performance."

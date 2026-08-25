@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface Totals { campaigns: number; creators: number; reach: number; spend: number; avg_quality: number }
 interface Perf { id: string; name: string; status: string; recruits: number; reach: number; spend: number }
@@ -36,7 +37,8 @@ export default function AnalyticsPage() {
   const statusCounts = (data?.per_campaign ?? []).reduce((m, p) => { m[p.status] = (m[p.status] ?? 0) + 1; return m; }, {} as Record<string, number>);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-6xl mx-auto w-full px-6 py-10">
         <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
