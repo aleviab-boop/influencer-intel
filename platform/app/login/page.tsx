@@ -3,10 +3,24 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { CSSProperties } from 'react';
 import { ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
+import { Doodle, DOODLE_HUES } from '@/components/doodles';
 import { SUPPORT_CONTACT } from '@/components/legal';
 
 type Role = 'brand' | 'agency' | 'influencer' | 'admin';
+
+// Hand-drawn doodles scattered into the corners so they peek out around the
+// centred login card (float via .ii-floatr, disabled under reduced-motion).
+const LOGIN_DOODLES: { pos: CSSProperties; size: number; shape: number; hue: number; op: number; rot: string; delay: string }[] = [
+  { pos: { top: '10%', left: '5%' }, size: 46, shape: 0, hue: 0, op: 0.5, rot: '-12deg', delay: '0s' },
+  { pos: { top: '22%', left: '11%' }, size: 30, shape: 4, hue: 4, op: 0.4, rot: '10deg', delay: '1.1s' },
+  { pos: { bottom: '12%', left: '7%' }, size: 40, shape: 6, hue: 3, op: 0.42, rot: '8deg', delay: '.6s' },
+  { pos: { top: '12%', right: '6%' }, size: 40, shape: 2, hue: 5, op: 0.45, rot: '-8deg', delay: '1.8s' },
+  { pos: { top: '26%', right: '12%' }, size: 26, shape: 5, hue: 8, op: 0.38, rot: '6deg', delay: '2.2s' },
+  { pos: { bottom: '14%', right: '7%' }, size: 44, shape: 7, hue: 6, op: 0.4, rot: '14deg', delay: '.9s' },
+  { pos: { bottom: '26%', right: '14%' }, size: 24, shape: 8, hue: 1, op: 0.35, rot: '-6deg', delay: '1.4s' },
+];
 
 const PANEL: Record<Role, { headline: string; sub: string; points: string[] }> = {
   brand: {
@@ -155,6 +169,16 @@ export default function LoginPage() {
           <div className="absolute -bottom-20 left-[6%] w-80 h-80 rounded-full blur-3xl opacity-50" style={{ background: 'radial-gradient(circle, #c4b5ff, transparent 68%)', animation: 'ii-drift1 22s ease-in-out infinite reverse' }} />
           {/* rotating conic ring, top-centre */}
           <div className="absolute -top-56 left-1/2 -translate-x-1/2 w-[680px] h-[680px] rounded-full opacity-[0.12]" style={{ background: `conic-gradient(from 0deg, ${ACCENT}, transparent 28%, #9b7bff 55%, transparent 85%)`, animation: 'ii-spin 36s linear infinite' }} />
+          {/* floating hand-drawn doodles framing the card */}
+          {LOGIN_DOODLES.map((d, i) => (
+            <Doodle
+              key={i}
+              shape={d.shape}
+              color={DOODLE_HUES[d.hue]}
+              className="ii-floatr absolute"
+              style={{ ...d.pos, width: d.size, height: d.size, opacity: d.op, ['--r' as string]: d.rot, animationDelay: d.delay }}
+            />
+          ))}
         </div>
 
         <div
