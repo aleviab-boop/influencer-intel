@@ -39,6 +39,15 @@ interface PostSuggestion {
   you_do_it: boolean;
   prompt: string;
 }
+interface BrandMatch {
+  program_id: string;
+  brand_name: string;
+  program_name: string;
+  category: string | null;
+  score: number;
+  fit: 'strong' | 'good' | 'possible';
+  reason: string;
+}
 interface Overview {
   available: boolean;
   notifications: { action_count: number; total: number };
@@ -93,6 +102,13 @@ const STATUS_META: Record<string, { t: string; c: string; b: string }> = {
   declined: { t: 'Not selected', c: '#f43f5e', b: '#fff1f2' },
 };
 
+// Fit badge styling for the "Brands you should pitch" leads.
+const FIT_META: Record<string, { t: string; c: string; b: string }> = {
+  strong: { t: 'Strong fit', c: '#0f9d6a', b: '#e7f8f0' },
+  good: { t: 'Good fit', c: '#6C4DF6', b: '#f4f2ff' },
+  possible: { t: 'Worth a look', c: '#64748b', b: '#f1f5f9' },
+};
+
 // Shared stroke styling for the quick-link glyphs.
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 const Svg = ({ children }: { children: ReactNode }) => (
@@ -127,6 +143,7 @@ export default function CreatorPortal() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [whatToPost, setWhatToPost] = useState<PostSuggestion[]>([]);
+  const [brandMatches, setBrandMatches] = useState<BrandMatch[]>([]);
   const [syncing, setSyncing] = useState(false);
 
   // Resolve handle from URL (?handle=) or localStorage on first load; surface
@@ -202,6 +219,16 @@ export default function CreatorPortal() {
       .catch(() => setWhatToPost([]));
   }, []);
 
+  // "Brands you should pitch" — warm leads ranked from the DB's active programs
+  // against the creator's niche. Best-effort: the section hides when there's
+  // nothing to suggest yet (no niche, or no active programs to match).
+  const loadBrandMatches = useCallback((h: string) => {
+    fetch(`/api/creator/brand-matches?handle=${encodeURIComponent(h.replace(/^@/, ''))}`)
+      .then((x) => x.json())
+      .then((d) => setBrandMatches(Array.isArray(d?.matches) ? d.matches : []))
+      .catch(() => setBrandMatches([]));
+  }, []);
+
   const disconnectIg = useCallback(async () => {
     if (!handle) return;
     if (!window.confirm('Disconnect Instagram? We’ll stop pulling live insights and delete the stored access token. Your saved profile stays.')) return;
@@ -219,10 +246,11 @@ export default function CreatorPortal() {
       await Promise.all([loadProfile(handle), loadConnection(handle)]);
       loadOverview(handle);
       loadWhatToPost(handle);
+      loadBrandMatches(handle);
     } finally {
       setSyncing(false);
     }
-  }, [handle, syncing, loadProfile, loadConnection, loadOverview, loadWhatToPost]);
+  }, [handle, syncing, loadProfile, loadConnection, loadOverview, loadWhatToPost, loadBrandMatches]);
 
   useEffect(() => {
     if (!handle) return;
@@ -239,12 +267,13 @@ export default function CreatorPortal() {
           .catch(() => {});
         loadOverview(handle);
       loadWhatToPost(handle);
+      loadBrandMatches(handle);
         void loadConnection(handle);
       } finally {
         setLoading(false);
       }
     })();
-  }, [handle, loadApplications, loadConnection, loadProfile, loadOverview, loadWhatToPost]);
+  }, [handle, loadApplications, loadConnection, loadProfile, loadOverview, loadWhatToPost, loadBrandMatches]);
 
   // Keep the dashboard fresh without a manual reload: whenever the creator
   // returns to this tab (focus / visibility) we re-pull the light read-only
@@ -265,6 +294,7 @@ export default function CreatorPortal() {
       void loadApplications(handle).catch(() => {});
       loadOverview(handle);
       loadWhatToPost(handle);
+      loadBrandMatches(handle);
     };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
@@ -272,7 +302,7 @@ export default function CreatorPortal() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [handle, loadProfile, loadConnection, loadApplications, loadOverview, loadWhatToPost]);
+  }, [handle, loadProfile, loadConnection, loadApplications, loadOverview, loadWhatToPost, loadBrandMatches]);
 
   function signIn() {
     const h = input.trim().replace(/^@/, '');
@@ -483,6 +513,47 @@ export default function CreatorPortal() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </section>
+            )}
+
+            {/* Brands you should pitch — warm leads from active programs */}
+            {brandMatches.length > 0 && (
+              <section className="mb-8">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[16px]" aria-hidden>🎯</span>
+                  <h2 className="text-[13px] font-semibold uppercase tracking-wider text-ink-400">Brands you should pitch</h2>
+                </div>
+                <p className="text-[12.5px] text-ink-400 mb-3">Active campaigns that fit your niche — apply before they fill up.</p>
+                <div className="grid sm:grid-cols-2 gap-2.5">
+                  {brandMatches.map((m) => {
+                    const fit = FIT_META[m.fit] ?? { t: 'Worth a look', c: '#64748b', b: '#f1f5f9' };
+                    return (
+                      <Link
+                        key={m.program_id}
+                        href={`/creator/campaigns/${encodeURIComponent(m.program_id)}?handle=${encodeURIComponent(profile.handle)}`}
+                        className="group rounded-2xl bg-white border border-border shadow-card p-4 flex flex-col transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-[#e3def9] hover:shadow-[0_16px_44px_rgba(108,77,246,0.16)]"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[14px] font-semibold text-ink-900 truncate">{m.brand_name}</span>
+                          <span className="ml-auto text-[9.5px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0" style={{ background: fit.b, color: fit.c }}>
+                            {fit.t}
+                          </span>
+                        </div>
+                        <div className="text-[12.5px] text-ink-600 truncate">{m.program_name}</div>
+                        <div className="text-[12px] text-ink-400 mt-0.5 line-clamp-2">{m.reason}</div>
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/70">
+                          {m.category && (
+                            <span className="text-[11px] text-ink-400 capitalize truncate">{m.category}</span>
+                          )}
+                          <span className="ml-auto text-[12.5px] font-semibold inline-flex items-center gap-1 shrink-0" style={{ color: ACCENT }}>
+                            View &amp; apply
+                            <span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
               </section>
             )}
