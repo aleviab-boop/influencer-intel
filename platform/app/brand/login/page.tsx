@@ -34,7 +34,9 @@ export default function BrandLoginPage() {
 
   async function handleLogout() {
     await logout();
-    window.location.reload();
+    // Back to the role chooser (Brand / Agency / Influencer / Admin), not this
+    // brand-only form — that's where a signed-out user should land.
+    window.location.href = '/login';
   }
 
   // Credentialed sign-in: email + password → brand account (account_type='brand')
