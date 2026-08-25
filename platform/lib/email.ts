@@ -300,6 +300,30 @@ export async function notifyInviteResponse(
   }, { kind, creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
 }
 
+/**
+ * A creator self-applied to a brand's open program. Tell the brand so a fresh
+ * application doesn't sit unseen in the kanban — the symmetric partner to
+ * notifyDecision (which closes the loop back to the creator).
+ */
+export async function notifyApplication(programId: string, creatorId: string): Promise<void> {
+  if (!emailEnabled()) return;
+  const ctx = await loadRecruitContext(programId, creatorId);
+  if (!ctx?.brand_email) return;
+  const href = `${appBaseUrl()}/campaign-management`;
+  await sendEmail({
+    to: ctx.brand_email,
+    subject: `${ctx.creator_name} applied to ${ctx.program}`,
+    html: shell(
+      `New application for ${ctx.program}`,
+      `<p style="margin:0 0 12px;">Good news —</p>
+       <p style="margin:0;"><strong>${ctx.creator_name}</strong> applied to join <strong>${ctx.program}</strong>. Review their profile and accept to bring them on, or pass to keep your pipeline tidy.</p>`,
+      'Review application',
+      href,
+      BRAND_FOOTER,
+    ),
+  }, { kind: 'application_received', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
+}
+
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 

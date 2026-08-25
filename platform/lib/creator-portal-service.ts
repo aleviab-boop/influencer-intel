@@ -6,6 +6,7 @@
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';
+import { notifyApplication } from './email';
 
 const clean = (handle: string) => handle.trim().replace(/^@/, '').toLowerCase();
 
@@ -100,5 +101,8 @@ export async function applyToProgram(handle: string, programId: string): Promise
     status: 'applied',
     note: 'Applied via creator portal',
   });
+  // Let the brand know a new application landed (fire-and-forget — never block
+  // or fail the apply on an email hiccup).
+  void notifyApplication(programId, creator.id).catch(() => { /* ignore */ });
   return { already: false, status: 'applied' };
 }
