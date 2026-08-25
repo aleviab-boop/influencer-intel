@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BookDemoButton } from './book-demo';
+import { BackButton } from './back-button';
 import { Doodle } from './doodles';
 import { useAgencyAccount } from '@/lib/use-agency-account';
 import { clearBrandSession } from '@/lib/brand-session';
@@ -317,10 +318,13 @@ export function MarketingNav() {
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#eee]">
       <div className="w-full px-5 lg:px-10 h-16 flex items-center justify-between">
-        <Link href="/lander" className="flex items-center gap-2" onClick={closeMobile}>
-          <BrandMark size={30} />
-          <span className="text-[15px] font-bold tracking-tight">Influencer Intel</span>
-        </Link>
+        <div className="flex items-center gap-3">
+          <BackButton />
+          <Link href="/lander" className="flex items-center gap-2" onClick={closeMobile}>
+            <BrandMark size={30} />
+            <span className="text-[15px] font-bold tracking-tight">Influencer Intel</span>
+          </Link>
+        </div>
         <nav className="hidden md:flex items-center gap-7 text-[14px] text-[#444]">
           <Link href="/lander" className="hover:text-[#111]">Home</Link>
           <div className="relative group h-16 flex items-center">
@@ -331,7 +335,7 @@ export function MarketingNav() {
               </svg>
             </button>
             <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 w-[340px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
-              <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
+              <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-y-auto max-h-[calc(100vh-6rem)]">
                 {FEATURE_MENU.map((f) => (
                   <Link key={f.label} href={f.href} className="flex items-center gap-3.5 px-5 py-3.5 border-b border-[#f3f3f3] last:border-0 hover:bg-[#f6f4ff] transition-colors">
                     <span style={{ color: ACCENT }}><FeatureIcon name={f.icon} /></span>

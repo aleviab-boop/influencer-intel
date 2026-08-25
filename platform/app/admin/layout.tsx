@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BrandMark } from '@/components/marketing';
+import { BackButton } from '@/components/back-button';
 
 const ACCENT = '#6C4DF6';
 const ACCENT_SOFT = '#F4F2FF';
@@ -72,6 +73,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <span className="text-[15px] font-semibold tracking-tight">Influencer Intel</span>
           <span className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: `linear-gradient(90deg, ${ACCENT}, #9b7bff, transparent)` }} />
         </Link>
+
+        <div className="px-4 pt-3">
+          <BackButton />
+        </div>
 
         <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#aab] mt-2">
           Admin

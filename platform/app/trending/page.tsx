@@ -102,15 +102,6 @@ export default function TrendingPage() {
         <section className="relative isolate overflow-hidden py-10 md:py-12" style={{ background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 55% at 90% 6%, rgba(247,181,0,.15), transparent 60%), radial-gradient(55% 50% at 60% 0%, rgba(236,72,153,.12), transparent 55%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }}>
           <PageDoodles className="-z-10" />
           <div className="max-w-6xl mx-auto px-6">
-            <Link
-              href="/"
-              className="flex w-fit items-center gap-1.5 mb-3 text-[13px] font-medium text-[#666] hover:text-[#111] transition-colors"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M19 12H5" /><path d="M12 19l-7-7 7-7" />
-              </svg>
-              Back to home
-            </Link>
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>What&apos;s trending</span>
             <h1 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">Influencer & campaign pulse</h1>
             <p className="mt-2 text-[15px] text-[#555]">Live marketing news and what India is searching right now — refreshes through the day.</p>
