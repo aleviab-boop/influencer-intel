@@ -324,7 +324,7 @@ function OwnershipCard() {
  */
 type EmailPrefKey = 'invite' | 'payment' | 'review' | 'deadline';
 const EMAIL_PREF_META: { key: EmailPrefKey; label: string; hint: string }[] = [
-  { key: 'invite', label: 'Campaign invites', hint: 'When a brand invites you to a collab.' },
+  { key: 'invite', label: 'Invites & application decisions', hint: 'When a brand invites you, or accepts/declines your application.' },
   { key: 'payment', label: 'Payment receipts', hint: 'When a brand marks your deal as paid.' },
   { key: 'review', label: 'Submission reviews', hint: 'When your work is approved or sent back for changes.' },
   { key: 'deadline', label: 'Deadline reminders', hint: 'The day before a deliverable is due.' },

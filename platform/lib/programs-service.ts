@@ -9,7 +9,7 @@
 import { getBolticClient } from '@influencer-intel/shared/db';
 import type { Program, ProgramRecruit, ProgramStatus, RecruitStatus } from '@influencer-intel/shared/types';
 import { getSession } from './auth';
-import { notifyInvite, notifyPayment } from './email';
+import { notifyInvite, notifyPayment, notifyDecision } from './email';
 
 export interface ProgramSummary extends Program {
   recruit_count: number;
@@ -269,15 +269,21 @@ export async function updateRecruit(input: {
 }): Promise<ProgramRecruit | null> {
   const db = getBolticClient();
 
-  // Detect a genuine unpaid→paid transition so the "payment received" email
-  // fires once, not on every repeat PATCH that re-asserts paid:true.
+  // Read the prior row once so we can detect genuine transitions and fire each
+  // notification exactly once (not on every repeat PATCH that re-asserts the
+  // same value):
+  //   - unpaid→paid                → "payment received"
+  //   - applied→recruited/declined → the brand's decision on an application
   let wasPaid = false;
-  if (input.paid === true) {
-    const prior = await db.query<{ paid: boolean }>(
-      `SELECT paid FROM program_recruits WHERE program_id = $1 AND creator_id = $2 LIMIT 1`,
+  let priorStatus: string | null = null;
+  const needsPrior = input.paid === true || input.status === 'recruited' || input.status === 'declined';
+  if (needsPrior) {
+    const prior = await db.query<{ paid: boolean; status: string | null }>(
+      `SELECT paid, status FROM program_recruits WHERE program_id = $1 AND creator_id = $2 LIMIT 1`,
       [input.program_id, input.creator_id],
     );
     wasPaid = !!prior[0]?.paid;
+    priorStatus = prior[0]?.status ?? null;
   }
 
   const set: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -301,6 +307,13 @@ export async function updateRecruit(input: {
   // Fire-and-forget once the row is safely persisted.
   if (updated && input.paid === true && !wasPaid) {
     void notifyPayment(input.program_id, input.creator_id).catch(() => {});
+  }
+  // A pending application the brand just decided on — accepted or turned down.
+  // Only when the creator actually applied (applied→…), so brand-initiated
+  // invites moving down the pipeline don't send a spurious "application" email.
+  if (updated && priorStatus === 'applied' && (input.status === 'recruited' || input.status === 'declined')) {
+    const decision = input.status === 'recruited' ? 'accepted' : 'declined';
+    void notifyDecision(input.program_id, input.creator_id, decision).catch(() => {});
   }
   return updated;
 }

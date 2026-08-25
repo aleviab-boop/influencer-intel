@@ -24,7 +24,9 @@ export type EmailPrefs = Record<EmailPrefKey, boolean>;
 // review verdicts share one toggle (a creator who mutes reviews mutes both).
 export function kindToPrefKey(kind: string): EmailPrefKey | null {
   switch (kind) {
-    case 'invite': return 'invite';
+    case 'invite':
+    case 'application_accepted':
+    case 'application_declined': return 'invite';
     case 'payment': return 'payment';
     case 'review_changes':
     case 'review_approved': return 'review';

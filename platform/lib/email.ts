@@ -74,7 +74,7 @@ interface SendArgs {
 // Denormalised send context, recorded in email_log to power the agency-side
 // "Email Activity" page. Every field but `kind` is best-effort.
 export interface EmailLogMeta {
-  kind: string; // invite | invite_accepted | invite_declined | payment | review_changes | review_approved | deadline | digest | message
+  kind: string; // invite | invite_accepted | invite_declined | application_accepted | application_declined | payment | review_changes | review_approved | deadline | digest | message
   creator_id?: string | null;
   program_id?: string | null;
   brand_id?: string | null;
@@ -341,6 +341,51 @@ export async function notifyReview(
         href,
       ),
     }, { kind: 'review_approved', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
+  }
+}
+
+/**
+ * A brand decided on a creator's APPLICATION — accepted (→ recruited) or
+ * declined. Fires to the creator, closing the loop on a pending application so
+ * they aren't left refreshing the tracker. Acceptance is celebratory and points
+ * at the deal; a decline stays gentle and nudges toward the next campaign.
+ */
+export async function notifyDecision(
+  programId: string,
+  creatorId: string,
+  decision: 'accepted' | 'declined',
+): Promise<void> {
+  if (!emailEnabled()) return;
+  const ctx = await loadRecruitContext(programId, creatorId);
+  if (!ctx?.email) return;
+  const rateStr = money(ctx.rate);
+
+  if (decision === 'accepted') {
+    const href = `${appBaseUrl()}/creator/deals/${ctx.recruit_id}`;
+    await sendEmail({
+      to: ctx.email,
+      subject: `You're in! ${ctx.brand} accepted you for ${ctx.program}`,
+      html: shell(
+        `You're in 🎉`,
+        `<p style="margin:0 0 12px;">Hi ${ctx.creator_name},</p>
+         <p style="margin:0;">${ctx.brand} accepted your application to <strong>${ctx.program}</strong>${rateStr ? ` at <strong>${rateStr}</strong>` : ''}. Open the deal to see the brief, deliverables and what's next.</p>`,
+        'View deal',
+        href,
+      ),
+    }, { kind: 'application_accepted', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
+  } else {
+    const href = `${appBaseUrl()}/creator/campaigns`;
+    await sendEmail({
+      to: ctx.email,
+      subject: `An update on your ${ctx.program} application`,
+      html: shell(
+        `An update on ${ctx.program}`,
+        `<p style="margin:0 0 12px;">Hi ${ctx.creator_name},</p>
+         <p style="margin:0;">${ctx.brand} went with other creators for <strong>${ctx.program}</strong> this time. Don't be discouraged — plenty of brands are actively recruiting. Browse open campaigns and apply to your next fit.</p>`,
+        'Browse campaigns',
+        href,
+      ),
+    }, { kind: 'application_declined', creator_id: creatorId, program_id: programId, brand_id: ctx.brand_id });
   }
 }
 
