@@ -21,14 +21,11 @@ const FEATURE_MENU: { label: string; href: string; icon: string }[] = [
   { label: 'Reply Assistant', href: '/tools/reply-assistant', icon: 'chat' },
   { label: 'Campaign Management', href: '/campaign-management', icon: 'list' },
   { label: 'Comment to DM', href: '/comment-to-dm', icon: 'chat' },
-  { label: 'Saved creators', href: '/saved', icon: 'bookmark' },
-  { label: 'Competitor Analysis', href: '/brand-mentions', icon: 'bars' },
-  { label: 'Influencer Database', href: '/database', icon: 'database' },
+  { label: 'Brand Collaborations', href: '/brand-mentions', icon: 'instagram' },
+  { label: 'Influencer Database', href: '/influencer-database', icon: 'database' },
   { label: 'Campaign Analytics', href: '/campaign-analytics', icon: 'clock' },
   { label: 'Media Management', href: '/media-management', icon: 'video' },
   { label: 'Influencer Payouts', href: '/influencer-payouts', icon: 'payout' },
-  { label: 'Email Activity', href: '/email-activity', icon: 'mail' },
-  { label: 'Notifications', href: '/notifications', icon: 'bell' },
   { label: 'Authenticity Score', href: '/tools/fake-follower-checker', icon: 'shield' },
   { label: 'Engagement Rate (ER)', href: '/tools/er-calculator', icon: 'gauge' },
 ];
@@ -183,7 +180,7 @@ function MarketingNav() {
               </svg>
             </button>
             <div className="absolute left-1/2 -translate-x-1/2 top-full pt-2 w-[340px] z-50 opacity-0 invisible translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0">
-              <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
+              <div className="rounded-2xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-y-auto max-h-[calc(100vh-6rem)]">
                 {FEATURE_MENU.map((f) => (
                   <Link
                     key={f.label}
