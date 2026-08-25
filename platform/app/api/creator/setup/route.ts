@@ -53,10 +53,8 @@ export async function GET(request: Request): Promise<NextResponse> {
               follower_count, payout_details, verification_tier,
               last_scraped_at::text AS last_scraped_at,
               handle_verified_at::text AS handle_verified_at,
-              (EXISTS (SELECT 1 FROM connected_accounts ca
-                       WHERE ca.creator_id = creators.id AND ca.connection_status = 'active')
-               OR EXISTS (SELECT 1 FROM creator_connectors cc
-                          WHERE cc.creator_id = creators.id AND cc.status = 'connected')) AS has_oauth
+              EXISTS (SELECT 1 FROM connected_accounts ca
+                      WHERE ca.creator_id = creators.id AND ca.connection_status = 'active') AS has_oauth
        FROM creators WHERE id = $1 LIMIT 1`,
       [creatorId],
     );

@@ -7,9 +7,9 @@
 // then upserts them into trend_signals so /api/trends, the prediction engine
 // and the brand campaign-ideas feature all read real, first-party trends.
 //
-// Deliberately first-party only: audio trends aren't in recent_posts (they need
-// an external source like Apify), so this covers hashtag + format. Idempotent —
-// upserts on (trend_type, identifier); first_seen_at is preserved across runs.
+// First-party only, derived from our own crawl: hashtag + format (plus visual
+// and topic when those passes are enabled). Idempotent — upserts on
+// (trend_type, identifier); first_seen_at is preserved across runs.
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';

@@ -9,7 +9,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const category = url.searchParams.get('category');
   // Optional trend_type filter (e.g. ?type=topic for the "what's viral" board).
   // Accepts a comma list; anything outside the known set is ignored.
-  const KNOWN_TYPES = new Set(['audio', 'format', 'hashtag', 'topic', 'visual']);
+  const KNOWN_TYPES = new Set(['format', 'hashtag', 'topic', 'visual']);
   const types = (url.searchParams.get('type') ?? '')
     .split(',')
     .map((t) => t.trim().toLowerCase())

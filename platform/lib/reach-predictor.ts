@@ -440,7 +440,7 @@ function buildNotes(a: {
     const top = a.matched[0]!;
     notes.push(`Riding ${a.matched.length} live trend${a.matched.length > 1 ? 's' : ''} — strongest is “${top.display_name}” (${top.phase}), adding ~${Math.round((a.trend - 1) * 100)}% lift.`);
   } else {
-    notes.push('No currently-trending audio, hashtag or topic detected in the caption — add one to ride a trend and lift reach.');
+    notes.push('No currently-trending hashtag or topic detected in the caption — add one to ride a trend and lift reach.');
   }
   if (a.timing >= 1.05) notes.push('Planned post time lands in one of this creator’s best-performing slots.');
   else if (a.timing < 1) notes.push('This time slot has historically underperformed for this creator — consider one of their peak windows.');

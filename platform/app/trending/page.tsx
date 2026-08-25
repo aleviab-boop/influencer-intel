@@ -9,7 +9,7 @@ interface NewsItem { title: string; link: string; source: string; date: string; 
 interface TrendItem { title: string; traffic: string; link: string }
 // First-party Instagram trends, derived from our own crawl (trend_signals).
 interface IgTrend {
-  trend_type: 'audio' | 'format' | 'hashtag' | 'topic' | 'visual';
+  trend_type: 'format' | 'hashtag' | 'topic' | 'visual';
   display_name: string;
   phase: 'emerging' | 'growing' | 'peak' | 'saturated' | 'declining';
   velocity: number;
@@ -24,7 +24,6 @@ const IG_TYPE_META: { key: IgTrend['trend_type']; label: string; glyph: string }
   { key: 'hashtag', label: 'Hashtags', glyph: '#' },
   { key: 'visual', label: 'Visual aesthetics', glyph: '🎨' },
   { key: 'topic', label: 'Topics', glyph: '💬' },
-  { key: 'audio', label: 'Audio', glyph: '🎵' },
 ];
 // Lifecycle phase → dot colour + human label.
 const PHASE_META: Record<IgTrend['phase'], { c: string; label: string }> = {

@@ -48,7 +48,7 @@ interface ForecastHistory {
 }
 
 interface MatchedTrend {
-  trend_type: 'audio' | 'format' | 'hashtag' | 'topic';
+  trend_type: 'format' | 'hashtag' | 'topic';
   display_name: string;
   phase: 'emerging' | 'growing' | 'peak' | 'saturated' | 'declining';
   velocity: number;
