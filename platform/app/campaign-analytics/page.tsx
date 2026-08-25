@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 import { InlineError } from '@/components/skeleton';
 
 interface Totals { campaigns: number; creators: number; reach: number; spend: number; avg_quality: number }
@@ -54,6 +55,7 @@ export default function CampaignAnalyticsPage() {
         <section className="relative overflow-hidden border-b border-[#eee]">
           <div className="absolute inset-0" style={{ background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 55% at 90% 6%, rgba(247,181,0,.15), transparent 60%), radial-gradient(55% 50% at 60% 0%, rgba(236,72,153,.12), transparent 55%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
           <div className="grid-bg absolute inset-0 opacity-50" />
+          <PageDoodles />
           <div className="relative max-w-5xl mx-auto px-6 pt-14 pb-10 text-center">
             <span className="inline-block px-3 py-1 rounded-full bg-white border border-border shadow-sm text-[12px] font-semibold" style={{ color: ACCENT }}>Campaign Analytics</span>
             <Reveal><h1 className="mt-5 text-3xl md:text-4xl font-bold tracking-tight text-ink-900 leading-tight">Predicted vs. real campaign analytics</h1></Reveal>

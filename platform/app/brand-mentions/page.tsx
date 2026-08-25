@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, ACCENT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 interface MatchedPost {
   caption?: string;
@@ -172,7 +173,8 @@ export default function BrandMentionsPage() {
   }, [debouncedQ, creators, liveLoading]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+    <div className="relative isolate overflow-hidden min-h-screen flex flex-col bg-[#f7f7fb] font-sans">
+      <PageDoodles className="-z-10" />
       <MarketingNav />
       <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
         <div className="text-[11px] uppercase tracking-wider font-medium mb-1.5" style={{ color: ACCENT }}>Brand Collaborations</div>

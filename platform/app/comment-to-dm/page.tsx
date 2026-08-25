@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 export default function CommentToDmPage() {
   return (
@@ -52,7 +53,8 @@ export default function CommentToDmPage() {
 
 function Hero() {
   return (
-    <section className="grid-bg">
+    <section className="grid-bg relative isolate overflow-hidden">
+      <PageDoodles className="-z-10" />
       <div className="max-w-6xl mx-auto px-6 py-16 grid lg:grid-cols-2 gap-12 items-center">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.08]">

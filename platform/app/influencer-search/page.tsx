@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, Reveal, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 import { LiveSearch } from '@/components/live-search';
 
 export default function InfluencerSearchPage() {
@@ -41,7 +42,8 @@ function Hero() {
   const initialPrompt = params.get('prompt') ?? '';
 
   return (
-    <section className="grid-bg">
+    <section className="grid-bg relative isolate overflow-hidden">
+      <PageDoodles className="-z-10" />
       <div className="max-w-5xl mx-auto px-6 py-16">
         <div className="text-center max-w-3xl mx-auto mb-8">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.08]">

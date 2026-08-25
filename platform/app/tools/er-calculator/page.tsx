@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 const tierTarget = (f: number): number => (f >= 1e6 ? 1 : f >= 5e5 ? 1.3 : f >= 1e5 ? 1.8 : f >= 5e4 ? 2.5 : f >= 2e4 ? 3.5 : f >= 1e4 ? 4.5 : 6);
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
@@ -67,6 +68,7 @@ export default function ERCalculator() {
         <section className="relative overflow-hidden border-b border-[#eee]">
           <div className="grid-bg absolute inset-0 opacity-60" />
           <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full blur-3xl opacity-30" style={{ background: ACCENT }} />
+          <PageDoodles />
           <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-12 text-center">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold mb-5" style={{ background: ACCENT_SOFT, color: ACCENT }}>
               <Gauge14 /> Free tool

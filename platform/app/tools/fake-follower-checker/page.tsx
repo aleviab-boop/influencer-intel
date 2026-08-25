@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 
@@ -75,6 +76,7 @@ export default function FakeFollowerChecker() {
         <section className="relative overflow-hidden border-b border-[#eee]">
           <div className="grid-bg absolute inset-0 opacity-60" />
           <div className="absolute -top-24 -right-24 w-80 h-80 rounded-full blur-3xl opacity-30" style={{ background: ACCENT }} />
+          <PageDoodles />
           <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-12 text-center">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold mb-5" style={{ background: ACCENT_SOFT, color: ACCENT }}>
               <Shield /> Free tool
