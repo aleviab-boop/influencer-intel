@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { MarketingNav, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 import { CreatorAvatar } from '@/components/creator-avatar';
 
 interface Parsed { location: string | null; genres: string[]; keywords: string[]; hashtags: string[] }
@@ -64,6 +65,7 @@ export default function InstagramSearchPage() {
         <section className="relative overflow-hidden border-b border-[#eee]">
           <div className="absolute inset-0" style={{ background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 55% at 90% 6%, rgba(247,181,0,.15), transparent 60%), radial-gradient(55% 50% at 60% 0%, rgba(236,72,153,.12), transparent 55%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
           <div className="grid-bg absolute inset-0 opacity-50" />
+          <PageDoodles />
           <div className="relative max-w-3xl mx-auto px-6 pt-16 pb-10 text-center">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: '#fff', color: ACCENT }}>Instagram search</span>
             <h1 className="mt-5 text-4xl md:text-5xl font-bold tracking-tight text-ink-900">Search creators across Instagram</h1>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { MarketingNav, MarketingFooter, ACCENT, ACCENT_SOFT } from '@/components/marketing';
+import { PageDoodles } from '@/components/page-doodles';
 import { InlineError } from '@/components/skeleton';
 import { cleanTrendCategories } from '@/lib/trend-quality';
 
@@ -116,11 +117,12 @@ export default function TrendingTopicsPage() {
       <main className="flex-1">
         {/* Hero */}
         <section
-          className="py-10 md:py-12"
+          className="relative isolate overflow-hidden py-10 md:py-12"
           style={{
             background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 55% at 90% 6%, rgba(236,72,153,.14), transparent 60%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)`,
           }}
         >
+          <PageDoodles className="-z-10" />
           <div className="max-w-5xl mx-auto px-6">
             <div className="flex items-center gap-2">
               <Link href="/trending" className="text-[13px] text-[#888] hover:text-[#111]">Trending</Link>
