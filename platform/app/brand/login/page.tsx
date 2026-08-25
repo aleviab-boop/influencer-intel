@@ -65,20 +65,12 @@ export default function BrandLoginPage() {
   return (
     <div className="min-h-screen bg-[#fafafc] font-sans">
       <div className="max-w-4xl mx-auto px-6 py-12">
-        {/* Account strip — only when signed in (the login card carries the links). */}
+        {/* Log out — only when signed in; kept minimal in the top corner. */}
         {account && (
           <div className="mb-6 flex justify-end">
-            <div className="flex items-center gap-3 text-[13px]">
-              <span className="text-ink-500">
-                Signed in as <span className="font-semibold text-ink-800">{account.name || account.email}</span>
-              </span>
-              <a href="/brand/home" className="font-semibold" style={{ color: ACCENT }}>
-                Go to workspace →
-              </a>
-              <button onClick={() => void handleLogout()} className="font-semibold text-ink-400 hover:text-ink-600 underline">
-                Log out
-              </button>
-            </div>
+            <button onClick={() => void handleLogout()} className="text-[13px] font-semibold text-ink-400 hover:text-ink-600 underline">
+              Log out
+            </button>
           </div>
         )}
 
