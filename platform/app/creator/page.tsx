@@ -455,8 +455,10 @@ export default function CreatorPortal() {
               </Link>
             )}
 
-            {/* Quick links to the creator's own workspaces */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-8">
+            {/* Quick links to the creator's own workspaces. Columns scale with
+                width so labels never truncate: 1-up on phones, 2-up on the
+                640–1024px band, 3-up only once there's genuine room. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mb-8">
               <QuickLink href={`/creator/notifications?handle=${encodeURIComponent(profile.handle)}`} label="Notifications" desc="What needs you" icon={ICONS.notifications}
                 badge={overview && overview.notifications.action_count > 0 ? String(overview.notifications.action_count) : null} alert />
               <QuickLink href={`/creator/deals?handle=${encodeURIComponent(profile.handle)}`} label="Your deals" desc="Deliverables & payments" icon={ICONS.deals}
@@ -624,19 +626,21 @@ function ConnectionCard({ c, onDisconnect, onResync, syncing }: {
   // Connected & healthy — quiet confirmation that live insights are on.
   if (c.connected && !c.expiring_soon) {
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-5 py-3.5 mb-4">
-        <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-emerald-600 shadow-sm"><IgGlyph /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold text-emerald-900">
-            Instagram connected{c.ig_username ? <> — <span className="font-bold">@{c.ig_username}</span></> : ''}
-          </div>
-          <div className="text-[12.5px] text-emerald-700/90">
-            {isSyncing
-              ? 'Syncing your latest posts and insights…'
-              : <>Live insights are on{syncedLabel ? <> — last synced {syncedLabel}</> : ''}{c.posts_synced_count ? ` · ${c.posts_synced_count} posts` : ''}.</>}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-5 py-3.5 mb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-emerald-600 shadow-sm"><IgGlyph /></span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-semibold text-emerald-900">
+              Instagram connected{c.ig_username ? <> — <span className="font-bold">@{c.ig_username}</span></> : ''}
+            </div>
+            <div className="text-[12.5px] text-emerald-700/90">
+              {isSyncing
+                ? 'Syncing your latest posts and insights…'
+                : <>Live insights are on{syncedLabel ? <> — last synced {syncedLabel}</> : ''}{c.posts_synced_count ? ` · ${c.posts_synced_count} posts` : ''}.</>}
+            </div>
           </div>
         </div>
-        <div className="shrink-0 flex items-center gap-3">
+        <div className="shrink-0 flex items-center gap-3 pl-12 sm:pl-0">
           <button
             onClick={onResync}
             disabled={isSyncing}
@@ -657,15 +661,17 @@ function ConnectionCard({ c, onDisconnect, onResync, syncing }: {
   if (c.connected && c.expiring_soon) {
     const days = c.days_until_expiry;
     return (
-      <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 mb-4">
-        <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-amber-600 shadow-sm"><IgGlyph /></span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold text-amber-900">Reconnect Instagram soon</div>
-          <div className="text-[12.5px] text-amber-700">
-            Your connection {days != null && days > 0 ? `expires in ${days} day${days === 1 ? '' : 's'}` : 'is about to expire'}. Reconnect to keep live insights flowing.
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 mb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <span className="shrink-0 grid place-items-center w-9 h-9 rounded-xl bg-white text-amber-600 shadow-sm"><IgGlyph /></span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-semibold text-amber-900">Reconnect Instagram soon</div>
+            <div className="text-[12.5px] text-amber-700">
+              Your connection {days != null && days > 0 ? `expires in ${days} day${days === 1 ? '' : 's'}` : 'is about to expire'}. Reconnect to keep live insights flowing.
+            </div>
           </div>
         </div>
-        <div className="shrink-0 flex items-center gap-3">
+        <div className="shrink-0 flex items-center gap-3 pl-12 sm:pl-0">
           <a href="/api/oauth/instagram?flow=creator" className="group text-[13px] font-semibold text-amber-700 inline-flex items-center gap-1">
             Reconnect<span className="transition-transform duration-300 ease-out group-hover:translate-x-1" aria-hidden>→</span>
           </a>
