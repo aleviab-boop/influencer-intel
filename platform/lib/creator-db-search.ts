@@ -80,7 +80,7 @@ interface Row {
 export async function searchCreatorsInDb(
   tokens: string[],
   limit: number,
-  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number; gender?: 'female' | 'male' } = {},
+  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number; gender?: 'female' | 'male'; locationBackfill?: boolean } = {},
 ): Promise<LiveProfile[]> {
   if (tokens.length === 0) return [];
   // Expand a state ("gujarat") into its cities so a state search ranks creators
@@ -172,7 +172,14 @@ export async function searchCreatorsInDb(
   // we fall back to the full niche-relevant set (loc_total = 0 short-circuits the
   // filter) — preserving the "never hide the only matches we have" behavior for
   // cities the DB hasn't covered yet.
-  const localsOnly = hasLocToken ? `where (loc_match or loc_total = 0)` : '';
+  //
+  // `locationBackfill` (the brand/lander finder) OPTS OUT of the hard drop: a
+  // narrow niche+city brief ("tech reviewers in Mumbai") otherwise returns only
+  // the 2-3 creators geo-tagged to that exact city, starving the page. With
+  // backfill on we keep the non-local niche matches too — still ranked BELOW
+  // genuine locals (via `loc_match desc`) and under the caller's limit — so
+  // locals lead but the page fills out with relevant creators instead of ~3.
+  const localsOnly = hasLocToken && !opts.locationBackfill ? `where (loc_match or loc_total = 0)` : '';
 
   const sql = `
     with base as (

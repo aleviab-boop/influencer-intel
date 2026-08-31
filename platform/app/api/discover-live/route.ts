@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
     // Excel/campaign creators. 5K follower floor drops nanos + bad-scrape noise.
     const bucket = body?.bucket === 'trends' ? 'trends' : body?.bucket === 'instagram' ? 'instagram' : undefined;
     const gender = body?.gender === 'female' ? 'female' : body?.gender === 'male' ? 'male' : undefined;
-    const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: 5000, gender });
+    const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: 5000, gender, locationBackfill: true });
     // Log the agency search for the admin Agency activity feed (best-effort).
     // Raw query (not db.insert): the client casts JS arrays to ::jsonb, but
     // agency_searches.tokens is text[] — pg encodes a string[] param natively.
@@ -475,7 +475,7 @@ export async function POST(req: NextRequest) {
   // 2. Database is supplementary — used to top up the live results. Fetch a wider
   //    slice (2×) so that after dropping apparel shops/brands below we still have
   //    enough real creators to fill the page.
-  const dbMatches = await searchCreatorsInDb(tokens, max * 2);
+  const dbMatches = await searchCreatorsInDb(tokens, max * 2, { locationBackfill: true });
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {
