@@ -419,6 +419,38 @@ function listFit(p: { full_name?: string; biography?: string; category?: string;
   return clamp(Math.round(rel * 0.68 + erScore * 0.32), 0, 100);
 }
 
+// Plain-English "why this creator matched" for a result row — built from the
+// same signals the Fit score uses, but spelled out so a user understands the
+// ranking without opening the full profile. Keyword hits drive the headline;
+// location, size tier, engagement health and verification round it out.
+interface MatchReason { label: string; tone: 'good' | 'neutral' | 'soft' }
+function whyMatched(
+  p: { full_name?: string; biography?: string; category?: string; followers: number; engagement?: number | null; is_verified?: boolean; loc_match?: boolean; unverified?: boolean },
+  briefKws: string[],
+): MatchReason[] {
+  const reasons: MatchReason[] = [];
+  const hay = `${p.full_name ?? ''} ${p.biography ?? ''} ${p.category ?? ''}`.toLowerCase();
+  const hits = Array.from(new Set(briefKws.filter((k) => k.length > 1 && hay.includes(k))));
+  if (hits.length) reasons.push({ label: `Matches “${hits.slice(0, 4).join(', ')}” in their name, bio or category`, tone: 'good' });
+  if (p.loc_match) reasons.push({ label: 'Tied to your searched location', tone: 'good' });
+  const f = p.followers;
+  if (f > 0) {
+    const tier = f >= 1_000_000 ? 'mega' : f >= 100_000 ? 'macro' : f >= 20_000 ? 'mid-tier' : f >= 1_000 ? 'micro' : 'nano';
+    reasons.push({ label: `${fmt(f)} followers · ${tier} creator`, tone: 'neutral' });
+  }
+  const er = p.engagement ?? 0;
+  if (er > 0 && f > 0) {
+    const rel = er / expectedErFloor(f);
+    const band = rel >= 1.3 ? 'strong' : rel >= 0.8 ? 'solid' : 'low';
+    reasons.push({ label: `${er}% engagement · ${band} for their size`, tone: band === 'low' ? 'soft' : 'good' });
+  }
+  if (p.is_verified) reasons.push({ label: 'Verified account', tone: 'good' });
+  if (reasons.length === 0) {
+    reasons.push({ label: p.unverified ? 'Surfaced from live discovery — stats still enriching' : 'Surfaced from your network / live crawl', tone: 'soft' });
+  }
+  return reasons;
+}
+
 // Posting rhythm from recent-post timestamps + engagement. IG timestamps are
 // UTC; we read them in IST (UTC+5:30) since the audience is India-first. Returns
 // posts/week, the highest-engagement weekday, and a 3-hour best-time window.
@@ -1050,12 +1082,35 @@ export function LiveSearch({
   const [recent, setRecent] = useState<string[]>([]);
   const autoRan = useRef(false);
 
+  // Saved searches — explicitly pinned by the user (☆ on the results header),
+  // persisted separately from the auto-tracked recents so they don't age out.
+  // Stored as the full prompt string (brief band words included), so re-running
+  // a saved search re-applies its follower/ER band too.
+  const SAVED_MAX = 12;
+  const [savedSearches, setSavedSearches] = useState<string[]>([]);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem('ii_recent_searches');
       if (raw) setRecent(JSON.parse(raw));
+      const rawS = localStorage.getItem('ii_saved_searches');
+      if (rawS) setSavedSearches(JSON.parse(rawS));
     } catch { /* ignore */ }
   }, []);
+
+  const isSearchSaved = (p: string) => savedSearches.some((x) => x.toLowerCase() === p.trim().toLowerCase());
+  function toggleSaveSearch(p: string) {
+    const t = p.trim();
+    if (t.length < 2) return;
+    setSavedSearches((list) => {
+      const exists = list.some((x) => x.toLowerCase() === t.toLowerCase());
+      const next = exists
+        ? list.filter((x) => x.toLowerCase() !== t.toLowerCase())
+        : [t, ...list].slice(0, SAVED_MAX);
+      try { localStorage.setItem('ii_saved_searches', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   // Record a query as recently-searched (deduped, newest first, capped). Called
   // automatically on every real search.
@@ -1298,6 +1353,10 @@ export function LiveSearch({
 
   // Brief = the search prompt; drives the "Fit" column for the whole list.
   const briefKws = fitKeywords(run?.prompt ?? '');
+  // Rows whose "why this matched" breakdown is expanded (keyed by username).
+  const [whyOpen, setWhyOpen] = useState<Set<string>>(new Set());
+  const toggleWhy = (u: string) =>
+    setWhyOpen((s) => { const n = new Set(s); if (n.has(u)) n.delete(u); else n.add(u); return n; });
   // Score against the row merged with any lazily-scraped live stats, so Fit
   // sharpens as engagement streams in.
   const fitOf = (p: LiveProfile) => listFit({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws) ?? -1;
@@ -1830,6 +1889,31 @@ export function LiveSearch({
       </div>
       )}
 
+      {/* Saved searches — user-pinned, click to re-run (band included), × to unpin.
+          Shown even in the brand finder (hideInput) so saved briefs stay reachable. */}
+      {savedSearches.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[12px] text-[#999]">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ color: ACCENT }}><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z" /></svg>
+            Saved:
+          </span>
+          {savedSearches.map((p) => (
+            <span key={p} className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full border border-[#e3def9] bg-[#faf9ff] text-[12px]">
+              <button onClick={() => runRecent(p)} className="hover:underline font-medium" style={{ color: ACCENT }} title="Run this saved search">
+                {p}
+              </button>
+              <button
+                onClick={() => toggleSaveSearch(p)}
+                className="w-4 h-4 grid place-items-center rounded-full text-[#bbb] hover:text-[#666] hover:bg-white"
+                title="Unpin"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* recently searched — auto-tracked, click to re-run, × to forget */}
       {!hideInput && recent.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1838,6 +1922,13 @@ export function LiveSearch({
             <span key={p} className="inline-flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full border border-[#e3def9] bg-white text-[12px]">
               <button onClick={() => runRecent(p)} className="hover:underline" style={{ color: ACCENT }} title="Search again">
                 {p}
+              </button>
+              <button
+                onClick={() => toggleSaveSearch(p)}
+                className={`w-4 h-4 grid place-items-center rounded-full ${isSearchSaved(p) ? 'text-[#6C4DF6]' : 'text-[#ccc] hover:text-[#6C4DF6]'} hover:bg-[#f3f3f3]`}
+                title={isSearchSaved(p) ? 'Saved' : 'Save this search'}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill={isSearchSaved(p) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z" /></svg>
               </button>
               <button
                 onClick={() => removeRecent(p)}
@@ -2007,6 +2098,15 @@ export function LiveSearch({
               ) : null}
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => toggleSaveSearch(run.prompt)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium border border-[#e3def9] hover:bg-[#faf9ff]"
+                style={{ color: isSearchSaved(run.prompt) ? ACCENT : '#666' }}
+                title={isSearchSaved(run.prompt) ? 'Saved — click to unpin' : 'Save this search to re-run later (keeps your brief band)'}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={isSearchSaved(run.prompt) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z" /></svg>
+                {isSearchSaved(run.prompt) ? 'Saved' : 'Save search'}
+              </button>
               <button
                 onClick={() => void downloadExcel()}
                 disabled={exporting || shown.length === 0}
@@ -2296,10 +2396,17 @@ export function LiveSearch({
                           const fit = listFit({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws);
                           if (fit == null) return <span className="text-[13px] text-[#ccc]">—</span>;
                           const c = fit >= 72 ? { bg: '#ecfdf5', fg: '#059669' } : fit >= 52 ? { bg: '#fff7ed', fg: '#b45309' } : { bg: '#fef2f2', fg: '#dc2626' };
+                          const open = whyOpen.has(p.username);
                           return (
-                            <span className="inline-block text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums" style={{ background: c.bg, color: c.fg }} title="Quick fit vs your search brief — open the profile for the full Brand Fit breakdown">
+                            <button
+                              onClick={() => toggleWhy(p.username)}
+                              className="inline-flex items-center gap-1 text-[12px] font-semibold px-2 py-0.5 rounded-md tabular-nums transition-shadow hover:shadow-sm"
+                              style={{ background: c.bg, color: c.fg }}
+                              title={open ? 'Hide why this matched' : 'Why did this match? — click for the breakdown'}
+                            >
                               {fit}
-                            </span>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}><path d="M6 9l6 6 6-6" /></svg>
+                            </button>
                           );
                         })()}
                       </td>
@@ -2414,6 +2521,38 @@ export function LiveSearch({
                         </div>
                       </td>
                     </tr>
+                    {whyOpen.has(p.username) && (
+                      <tr>
+                        <td colSpan={9} className="px-4 pb-3 pt-0 bg-[#faf9ff]">
+                          <div className="rounded-xl border border-[#ece7fb] bg-white px-3.5 py-3">
+                            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#9a92c2] mb-2">
+                              Why this creator matched
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {whyMatched({ ...p, ...(liveStats[p.username] ?? {}) }, briefKws).map((r, ri) => {
+                                const tc = r.tone === 'good'
+                                  ? { bg: '#ecfdf5', fg: '#047857', bd: '#bbf7d0' }
+                                  : r.tone === 'soft'
+                                    ? { bg: '#fff7ed', fg: '#b45309', bd: '#fed7aa' }
+                                    : { bg: '#f4f2ff', fg: '#5b3fd6', bd: '#e3def9' };
+                                return (
+                                  <span
+                                    key={ri}
+                                    className="inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-lg border"
+                                    style={{ background: tc.bg, color: tc.fg, borderColor: tc.bd }}
+                                  >
+                                    {r.tone === 'good' && (
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10" /></svg>
+                                    )}
+                                    {r.label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                     {profileFor === p.username && (
                       <tr>
                         <td colSpan={9} className="p-0 bg-[#faf9ff]">
