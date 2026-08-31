@@ -556,6 +556,65 @@ function parseSeedInput(raw: string): { seeds: string[]; names: string[] } {
   return { seeds, names };
 }
 
+// Parse follower / engagement constraints out of a typed brief so they become
+// REAL filters instead of dead search text. A prompt like "tech reviewers in
+// Mumbai with 5k-20k followers and 4%+ engagement" yields
+// { minF: 5000, maxF: 20000, minER: 4, cleaned: "tech reviewers in Mumbai" } —
+// the band is applied to the results and the numbers are stripped so the niche
+// search broadens (more supply) instead of matching stray digits.
+interface BriefBand { minF?: number; maxF?: number; minER?: number }
+// Compact "5K–20K followers · 4%+ ER" summary for the brief chip.
+function briefFollowersShort(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return String(n);
+}
+function briefBandLabel(b: BriefBand): string {
+  const parts: string[] = [];
+  if (b.minF != null && b.maxF != null) parts.push(`${briefFollowersShort(b.minF)}–${briefFollowersShort(b.maxF)} followers`);
+  else if (b.minF != null) parts.push(`${briefFollowersShort(b.minF)}+ followers`);
+  else if (b.maxF != null) parts.push(`under ${briefFollowersShort(b.maxF)} followers`);
+  if (b.minER != null) parts.push(`${b.minER}%+ ER`);
+  return parts.join(' · ');
+}
+function briefNum(raw: string): number {
+  const m = raw.trim().toLowerCase().match(/^([\d.]+)\s*([km]?)/);
+  if (!m) return NaN;
+  let n = parseFloat(m[1]!);
+  if (m[2] === 'k') n *= 1_000;
+  else if (m[2] === 'm') n *= 1_000_000;
+  return Math.round(n);
+}
+function parseBriefConstraints(prompt: string): BriefBand & { cleaned: string } {
+  let cleaned = prompt;
+  let minF: number | undefined;
+  let maxF: number | undefined;
+  let minER: number | undefined;
+  const FOLL = '(?:followers?|fans)';
+  const NUM = '([\\d.]+\\s*[km]?)';
+  const strip = (re: RegExp, take: (m: RegExpMatchArray) => void) => {
+    const m = cleaned.match(re);
+    if (m) { take(m); cleaned = cleaned.replace(re, ' '); }
+  };
+  // Follower RANGE first: "5k-20k followers", "between 5k and 20k followers".
+  strip(new RegExp(`(?:with|having|,|between)?\\s*${NUM}\\s*(?:-|–|—|to|and)\\s*${NUM}\\s*${FOLL}`, 'i'), (m) => {
+    const a = briefNum(m[1]!); const b = briefNum(m[2]!);
+    if (!Number.isNaN(a)) minF = Math.min(a, b); if (!Number.isNaN(b)) maxF = Math.max(a, b);
+  });
+  // Follower MAX: "under 50k followers", "up to 20k".
+  strip(new RegExp(`(?:with|having|,)?\\s*(?:under|below|less than|max(?:imum)?|up to|<)\\s*${NUM}\\s*${FOLL}?`, 'i'), (m) => { const n = briefNum(m[1]!); if (!Number.isNaN(n)) maxF = n; });
+  // Follower MIN: "over 10k followers", "at least 5k".
+  strip(new RegExp(`(?:with|having|,)?\\s*(?:over|above|more than|at least|min(?:imum)?|from|>)\\s*${NUM}\\s*${FOLL}?`, 'i'), (m) => { const n = briefNum(m[1]!); if (!Number.isNaN(n)) minF = n; });
+  // Follower PLUS: "10k+ followers".
+  strip(new RegExp(`(?:with|having|,)?\\s*${NUM}\\s*\\+\\s*${FOLL}`, 'i'), (m) => { const n = briefNum(m[1]!); if (!Number.isNaN(n)) minF = n; });
+  // Bare "10k followers" → treat as a floor (at least).
+  strip(new RegExp(`(?:with|having|,)?\\s*${NUM}\\s*${FOLL}`, 'i'), (m) => { const n = briefNum(m[1]!); if (!Number.isNaN(n) && minF == null) minF = n; });
+  // Engagement floor: "4%+ engagement", "at least 3% ER".
+  strip(/(?:with|having|,|and)?\s*(?:at least|min(?:imum)?|over|above|more than|>)?\s*([\d.]+)\s*%?\s*\+?\s*(?:er\b|engagement(?:\s*rate)?)/i, (m) => { const n = parseFloat(m[1]!); if (!Number.isNaN(n)) minER = n; });
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\s*[,;.]+\s*$/g, '').replace(/^\s*[,;.]+\s*/g, '').replace(/\s+(?:with|and|having)\s*$/i, '').trim();
+  return { minF, maxF, minER, cleaned };
+}
+
 // Refresh-persistence cache (Lander). Keyed by tab + prompt so each bucket keeps
 // its own list, and stored in sessionStorage so it survives a page reload but is
 // wiped when the tab closes (never stale across sessions).
@@ -645,6 +704,10 @@ export function LiveSearch({
   // clampInt 5..150); 60 is the default page. The "Show" control re-runs the
   // search with a bigger ceiling so more creators surface.
   const [resultLimit, setResultLimit] = useState(60);
+  // Follower / engagement band parsed out of a typed brief ("…5k-20k followers
+  // and 4%+ engagement") and applied to the results as a real filter, shown as a
+  // removable chip. Null when the prompt carries no numeric constraints.
+  const [briefFilter, setBriefFilter] = useState<BriefBand | null>(null);
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
   // 'trends' = creators uploaded from the campaign Excel sheets.
   const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>(initialBucket);
@@ -1279,6 +1342,11 @@ export function LiveSearch({
         followers >= minFollowers &&
         (maxFollowers === 0 || followers <= maxFollowers) &&
         (minER === 0 || !erKnown || er >= minER) &&
+        // Band parsed from the typed brief (followers range + ER floor). Unknown
+        // ER is kept (don't hide a creator we haven't scraped yet).
+        (briefFilter?.minF == null || followers >= briefFilter.minF) &&
+        (briefFilter?.maxF == null || followers <= briefFilter.maxF) &&
+        (briefFilter?.minER == null || !erKnown || er >= briefFilter.minER) &&
         (!verifiedOnly || p.is_verified) &&
         (!healthyOnly || authenticityFlag(followers, er ?? undefined) !== 'low') &&
         (genderFilter === 'any' || p.gender === genderFilter) &&
@@ -1443,8 +1511,21 @@ export function LiveSearch({
     const wantMax = opts?.maxOverride ?? resultLimit;
     // The server needs a prompt for ranking; for a bare username crawl, fall back
     // to the handle/name so we never invent a keyword the user didn't type.
-    const p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
+    let p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
     if (p.length < 2) return;
+
+    // Pull follower / engagement constraints out of a typed brief so they become
+    // real filters — and search on the CLEANED niche text so supply broadens.
+    // Skipped for a direct @handle lookup (no niche to broaden). The band is
+    // applied client-side in `shown`; the chip shows/clears it.
+    if (!/^@[a-z0-9._]{1,30}$/i.test(p)) {
+      const band = parseBriefConstraints(p);
+      const hasBand = band.minF != null || band.maxF != null || band.minER != null;
+      setBriefFilter(hasBand ? { minF: band.minF, maxF: band.maxF, minER: band.minER } : null);
+      if (hasBand && band.cleaned.length >= 2) p = band.cleaned;
+    } else {
+      setBriefFilter(null);
+    }
 
     // A fresh user search (not a bucket toggle) invalidates the cached buckets
     // and gets recorded as recently-searched.
@@ -1915,6 +1996,26 @@ export function LiveSearch({
 
           {/* filters + sort */}
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
+            {briefFilter && (
+              // Auto-derived from numbers you typed into the brief (e.g. "5k-20k
+              // followers, 4%+ ER"). We strip these from the search text so the
+              // niche query stays broad, then apply them as a live band here.
+              <span
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium"
+                style={{ background: ACCENT_SOFT, color: ACCENT, borderColor: '#d9d0ff' }}
+                title="Parsed from your brief — remove to see all matches"
+              >
+                <span className="opacity-70">From your brief:</span>
+                {briefBandLabel(briefFilter)}
+                <button
+                  onClick={() => setBriefFilter(null)}
+                  className="ml-0.5 -mr-0.5 rounded-full p-0.5 hover:bg-white/60"
+                  title="Remove brief constraints"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                </button>
+              </span>
+            )}
             <FilterDropdown value={minFollowers} active={minFollowers !== 0} onClear={() => setMinFollowers(0)} onChange={setMinFollowers}
               options={[[0, 'Any followers'], [1000, '1K+'], [5000, '5K+'], [10000, '10K+'], [100000, '100K+'], [1000000, '1M+']]} />
             <FilterDropdown value={maxFollowers} active={maxFollowers !== 0} onClear={() => setMaxFollowers(0)} onChange={setMaxFollowers} title="Cap follower count — useful for finding micro / nano creators"
@@ -1933,12 +2034,12 @@ export function LiveSearch({
               <input type="checkbox" checked={hideContacted} onChange={(e) => setHideContacted(e.target.checked)} className="accent-[#6C4DF6]" />
               Hide contacted
             </label>
-            {(minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly || healthyOnly || hideContacted || genderFilter !== 'any' || tierFilter !== 'all') && (
+            {(minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly || healthyOnly || hideContacted || genderFilter !== 'any' || tierFilter !== 'all' || briefFilter) && (
               <button
                 onClick={() => {
                   setMinFollowers(0); setMaxFollowers(0); setMinER(0);
                   setVerifiedOnly(false); setHealthyOnly(false); setHideContacted(false);
-                  setGenderFilter('any'); setTierFilter('all');
+                  setGenderFilter('any'); setTierFilter('all'); setBriefFilter(null);
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                 title="Clear all filters"
