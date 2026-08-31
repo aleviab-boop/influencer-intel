@@ -24,9 +24,15 @@ export async function GET(request: Request): Promise<NextResponse> {
     void syncConnectedAccount(account.id).catch((err) =>
       console.error('[oauth] initial sync failed:', err),
     );
+    // Land the just-connected account on the rich analytics dashboard so the
+    // granted insights permission is visibly used end-to-end (reach, reel plays,
+    // saves, audience demographics) the moment the OAuth flow returns — this is
+    // the exact use-case surface a Meta App reviewer needs to see on the
+    // screencast. It resolves via ?handle (the live Graph pull is synchronous,
+    // so no sync-polling wait) and is middleware-exempt for shared viewing.
     const dest = flow === 'creator'
       ? `/creator?handle=${encodeURIComponent(account.ig_username)}&connected=true`
-      : `/insights/${account.ig_username}?connected=true`;
+      : `/creator/analytics-preview?handle=${encodeURIComponent(account.ig_username)}&connected=true`;
     const res = NextResponse.redirect(new URL(dest, request.url));
     // A successful Instagram connect IS the creator's login: mint a signed
     // creator session so every /creator/* view can trust who's viewing instead
