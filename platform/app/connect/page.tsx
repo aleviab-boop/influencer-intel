@@ -143,7 +143,11 @@ function InstagramConnect({
 
   const startConnect = (withHandle?: string) => {
     const h = (withHandle ?? '').replace(/^@/, '').trim();
-    window.location.href = h ? `/api/oauth/instagram?handle=${encodeURIComponent(h)}` : '/api/oauth/instagram';
+    // flow=creator so the callback mints the ii_creator session cookie — connecting
+    // your own Instagram here IS logging in as a creator. Without it the connect
+    // succeeds but leaves no session, so the nav keeps showing "Log in".
+    const base = '/api/oauth/instagram?flow=creator';
+    window.location.href = h ? `${base}&handle=${encodeURIComponent(h)}` : base;
   };
 
   const checkAccess = async () => {
