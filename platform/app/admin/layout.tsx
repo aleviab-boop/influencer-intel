@@ -125,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'sign_out' }),
               }).catch(() => {});
-              window.location.href = '/login?role=admin';
+              window.location.href = '/staff';
             }}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-[#888] hover:bg-rose-50 hover:text-rose-600 transition-colors"
           >

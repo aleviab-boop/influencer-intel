@@ -47,12 +47,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // /admin pages → send unauthenticated users to the main login (Admin tab).
+  // /admin pages → send unauthenticated users to the unlisted staff sign-in.
+  // (Admin is no longer a tab on the public /login role chooser — it lives on
+  // its own /staff page for internal use only.)
   if (!valid) {
     const url = req.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = '/staff';
     url.search = ''; // drop any stale query
-    url.searchParams.set('role', 'admin');
     // Preserve where they were headed — but never the deleted /admin/login.
     if (pathname !== '/admin/login') url.searchParams.set('next', pathname);
     return NextResponse.redirect(url);
