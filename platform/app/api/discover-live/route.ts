@@ -120,6 +120,13 @@ export async function POST(req: NextRequest) {
   // 60s limit. Anything still crawling when the wall-clock budget hits is dropped
   // gracefully (partial 200), so a big cap never turns into a 504.
   const max = clampInt(body?.max, 5, 150, 60);
+  // Brief band parsed on the client from a typed brief ("5k-20k followers, 4%+
+  // ER"). Passed through so the DB source filters to fitting creators instead of
+  // returning out-of-band rows the client discards — makes the band survive
+  // "load more" / topup, not just the current in-memory page. Undefined = absent.
+  const bandMinFollowers = Number.isFinite(body?.minFollowers) && body.minFollowers > 0 ? Math.floor(body.minFollowers) : undefined;
+  const bandMaxFollowers = Number.isFinite(body?.maxFollowers) && body.maxFollowers > 0 ? Math.floor(body.maxFollowers) : undefined;
+  const bandMinER = Number.isFinite(body?.minER) && body.minER > 0 ? body.minER : undefined;
   const tokens = tokenize(prompt);
   const mode = body?.mode === 'db' ? 'db' : 'live';
   const isCampaign = isCampaignPrompt(prompt);
@@ -152,7 +159,7 @@ export async function POST(req: NextRequest) {
     // Excel/campaign creators. 5K follower floor drops nanos + bad-scrape noise.
     const bucket = body?.bucket === 'trends' ? 'trends' : body?.bucket === 'instagram' ? 'instagram' : undefined;
     const gender = body?.gender === 'female' ? 'female' : body?.gender === 'male' ? 'male' : undefined;
-    const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: 5000, gender, locationBackfill: true });
+    const dbMatches = await searchCreatorsInDb(tokens, max, { bucket, minFollowers: bandMinFollowers ?? 5000, maxFollowers: bandMaxFollowers, minEngagement: bandMinER, gender, locationBackfill: true });
     // Log the agency search for the admin Agency activity feed (best-effort).
     // Raw query (not db.insert): the client casts JS arrays to ::jsonb, but
     // agency_searches.tokens is text[] — pg encodes a string[] param natively.
@@ -480,7 +487,7 @@ export async function POST(req: NextRequest) {
   // 2. Database is supplementary — used to top up the live results. Fetch a wider
   //    slice (3×) so that after dropping apparel shops/brands below we still have
   //    enough real creators to fill the page.
-  const dbMatches = await searchCreatorsInDb(tokens, max * 3, { locationBackfill: true });
+  const dbMatches = await searchCreatorsInDb(tokens, max * 3, { minFollowers: bandMinFollowers, maxFollowers: bandMaxFollowers, minEngagement: bandMinER, locationBackfill: true });
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {

@@ -1518,14 +1518,21 @@ export function LiveSearch({
     // real filters — and search on the CLEANED niche text so supply broadens.
     // Skipped for a direct @handle lookup (no niche to broaden). The band is
     // applied client-side in `shown`; the chip shows/clears it.
+    let sentBand: BriefBand | null = null;
     if (!/^@[a-z0-9._]{1,30}$/i.test(p)) {
       const band = parseBriefConstraints(p);
       const hasBand = band.minF != null || band.maxF != null || band.minER != null;
-      setBriefFilter(hasBand ? { minF: band.minF, maxF: band.maxF, minER: band.minER } : null);
+      sentBand = hasBand ? { minF: band.minF, maxF: band.maxF, minER: band.minER } : null;
+      setBriefFilter(sentBand);
       if (hasBand && band.cleaned.length >= 2) p = band.cleaned;
     } else {
       setBriefFilter(null);
     }
+    // Passed to the server so the DB source filters to the band — the band then
+    // survives topup / "load more", not just the current in-memory page.
+    const bandBody = sentBand
+      ? { minFollowers: sentBand.minF, maxFollowers: sentBand.maxF, minER: sentBand.minER }
+      : {};
 
     // A fresh user search (not a bucket toggle) invalidates the cached buckets
     // and gets recorded as recently-searched.
@@ -1545,7 +1552,7 @@ export function LiveSearch({
         const r = await fetch('/api/crawl-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: p, max: wantMax }),
+          body: JSON.stringify({ prompt: p, max: wantMax, ...bandBody }),
         });
         const d = await r.json();
         if (!r.ok) {
@@ -1580,7 +1587,7 @@ export function LiveSearch({
     const myRun = crawlRun.current;
     const g = opts?.genderOverride ?? genderFilter;
     const bucket = opts?.bucketOverride ?? sourceBucket;
-    const baseBody = { prompt: p, seeds, names, mode, bucket, gender: g === 'any' ? undefined : g, max: wantMax };
+    const baseBody = { prompt: p, seeds, names, mode, bucket, gender: g === 'any' ? undefined : g, max: wantMax, ...bandBody };
 
     // PHASE 1 (fast, ~1s): DB-only so the page shows results immediately instead
     // of blocking ~15-30s on the slow OpenAI web search + live crawl.

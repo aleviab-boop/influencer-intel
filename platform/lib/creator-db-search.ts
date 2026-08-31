@@ -80,7 +80,7 @@ interface Row {
 export async function searchCreatorsInDb(
   tokens: string[],
   limit: number,
-  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number; gender?: 'female' | 'male'; locationBackfill?: boolean } = {},
+  opts: { bucket?: 'instagram' | 'trends'; minFollowers?: number; maxFollowers?: number; minEngagement?: number; gender?: 'female' | 'male'; locationBackfill?: boolean } = {},
 ): Promise<LiveProfile[]> {
   if (tokens.length === 0) return [];
   // Expand a state ("gujarat") into its cities so a state search ranks creators
@@ -162,6 +162,20 @@ export async function searchCreatorsInDb(
     ? `and (follower_count is null or follower_count >= ${Math.floor(Number(opts.minFollowers))})`
     : '';
 
+  // Brief band: a follower ceiling and/or ER floor parsed from a typed brief
+  // ("5k-20k followers, 4%+ ER"). Applied server-side so the limited result
+  // slots go to creators that actually FIT the band — otherwise the DB returns
+  // out-of-band creators that the client filters away, starving "load more".
+  // NULLs are KEPT (same convention as the floor above): freshly-discovered
+  // stubs with unknown stats still surface and get enriched later. ER is stored
+  // as a ratio (0.04), so a 4%-brief compares against 0.04.
+  const ceil = Number(opts.maxFollowers) > 0
+    ? `and (follower_count is null or follower_count <= ${Math.floor(Number(opts.maxFollowers))})`
+    : '';
+  const erFloor = Number(opts.minEngagement) > 0
+    ? `and (engagement_rate is null or engagement_rate >= ${Number(opts.minEngagement) / 100})`
+    : '';
+
   // Conditional LOCATION filter (only when the query names a place). Ranking
   // alone isn't enough: when a query's genuine locals get claimed by the AI/live
   // sections upstream (they're de-duped out of the DB section), the DB fallback
@@ -193,6 +207,8 @@ export async function searchCreatorsInDb(
         ${nicheRequired}
         ${bucketFilter}
         ${floor}
+        ${ceil}
+        ${erFloor}
         ${genderFilter}
     ),
     scored as (
