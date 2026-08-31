@@ -132,7 +132,10 @@ export default function BrandLoginPage() {
                 <input className={inp} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@brand.com" autoComplete="email" />
               </label>
               <label className="block">
-                <span className="text-[12px] font-medium text-ink-500 mb-1.5 block">Password</span>
+                <span className="mb-1.5 flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-ink-500">Password</span>
+                  <a href="/brand/reset" className="text-[12px] font-medium text-ink-400 hover:text-ink-600">Forgot password?</a>
+                </span>
                 <input className={inp} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Your password" autoComplete="current-password" />
               </label>
               <button

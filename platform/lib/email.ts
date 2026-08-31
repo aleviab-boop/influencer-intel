@@ -132,6 +132,29 @@ export async function sendEmail({ to, subject, html }: SendArgs, meta?: EmailLog
   }
 }
 
+/**
+ * Password-reset link for an agency / brand account. Bypasses the creator
+ * opt-out gate (a security email must always send) and isn't logged to the
+ * creator-scoped email_log. No-ops silently when email is unconfigured, so the
+ * request endpoint stays anti-enumeration either way.
+ */
+export async function sendPasswordResetEmail(to: string, name: string | null, resetUrl: string): Promise<boolean> {
+  if (!emailEnabled()) return false;
+  return sendEmail({
+    to,
+    subject: 'Reset your Influencer Intel password',
+    html: shell(
+      'Reset your password',
+      `<p style="margin:0 0 12px;">Hi ${name ? escapeHtml(name) : 'there'},</p>
+       <p style="margin:0 0 12px;">We got a request to reset the password on your account. Click below to choose a new one — the link expires in 1 hour and can only be used once.</p>
+       <p style="margin:0;color:#6b7280;font-size:13px;">If you didn't ask for this, you can safely ignore this email; your password won't change.</p>`,
+      'Set a new password',
+      resetUrl,
+      'You received this because a password reset was requested for your Influencer Intel account.',
+    ),
+  });
+}
+
 // One row of the agency-side "Email Activity" feed. Joins the denormalised
 // email_log back to live creator/program rows for display (both may be null if
 // the underlying row was deleted — the log survives regardless).
