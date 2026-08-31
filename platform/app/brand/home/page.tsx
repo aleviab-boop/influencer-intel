@@ -44,68 +44,6 @@ interface Trend {
 const fmt = (n: number): string =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
 
-// Personalised typewriter examples for the brand's prompt bar. Built from the
-// brand's DNA (category / keywords / archetypes / audience) so the placeholder
-// cycles through searches that actually fit THIS brand — falling back to generic
-// briefs when the DNA hasn't been mapped yet.
-function brandExamples(brand: string, dna: BrandDnaProfile | null): string[] {
-  const cat = (dna?.category || '').trim();
-  const kws = (dna?.keywords ?? []).map((k) => k.trim()).filter(Boolean);
-  const arch = (dna?.creator_archetypes ?? []).map((a) => a.trim()).filter(Boolean);
-  const aud = (dna?.target_audience || '').trim();
-  const ex: string[] = [];
-  if (cat) ex.push(`${cat} creators in Mumbai for a ${brand} launch`);
-  if (arch[0]) ex.push(`${arch[0]} who post about ${kws[0] || cat || 'your niche'}`);
-  if (kws[1]) ex.push(`Creators covering ${kws[1]} with 85%+ credibility`);
-  // target_audience is a full descriptive sentence (e.g. "Samsung primarily
-  // targets tech-savvy consumers aged 25–45, who are early adopters…"). Distil a
-  // short leading clause so the placeholder reads like a real search and stays on
-  // one line instead of dumping a paragraph over the search button.
-  if (aud) {
-    const audSnippet = aud
-      .replace(/^[A-Z][a-z]+ (?:primarily |mainly )?(?:targets?|serves?|is aimed at) /i, '')
-      .split(/[.;,]/)[0]!
-      .trim();
-    if (audSnippet) {
-      const short = audSnippet.length > 44 ? `${audSnippet.slice(0, 44).trim()}…` : audSnippet;
-      ex.push(`Creators reaching ${short}`);
-    }
-  }
-  ex.push(`Barter-ready ${cat || 'niche'} creators for gifting`);
-  const cleaned = Array.from(new Set(ex.map((e) => e.trim()).filter(Boolean)));
-  return cleaned.length
-    ? cleaned.slice(0, 5)
-    : [
-        'Beauty micro-influencers in Mumbai with 85%+ credibility',
-        'Vegan food bloggers in Bangalore for a product launch',
-        'Fashion creators for a festive Diwali lookbook',
-      ];
-}
-
-// Typewriter: types each phrase, holds, deletes, moves to the next.
-function useTypewriter(words: string[]) {
-  const [text, setText] = useState('');
-  const [i, setI] = useState(0);
-  const [phase, setPhase] = useState<'typing' | 'deleting'>('typing');
-  useEffect(() => {
-    const word = words[i % words.length] ?? '';
-    let timer: ReturnType<typeof setTimeout>;
-    if (phase === 'typing') {
-      if (text.length < word.length) timer = setTimeout(() => setText(word.slice(0, text.length + 1)), 45);
-      else timer = setTimeout(() => setPhase('deleting'), 1600);
-    } else {
-      if (text.length > 0) timer = setTimeout(() => setText(word.slice(0, text.length - 1)), 22);
-      else {
-        setPhase('typing');
-        setI((v) => v + 1);
-        timer = setTimeout(() => {}, 0);
-      }
-    }
-    return () => clearTimeout(timer);
-  }, [text, phase, i, words]);
-  return text;
-}
-
 // The brand's personalised prompt bar — same look as the lander hero (rounded
 // white card, animated placeholder, autocomplete, gradient search button), but
 // seeded to the brand's niche and wired straight into the workspace finder.
@@ -113,9 +51,6 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
   const [value, setValue] = useState('');
   const [showSug, setShowSug] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
-  const examplesRef = useRef<string[]>(brandExamples(brand, dna));
-  examplesRef.current = brandExamples(brand, dna);
-  const typed = useTypewriter(examplesRef.current);
 
   // AI-backed, brand-grounded autocomplete. Debounced so it powers live typing
   // without a call per keystroke; grounded on the brand's DNA so the ideas fit
@@ -203,14 +138,9 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
                 }
               }}
               rows={1}
-              className="w-full resize-none text-[17px] text-[#222] placeholder-transparent focus:outline-none bg-transparent"
+              placeholder={`Search ${brand}'s creators — a niche, city or @username`}
+              className="w-full resize-none text-[17px] text-[#222] placeholder:text-[#9aa] focus:outline-none bg-transparent truncate"
             />
-            {value.length === 0 && (
-              <div className="pointer-events-none absolute inset-0 flex items-center whitespace-nowrap overflow-hidden text-[17px] text-[#9aa] select-none">
-                <span className="min-w-0 truncate">{typed}</span>
-                <span className="ii-caret shrink-0" style={{ color: ACCENT }}>|</span>
-              </div>
-            )}
             {sugOpen && (
               <div className="absolute left-0 right-0 top-full mt-2 z-30 rounded-xl bg-white border border-[#ececec] shadow-[0_16px_50px_rgba(0,0,0,0.12)] overflow-hidden">
                 {suggestions.map((s, i) => (
