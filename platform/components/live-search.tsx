@@ -1501,7 +1501,7 @@ export function LiveSearch({
     }
   }, [run, sourceBucket, onSearchPrompt]);
 
-  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male'; maxOverride?: number }) {
+  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male'; maxOverride?: number; keepBand?: boolean }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
     const mode = opts?.mode ?? 'crawl';
@@ -1519,7 +1519,13 @@ export function LiveSearch({
     // Skipped for a direct @handle lookup (no niche to broaden). The band is
     // applied client-side in `shown`; the chip shows/clears it.
     let sentBand: BriefBand | null = null;
-    if (!/^@[a-z0-9._]{1,30}$/i.test(p)) {
+    if (opts?.keepBand) {
+      // Internal re-run (Show control, bucket toggle) fires with the ALREADY
+      // cleaned prompt — the brief's numbers are gone from the text, so
+      // re-parsing would find nothing and silently drop the band. Reuse the
+      // band that's already active instead.
+      sentBand = briefFilter;
+    } else if (!/^@[a-z0-9._]{1,30}$/i.test(p)) {
       const band = parseBriefConstraints(p);
       const hasBand = band.minF != null || band.maxF != null || band.minER != null;
       sentBand = hasBand ? { minF: band.minF, maxF: band.maxF, minER: band.minER } : null;
@@ -1903,7 +1909,7 @@ export function LiveSearch({
                       window.history.replaceState(null, '', u.toString());
                     }
                     if (cached) { setRun(cached); setError(null); return; } // restore — no re-search, no mix-up
-                    void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt });
+                    void search({ mode: 'db', bucketOverride: val, promptOverride: run?.prompt ?? prompt, keepBand: true });
                   }}
                   className="px-4 py-1.5 rounded-lg text-[13px] font-medium transition-all"
                   style={sourceBucket === val
@@ -2077,7 +2083,7 @@ export function LiveSearch({
                 setResultLimit(n);
                 // Re-run the SAME prompt with the bigger ceiling so more creators
                 // surface. No-op until there's an active run to re-fetch.
-                if (run) void search({ mode: initialMode, maxOverride: n, promptOverride: run.prompt });
+                if (run) void search({ mode: initialMode, maxOverride: n, promptOverride: run.prompt, keepBand: true });
               }}
               className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6] disabled:opacity-50"
             >
