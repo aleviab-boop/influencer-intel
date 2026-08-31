@@ -190,6 +190,16 @@ export async function runDiscovery(
 
     // 8a. Enrich the creator row — COALESCE only fills NULLs so we never
     //     clobber richer scraped/OAuth data. tags is text[], so raw SQL.
+    //     IMPORTANT: persist ONLY creator-owned attributes, never the prompt's
+    //     assumptions. inf.region/niche/genre fall back to parsed.* (the CITY /
+    //     niche typed in the search) for THIS search's display, but stamping
+    //     those into the durable row mis-tags creators forever — e.g. a South
+    //     star surfaced under a "kolkata" query, with no known city of their
+    //     own, would get region='kolkata' permanently. So we write only what we
+    //     actually know about the creator (c.region / c.primary_city, etc.).
+    const persistGenre = c.genre ?? c.primary_category ?? null;
+    const persistNiche = c.niche ?? null;
+    const persistRegion = c.region ?? c.primary_city ?? null;
     await db.query(
       `UPDATE creators SET
          genre            = COALESCE(genre, $2),
@@ -201,7 +211,7 @@ export async function runDiscovery(
          tags             = CASE WHEN tags IS NULL OR cardinality(tags) = 0
                                  THEN $8::text[] ELSE tags END
        WHERE id = $1`,
-      [c.id, inf.genre, inf.niche, inf.region, inf.source, c.profile_url, inf.confidence_score, inf.tags],
+      [c.id, persistGenre, persistNiche, persistRegion, inf.source, c.profile_url, inf.confidence_score, inf.tags],
     );
 
     // 8b. Persist the per-prompt result. Idempotent on (prompt, creator_id).
