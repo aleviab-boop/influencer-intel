@@ -1327,6 +1327,17 @@ export function LiveSearch({
   const handleLookup = /^@[a-z0-9._]{1,30}$/i.test((run?.prompt ?? '').trim());
   const lookupTarget = handleLookup ? (run?.prompt ?? '').trim().slice(1).toLowerCase() : '';
 
+  // Any client-side filter (presets, toggles, or the parsed brief band) is
+  // narrowing the list — used to gate the "Clear filters" affordances.
+  const anyFilterActive =
+    minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly ||
+    healthyOnly || hideContacted || genderFilter !== 'any' || tierFilter !== 'all' || !!briefFilter;
+  const clearFilters = () => {
+    setMinFollowers(0); setMaxFollowers(0); setMinER(0);
+    setVerifiedOnly(false); setHealthyOnly(false); setHideContacted(false);
+    setGenderFilter('any'); setTierFilter('all'); setBriefFilter(null);
+  };
+
   const shown = (() => {
     if (!run) return [] as LiveProfile[];
     const filtered = run.results.filter((p) => {
@@ -2047,13 +2058,9 @@ export function LiveSearch({
               <input type="checkbox" checked={hideContacted} onChange={(e) => setHideContacted(e.target.checked)} className="accent-[#6C4DF6]" />
               Hide contacted
             </label>
-            {(minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly || healthyOnly || hideContacted || genderFilter !== 'any' || tierFilter !== 'all' || briefFilter) && (
+            {anyFilterActive && (
               <button
-                onClick={() => {
-                  setMinFollowers(0); setMaxFollowers(0); setMinER(0);
-                  setVerifiedOnly(false); setHealthyOnly(false); setHideContacted(false);
-                  setGenderFilter('any'); setTierFilter('all'); setBriefFilter(null);
-                }}
+                onClick={clearFilters}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
                 title="Clear all filters"
               >
@@ -2146,13 +2153,33 @@ export function LiveSearch({
                   <span className="w-4 h-4 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
                   Crawling Instagram for fresh creators… new profiles appear here as the worker finds them.
                 </span>
-              ) : run.results.length === 0
-                ? initialMode === 'db'
+              ) : run.results.length === 0 ? (
+                initialMode === 'db'
                   ? sourceBucket === 'trends'
                     ? 'No creators in your Trends DB match this. Trends only shows the curated campaign sheets shared with you — switch to Instagram to discover new creators live.'
                     : 'Nothing in the database matches that yet — try a broader search.'
                   : 'No creators found for that yet. Make sure the worker is running, or try a broader prompt.'
-                : 'No profiles match these filters. Loosen them to see more.'}
+              ) : (
+                // We DO have results, but every one was hidden by the active
+                // filters / brief band. Say so and offer a one-click reset here
+                // so the user doesn't have to hunt for the control up top.
+                <div className="flex flex-col items-center gap-3">
+                  <span>
+                    {run.results.length} {run.results.length === 1 ? 'profile' : 'profiles'} found, but none match your current
+                    {briefFilter ? ' brief band / filters' : ' filters'}.
+                  </span>
+                  {anyFilterActive && (
+                    <button
+                      onClick={clearFilters}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-medium text-white transition-transform active:scale-[.98] hover:brightness-105"
+                      style={{ background: `linear-gradient(135deg, ${ACCENT}, #9b7bff)` }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div ref={tableWrapRef} className="overflow-x-auto rounded-xl border border-[#eee]">
