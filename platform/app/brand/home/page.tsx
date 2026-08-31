@@ -826,6 +826,8 @@ export default function BrandHomePage() {
             pipeline={pipeline}
             onSearchPrompt={(q) => setQuery(q)}
             hideInput
+            scopePrompt={scope}
+            scopeLabel={`fit for ${session.brand}`}
           />
         </section>
       </main>

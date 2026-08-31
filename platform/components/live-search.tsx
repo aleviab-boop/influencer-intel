@@ -582,10 +582,18 @@ export function LiveSearch({
   onSearchPrompt,
   pipeline,
   hideInput = false,
+  scopePrompt,
+  scopeLabel,
 }: {
   initialPrompt?: string;
   initialSeed?: string;
   initialMode?: 'db' | 'live' | 'crawl';
+  // The brand's auto-generated default scope string (category + keywords +
+  // archetypes). When the current run IS this scope (i.e. the user hasn't typed
+  // their own query), the results header shows `scopeLabel` instead of dumping
+  // the raw run-on scope string in quotes as if it were a real search.
+  scopePrompt?: string;
+  scopeLabel?: string;
   // Hide the component's own search box + recent chips. Used on the Brand home,
   // where a single personalised prompt bar in the hero drives this finder via
   // onSearchPrompt/initialPrompt — so rendering a second input here would be
@@ -1866,8 +1874,12 @@ export function LiveSearch({
           <div className="flex items-center justify-between mb-3">
             <div className="text-[14px] text-[#555]">
               <span className="font-semibold text-[#111]">{shown.length}</span>
-              {shown.length !== run.results.length && <span className="text-[#999]">/{run.results.length}</span>} profiles for{' '}
-              <span className="font-medium text-[#111]">“{run.prompt}”</span>
+              {shown.length !== run.results.length && <span className="text-[#999]">/{run.results.length}</span>} profiles{' '}
+              {scopePrompt && scopeLabel && run.prompt.trim() === scopePrompt.trim() ? (
+                <span className="font-medium text-[#111]">{scopeLabel}</span>
+              ) : (
+                <>for <span className="font-medium text-[#111]">“{run.prompt}”</span></>
+              )}
               {enriching ? (
                 <span className="ml-2 inline-flex items-center gap-1.5 text-[12px] text-[#9b7bff]">
                   <span className="w-3 h-3 rounded-full border-2 border-[#d9d2f7] border-t-[#9b7bff] animate-spin" />
