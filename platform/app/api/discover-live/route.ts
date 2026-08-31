@@ -114,7 +114,12 @@ export async function POST(req: NextRequest) {
   const seeds = toStringArray(body?.seeds);
   const names = toStringArray(body?.names);
   const depth = clampInt(body?.depth, 1, 3, 2);
-  const max = clampInt(body?.max, 5, 80, 40);
+  // Result ceiling. Raised to 150: the DB/AI pools are cheap to widen, and the
+  // slow live crawl is time-boxed (fixed budgetMs) rather than count-bound, so a
+  // higher cap fills the page from DB+AI without pushing the function past its
+  // 60s limit. Anything still crawling when the wall-clock budget hits is dropped
+  // gracefully (partial 200), so a big cap never turns into a 504.
+  const max = clampInt(body?.max, 5, 150, 60);
   const tokens = tokenize(prompt);
   const mode = body?.mode === 'db' ? 'db' : 'live';
   const isCampaign = isCampaignPrompt(prompt);

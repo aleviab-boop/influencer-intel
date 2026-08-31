@@ -641,8 +641,8 @@ export function LiveSearch({
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
-  // How many profiles to pull per search. The server caps at 80 (discover-live
-  // clampInt 5..80); 60 is the default page. The "Show" control re-runs the
+  // How many profiles to pull per search. The server caps at 150 (discover-live
+  // clampInt 5..150); 60 is the default page. The "Show" control re-runs the
   // search with a bigger ceiling so more creators surface.
   const [resultLimit, setResultLimit] = useState(60);
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
@@ -1976,6 +1976,8 @@ export function LiveSearch({
               <option value={40}>40 profiles</option>
               <option value={60}>60 profiles</option>
               <option value={80}>80 profiles</option>
+              <option value={100}>100 profiles</option>
+              <option value={150}>150 profiles</option>
             </select>
             <span className="text-[#999]">·</span>
             <span className="text-[#999]">Add to</span>
