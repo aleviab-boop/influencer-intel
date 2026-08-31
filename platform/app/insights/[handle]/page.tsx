@@ -85,6 +85,15 @@ interface ConnectedData {
   worst_posts: Array<{ ig_shortcode: string; er: number; bucket: string }>;
   best_posting_hours: number[];
   best_posting_days: number[];
+  insights_summary: {
+    posts_analyzed: number;
+    total_reach: number | null;
+    total_impressions: number | null;
+    total_saves: number | null;
+    total_shares: number | null;
+    total_video_views: number | null;
+    avg_reach_per_post: number | null;
+  } | null;
   confidence: string;
 }
 
@@ -570,8 +579,36 @@ function BrandWorkTab({ data }: { data: ScrapedData }) {
 }
 
 function ConnectedOverview({ data }: { data: ConnectedData }) {
+  const ins = data.insights_summary;
   return (
     <div className="space-y-8">
+      {/* Raw Instagram insight metrics — reach, impressions, saves, shares and
+          video views pulled straight from Instagram via the insights permission.
+          Shown verbatim so the granted permission's data is visibly used. */}
+      {ins && (
+        <div className="border border-[#e5e5e5] p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[#999]">Instagram Insights</div>
+            <span className="text-[11px] text-[#111] border border-[#111] px-1.5 py-0.5">Verified</span>
+          </div>
+          <p className="text-[11px] text-[#ccc] mb-4">
+            Reach, impressions, saves, shares &amp; video views — pulled from Instagram for your last {ins.posts_analyzed} posts.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-[#e5e5e5] border border-[#e5e5e5]">
+            <Metric label="Reach" value={ins.total_reach != null ? formatK(ins.total_reach) : '---'} />
+            <Metric label="Impressions" value={ins.total_impressions != null ? formatK(ins.total_impressions) : '---'} />
+            <Metric label="Saves" value={ins.total_saves != null ? formatK(ins.total_saves) : '---'} />
+            <Metric label="Shares" value={ins.total_shares != null ? formatK(ins.total_shares) : '---'} />
+            <Metric label="Video Views" value={ins.total_video_views != null ? formatK(ins.total_video_views) : '---'} />
+          </div>
+          {ins.avg_reach_per_post != null && (
+            <p className="text-[11px] text-[#999] mt-3 tabular-nums">
+              Avg reach per post: {formatK(ins.avg_reach_per_post)}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-[#e5e5e5] border border-[#e5e5e5]">
         <Metric label="30d ER" value={data.rolling_er_30d != null ? `${(data.rolling_er_30d * 100).toFixed(2)}%` : '---'} />
         <Metric label="Breakout Rate" value={data.breakout_rate != null ? `${(data.breakout_rate * 100).toFixed(1)}%` : '---'} />

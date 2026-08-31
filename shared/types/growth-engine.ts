@@ -90,6 +90,19 @@ export interface CreatorInsights {
   worst_posts: Array<{ ig_shortcode: string; er: number; bucket: PerformanceBucket }>;
   best_posting_hours: number[];
   best_posting_days: number[];
+  // Aggregate of the raw per-post metrics the Instagram insights permission
+  // (instagram_business_manage_insights) returns — reach, impressions, saves,
+  // shares and video views — summed across the creator's synced posts. Surfaced
+  // verbatim so the connected dashboard visibly USES each granted metric.
+  insights_summary: {
+    posts_analyzed: number;
+    total_reach: number | null;
+    total_impressions: number | null;
+    total_saves: number | null;
+    total_shares: number | null;
+    total_video_views: number | null;
+    avg_reach_per_post: number | null;
+  } | null;
   computed_at: string;
   confidence: InsightConfidence;
 }

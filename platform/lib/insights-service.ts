@@ -103,6 +103,31 @@ export async function computeCreatorInsights(creatorId: string): Promise<Creator
   else if (posts.length >= 15) confidence = 'medium';
   else if (posts.length >= 5) confidence = 'low';
 
+  // Aggregate the RAW per-post insight metrics (reach/impressions/saves/shares/
+  // video views) the manage_insights permission returns. We surface these
+  // verbatim on the connected dashboard so every granted metric is visibly used
+  // — not just folded into a derived engagement rate.
+  const withInsights = posts.filter(
+    (p) => p.reach != null || p.impressions != null || p.saved != null || p.shares != null || p.plays != null,
+  );
+  const sumField = (pick: (p: PostInsight) => number | null): number | null => {
+    const vals = withInsights.map(pick).filter((v): v is number => v != null);
+    return vals.length > 0 ? vals.reduce((s, v) => s + v, 0) : null;
+  };
+  const total_reach = sumField((p) => p.reach);
+  const reachSamples = withInsights.filter((p) => p.reach != null).length;
+  const insights_summary = withInsights.length > 0
+    ? {
+        posts_analyzed: withInsights.length,
+        total_reach,
+        total_impressions: sumField((p) => p.impressions),
+        total_saves: sumField((p) => p.saved),
+        total_shares: sumField((p) => p.shares),
+        total_video_views: sumField((p) => p.plays),
+        avg_reach_per_post: total_reach != null && reachSamples > 0 ? Math.round(total_reach / reachSamples) : null,
+      }
+    : null;
+
   return {
     creator_id: creatorId, connected_account_id: account.id,
     rolling_er_30d, rolling_er_90d, breakout_rate, breakout_threshold,
@@ -111,6 +136,7 @@ export async function computeCreatorInsights(creatorId: string): Promise<Creator
     posts_per_week, avg_days_between_posts,
     audience_quality_score, audience_demographics: audience_demographics_parsed,
     top_posts, worst_posts, best_posting_hours, best_posting_days,
+    insights_summary,
     computed_at: new Date().toISOString(), confidence,
   };
 }
