@@ -641,6 +641,10 @@ export function LiveSearch({
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
+  // How many profiles to pull per search. The server caps at 80 (discover-live
+  // clampInt 5..80); 40 is the default page. The "Show" control re-runs the
+  // search with a bigger ceiling so more creators surface.
+  const [resultLimit, setResultLimit] = useState(40);
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
   // 'trends' = creators uploaded from the campaign Excel sheets.
   const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>(initialBucket);
@@ -1429,10 +1433,14 @@ export function LiveSearch({
     }
   }, [run, sourceBucket, onSearchPrompt]);
 
-  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male' }) {
+  async function search(opts?: { promptOverride?: string; seedOverride?: string; mode?: 'db' | 'live' | 'crawl'; bucketOverride?: 'instagram' | 'trends'; genderOverride?: 'any' | 'female' | 'male'; maxOverride?: number }) {
     const typedPrompt = (opts?.promptOverride ?? prompt).trim();
     const { seeds, names } = parseSeedInput(opts?.seedOverride ?? seedText);
     const mode = opts?.mode ?? 'crawl';
+    // How many results to request this run — the "Show" control passes a bigger
+    // ceiling (server hard-caps at 80). Kept explicit so a re-run picks up the
+    // new limit before the resultLimit state has committed.
+    const wantMax = opts?.maxOverride ?? resultLimit;
     // The server needs a prompt for ranking; for a bare username crawl, fall back
     // to the handle/name so we never invent a keyword the user didn't type.
     const p = typedPrompt.length >= 2 ? typedPrompt : (seeds[0] ?? names[0] ?? '');
@@ -1456,7 +1464,7 @@ export function LiveSearch({
         const r = await fetch('/api/crawl-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: p }),
+          body: JSON.stringify({ prompt: p, max: wantMax }),
         });
         const d = await r.json();
         if (!r.ok) {
@@ -1491,7 +1499,7 @@ export function LiveSearch({
     const myRun = crawlRun.current;
     const g = opts?.genderOverride ?? genderFilter;
     const bucket = opts?.bucketOverride ?? sourceBucket;
-    const baseBody = { prompt: p, seeds, names, mode, bucket, gender: g === 'any' ? undefined : g };
+    const baseBody = { prompt: p, seeds, names, mode, bucket, gender: g === 'any' ? undefined : g, max: wantMax };
 
     // PHASE 1 (fast, ~1s): DB-only so the page shows results immediately instead
     // of blocking ~15-30s on the slow OpenAI web search + live crawl.
@@ -1950,6 +1958,24 @@ export function LiveSearch({
               <option value="followers_desc">Followers: high → low</option>
               <option value="followers_asc">Followers: low → high</option>
               <option value="engagement">Engagement</option>
+            </select>
+            <span className="text-[#999]">·</span>
+            <span className="text-[#999]" title="Pull more profiles per search (re-runs the search)">Show</span>
+            <select
+              value={resultLimit}
+              disabled={loading || enriching}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setResultLimit(n);
+                // Re-run the SAME prompt with the bigger ceiling so more creators
+                // surface. No-op until there's an active run to re-fetch.
+                if (run) void search({ mode: initialMode, maxOverride: n, promptOverride: run.prompt });
+              }}
+              className="px-2.5 py-1.5 rounded-lg border border-[#e3def9] bg-white focus:outline-none focus:border-[#6C4DF6] disabled:opacity-50"
+            >
+              <option value={40}>40 profiles</option>
+              <option value={60}>60 profiles</option>
+              <option value={80}>80 profiles</option>
             </select>
             <span className="text-[#999]">·</span>
             <span className="text-[#999]">Add to</span>
