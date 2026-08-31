@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
       const handles = await withTimeout(
-        getOpenAIClient().suggestHandlesFromPrompt(prompt, 30).catch(() => [] as string[]),
+        getOpenAIClient().suggestHandlesFromPrompt(prompt, 45).catch(() => [] as string[]),
         18_000,
         [] as string[],
       );
@@ -310,7 +310,7 @@ export async function POST(req: NextRequest) {
       const haveHandles = new Set(dbBacked.map((p) => p.username.toLowerCase()));
       const missing = handles.filter((h) => !haveHandles.has(h.trim().toLowerCase().replace(/^@/, '')));
       let liveValidated = (
-        await profilesFromHandles(missing, tokens, { max: 20, budgetMs: 15_000, delayMs: 200 })
+        await profilesFromHandles(missing, tokens, { max: 32, budgetMs: 15_000, delayMs: 200 })
       ).map((p) => ({ ...p, from: 'live' as const }));
       commitAi(liveValidated); // real live finds now included; stubs still 0-follower
 
@@ -473,9 +473,9 @@ export async function POST(req: NextRequest) {
   await withTimeout(Promise.all([aiPipeline, crawlPipeline]).then(() => null), 46_000, null);
 
   // 2. Database is supplementary — used to top up the live results. Fetch a wider
-  //    slice (2×) so that after dropping apparel shops/brands below we still have
+  //    slice (3×) so that after dropping apparel shops/brands below we still have
   //    enough real creators to fill the page.
-  const dbMatches = await searchCreatorsInDb(tokens, max * 2, { locationBackfill: true });
+  const dbMatches = await searchCreatorsInDb(tokens, max * 3, { locationBackfill: true });
 
   // 3. Nothing anywhere → ask for a starting point.
   if (dbMatches.length === 0 && liveProfiles.length === 0 && aiProfiles.length === 0) {

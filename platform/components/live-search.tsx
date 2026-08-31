@@ -642,9 +642,9 @@ export function LiveSearch({
   const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
   // How many profiles to pull per search. The server caps at 80 (discover-live
-  // clampInt 5..80); 40 is the default page. The "Show" control re-runs the
+  // clampInt 5..80); 60 is the default page. The "Show" control re-runs the
   // search with a bigger ceiling so more creators surface.
-  const [resultLimit, setResultLimit] = useState(40);
+  const [resultLimit, setResultLimit] = useState(60);
   // Lander source toggle: 'instagram' = real creators from the browser scraper,
   // 'trends' = creators uploaded from the campaign Excel sheets.
   const [sourceBucket, setSourceBucket] = useState<'instagram' | 'trends'>(initialBucket);
