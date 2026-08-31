@@ -57,7 +57,20 @@ function brandExamples(brand: string, dna: BrandDnaProfile | null): string[] {
   if (cat) ex.push(`${cat} creators in Mumbai for a ${brand} launch`);
   if (arch[0]) ex.push(`${arch[0]} who post about ${kws[0] || cat || 'your niche'}`);
   if (kws[1]) ex.push(`Creators covering ${kws[1]} with 85%+ credibility`);
-  if (aud) ex.push(`Influencers whose audience is ${aud}`);
+  // target_audience is a full descriptive sentence (e.g. "Samsung primarily
+  // targets tech-savvy consumers aged 25–45, who are early adopters…"). Distil a
+  // short leading clause so the placeholder reads like a real search and stays on
+  // one line instead of dumping a paragraph over the search button.
+  if (aud) {
+    const audSnippet = aud
+      .replace(/^[A-Z][a-z]+ (?:primarily |mainly )?(?:targets?|serves?|is aimed at) /i, '')
+      .split(/[.;,]/)[0]!
+      .trim();
+    if (audSnippet) {
+      const short = audSnippet.length > 44 ? `${audSnippet.slice(0, 44).trim()}…` : audSnippet;
+      ex.push(`Creators reaching ${short}`);
+    }
+  }
   ex.push(`Barter-ready ${cat || 'niche'} creators for gifting`);
   const cleaned = Array.from(new Set(ex.map((e) => e.trim()).filter(Boolean)));
   return cleaned.length
@@ -193,9 +206,9 @@ function BrandPromptBar({ brand, dna, onSearch }: { brand: string; dna: BrandDna
               className="w-full resize-none text-[17px] text-[#222] placeholder-transparent focus:outline-none bg-transparent"
             />
             {value.length === 0 && (
-              <div className="pointer-events-none absolute inset-0 text-[17px] text-[#9aa] select-none">
-                {typed}
-                <span className="ii-caret" style={{ color: ACCENT }}>|</span>
+              <div className="pointer-events-none absolute inset-0 flex items-center whitespace-nowrap overflow-hidden text-[17px] text-[#9aa] select-none">
+                <span className="min-w-0 truncate">{typed}</span>
+                <span className="ii-caret shrink-0" style={{ color: ACCENT }}>|</span>
               </div>
             )}
             {sugOpen && (
