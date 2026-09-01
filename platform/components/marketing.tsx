@@ -147,14 +147,9 @@ export function AccountMenu() {
     return () => { cancelled = true; };
   }, []);
 
-  // Product decision: the marketing nav ALWAYS presents as logged-out — a plain
-  // person icon whose menu offers Log in (→ the Brand/Agency/Influencer chooser)
-  // and Sign up — regardless of any creator/brand/agency session. The home and
-  // marketing pages should read the same for a fresh visitor and a signed-in
-  // account; the dashboards have their own in-app nav for "go to workspace" /
-  // "log out". (The session probes below are kept harmless — they no longer
-  // drive what the menu shows.)
-  const signedIn = false;
+  // A creator OAuth session or a brand/agency cookie counts as signed in even
+  // without any localStorage.
+  const signedIn = loggedIn || creatorAuthed || !!agencyAccount;
   const shownHandle = handle ?? sessionHandle;
   const agencyLabel = agencyAccount ? (agencyAccount.name || agencyAccount.email) : null;
   // Where "Go to dashboard" lands: creator portal, admin panel, the brand/agency
