@@ -124,6 +124,21 @@ function fmt(n: number): string {
   return String(n);
 }
 
+// Parse a localStorage blob that SHOULD be a JSON array. Legacy/corrupt values
+// can be a bare string or object; JSON.parse succeeds on those, and then a
+// render-time `.map`/`.slice`/`.length` on the non-array throws the whole page
+// into the error boundary ("Something went wrong"). Coerce to [] unless it's a
+// real array so one stale key can never crash the finder for a single user.
+function parseArray<T>(raw: string | null): T[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? (v as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Compact Indian-rupee format for sponsored-post rates (₹1.2L, ₹45K, ₹800).
 function inr(n: number): string {
   if (n >= 1_00_000) return `₹${(n / 1_00_000).toFixed(n >= 10_00_000 ? 0 : 1)}L`;
@@ -930,10 +945,10 @@ export function LiveSearch({
           setContacted(parsed);
         }
       }
-      const rawSaved = localStorage.getItem('ii_saved_creators');
-      if (rawSaved) setSavedCreators(JSON.parse(rawSaved));
-      const rawDone = localStorage.getItem('ii_followups_done');
-      if (rawDone) setFollowupDone(JSON.parse(rawDone));
+      const savedC = parseArray<SavedCreator>(localStorage.getItem('ii_saved_creators'));
+      if (savedC.length) setSavedCreators(savedC);
+      const done = parseArray<string>(localStorage.getItem('ii_followups_done'));
+      if (done.length) setFollowupDone(done);
     } catch { /* ignore */ }
     // Hydrate saved creators from the DB (durable / cross-device); the
     // localStorage read above is the instant fallback.
@@ -948,7 +963,7 @@ export function LiveSearch({
           // DB empty — migrate any existing localStorage saves up to it (one-time)
           // and keep showing them rather than wiping to empty.
           try {
-            const local = JSON.parse(localStorage.getItem('ii_saved_creators') || '[]') as SavedCreator[];
+            const local = parseArray<SavedCreator>(localStorage.getItem('ii_saved_creators'));
             for (const c of local) {
               void fetch('/api/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ creator: c }) }).catch(() => {});
             }
@@ -1091,10 +1106,8 @@ export function LiveSearch({
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('ii_recent_searches');
-      if (raw) setRecent(JSON.parse(raw));
-      const rawS = localStorage.getItem('ii_saved_searches');
-      if (rawS) setSavedSearches(JSON.parse(rawS));
+      setRecent(parseArray<string>(localStorage.getItem('ii_recent_searches')));
+      setSavedSearches(parseArray<string>(localStorage.getItem('ii_saved_searches')));
     } catch { /* ignore */ }
   }, []);
 
