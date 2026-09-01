@@ -52,7 +52,8 @@ async function maybeAlertCookieDead(data: Health) {
       cookieDeadAlertedAt = now;
       await notifySlack(
         `:rotating_light: *IG drawer cookie rejected* — ${data.detail} (HTTP ${data.httpCode ?? '?'}). ` +
-          `Live posts / ER in the profile drawer will be blank until IG_SESSIONID is refreshed (local .env + Vercel).`,
+          `Live posts / ER in the profile drawer will be blank until a session is re-captured. ` +
+          `Fix: \`npm run scraper:capture -- <handle>\` (writes a fresh session into the DB pool — no .env/Vercel change needed).`,
       );
     }
     cookieWasDead = true;
@@ -103,7 +104,7 @@ export async function GET() {
     if (httpStatus >= 200 && httpStatus < 300) {
       status = 'healthy'; label = 'Live data flowing'; detail = 'Cookie + relay working — drawers show live posts & engagement.';
     } else if (httpStatus === 401 || httpStatus === 403) {
-      status = 'cookie_dead'; label = 'Cookie rejected'; detail = `Instagram rejected the session (HTTP ${httpStatus}) — refresh IG_SESSIONID.`;
+      status = 'cookie_dead'; label = 'Cookie rejected'; detail = `Instagram rejected the session (HTTP ${httpStatus}) — re-capture an account: npm run scraper:capture -- <handle>.`;
     } else if (httpStatus === 429 || httpStatus === 400) {
       // 400/429 from web_profile_info is IG soft-throttling this IP, not a
       // broken pipeline — live data still flows, just intermittently.
