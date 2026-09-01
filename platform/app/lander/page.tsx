@@ -8,6 +8,7 @@ import { Showcase } from '@/components/showcase';
 import { BrandMark, AccountMenu, MarketingFooter } from '@/components/marketing';
 import { BookDemoButton } from '@/components/book-demo';
 import { Doodle } from '@/components/doodles';
+import { PageDoodles } from '@/components/page-doodles';
 import { buildSuggestions } from '@/lib/suggestions';
 
 // Reelax-style influencer-marketing landing page, themed for Influencer Intel
@@ -542,7 +543,8 @@ const FEATURES = [
 
 function FeatureGrid() {
   return (
-    <section id="features" className="py-20" style={{ background: `radial-gradient(45% 40% at 10% 5%, rgba(108,77,246,.12), transparent 60%), radial-gradient(40% 40% at 92% 8%, rgba(247,181,0,.12), transparent 60%), radial-gradient(45% 45% at 70% 100%, rgba(236,72,153,.10), transparent 60%), ${ACCENT_SOFT}` }}>
+    <section id="features" className="relative isolate py-20" style={{ background: `radial-gradient(45% 40% at 10% 5%, rgba(108,77,246,.12), transparent 60%), radial-gradient(40% 40% at 92% 8%, rgba(247,181,0,.12), transparent 60%), radial-gradient(45% 45% at 70% 100%, rgba(236,72,153,.10), transparent 60%), ${ACCENT_SOFT}` }}>
+      <PageDoodles className="-z-10" />
       <div className="max-w-6xl mx-auto px-6">
         <div className="text-center max-w-2xl mx-auto mb-12">
           <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>Everything in one place</span>
@@ -656,7 +658,8 @@ function TrendingStrip() {
 
 function Testimonials() {
   return (
-    <section className="py-20 bg-white">
+    <section className="relative isolate py-20 bg-white">
+      <PageDoodles className="-z-10" />
       <div className="max-w-6xl mx-auto px-6">
         <div className="text-center mb-12">
           <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>Our users love us</span>
@@ -788,7 +791,8 @@ const FAQS = [
 function FAQ() {
   const [open, setOpen] = useState<number | null>(0);
   return (
-    <section id="faq" className="py-20" style={{ background: ACCENT_SOFT }}>
+    <section id="faq" className="relative isolate py-20" style={{ background: ACCENT_SOFT }}>
+      <PageDoodles className="-z-10" />
       <div className="max-w-3xl mx-auto px-6">
         <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-center mb-10">Frequently asked questions</h2>
         <div className="space-y-2">
