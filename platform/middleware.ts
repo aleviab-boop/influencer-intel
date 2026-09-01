@@ -1,16 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ADMIN_COOKIE, isValidAdminToken } from '@/lib/admin-auth';
 
-// Name of the signed creator-session cookie (mirrors CREATOR_COOKIE_NAME in
+// Names of the signed session cookies (mirror the *_COOKIE_NAME consts in
 // lib/auth). Hardcoded here so middleware stays on the Edge runtime without
 // pulling Node's `crypto` in via lib/auth.
-const CREATOR_COOKIE = 'ii_creator';
+const CREATOR_COOKIE = 'ii_creator'; // Instagram creator OAuth session
+const AGENCY_COOKIE = 'ii_agency'; // brand + agency accounts (account_type)
+const BRAND_COOKIE = 'ii_session'; // legacy brand session
+
+// True if ANY signed-in session cookie is present. Middleware only checks
+// PRESENCE (the authoritative signature check runs server-side in the matching
+// API routes) — enough to route logged-out visitors to the /login hero and let
+// signed-in users reach the /lander home.
+function hasAnySession(req: NextRequest): boolean {
+  return (
+    !!req.cookies.get(AGENCY_COOKIE)?.value ||
+    !!req.cookies.get(CREATOR_COOKIE)?.value ||
+    !!req.cookies.get(BRAND_COOKIE)?.value ||
+    !!req.cookies.get(ADMIN_COOKIE)?.value
+  );
+}
 
 // Gate the /admin panel + its APIs behind the superadmin password, and soft-gate
 // the /creator portal on the Instagram session. Signing in happens on the main
 // /login page via the auth/OAuth endpoints, so those stay reachable.
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // ---- Entry routing -------------------------------------------------------
+  // The /login 3-role chooser (Brand / Agency / Influencer) is the hero page
+  // for anyone who hasn't logged in. /lander (the search homepage) is the
+  // SIGNED-IN home. So:
+  //   • root "/"  → /lander when signed in, else /login
+  //   • /lander   → allowed only when signed in, else bounced to /login
+  // Presence of any session cookie counts as signed in (see hasAnySession).
+  if (pathname === '/' || pathname === '/lander') {
+    const signedIn = hasAnySession(req);
+    if (pathname === '/') {
+      const url = req.nextUrl.clone();
+      url.pathname = signedIn ? '/lander' : '/login';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+    // pathname === '/lander'
+    if (signedIn) return NextResponse.next();
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
 
   // ---- Creator portal pages ------------------------------------------------
   // A signed ii_creator cookie is minted on Instagram OAuth. We only check for
@@ -62,5 +100,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/api/admin/:path*', '/creator/:path*'],
+  matcher: ['/', '/lander', '/admin/:path*', '/api/admin/:path*', '/creator/:path*'],
 };
