@@ -44,6 +44,22 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
             <p className="mt-2 text-[11px] text-ink-400 tabular-nums">Reference: {error.digest}</p>
           )}
 
+          {/* Collapsed technical details — client render errors carry no digest,
+              so this is the only way to see WHAT actually threw. error.message is
+              preserved even in a minified production build, so it pinpoints the
+              failing access; the stack helps when message alone is ambiguous. */}
+          {(error?.message || error?.stack) && (
+            <details className="mt-4 mx-auto max-w-md text-left">
+              <summary className="cursor-pointer text-[12px] text-ink-400 hover:text-ink-600 select-none">
+                Technical details
+              </summary>
+              <pre className="mt-2 max-h-60 overflow-auto rounded-lg bg-[#faf9ff] border border-border p-3 text-[11px] leading-relaxed text-ink-700 whitespace-pre-wrap break-words">
+                {[error.name, error.message].filter(Boolean).join(': ')}
+                {error.stack ? `\n\n${error.stack}` : ''}
+              </pre>
+            </details>
+          )}
+
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
             <button
               onClick={reset}
