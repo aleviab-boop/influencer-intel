@@ -60,6 +60,8 @@ export async function GET() {
     creatorsBySource,
     jobOutcomes7d,
     searchBuckets,
+    // brand/agency account roster (with last sign-in)
+    registeredAccounts,
     // worker heartbeat
     heartbeat,
   ] = await Promise.all([
@@ -203,6 +205,21 @@ export async function GET() {
          FROM agency_searches WHERE created_at > now() - interval '30 days'`,
     ).then((r) => r[0] ?? { zero: 0, small: 0, big: 0 }),
 
+    // Registered brand/agency accounts + when each last signed in (migration 049),
+    // ordered most-recently-active first so dormant accounts sink. brand_count is
+    // how many distinct brands the account owns (brand_dna.account_id).
+    rows(
+      `SELECT aa.email, aa.name, aa.account_type, aa.created_at, aa.last_login_at,
+              coalesce(b.n, 0)::int AS brand_count
+         FROM agency_accounts aa
+         LEFT JOIN (
+           SELECT account_id, count(DISTINCT lower(brand_name)) n
+             FROM brand_dna WHERE account_id IS NOT NULL GROUP BY account_id
+         ) b ON b.account_id = aa.id
+        ORDER BY aa.last_login_at DESC NULLS LAST, aa.created_at DESC
+        LIMIT 100`,
+    ),
+
     rows<{ t: string | null }>(`SELECT beat_at t FROM worker_heartbeat WHERE worker='main'`).then((r) => r[0]?.t ?? null),
   ]);
 
@@ -236,6 +253,7 @@ export async function GET() {
     top_niches: topNiches,
     logins_per_day: loginsPerDay,
     recent_logins: recentLogins,
+    registered_accounts: registeredAccounts,
     creators_total: creatorsTotal,
     creator_growth: creatorGrowth,
     creators_by_source: creatorsBySource,

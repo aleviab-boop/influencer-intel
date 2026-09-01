@@ -28,6 +28,7 @@ interface Account {
 }
 interface RecentSearch { prompt: string; result_count: number; created_at: string }
 interface RecentLogin { email: string | null; kind: string; name: string | null; meta: { method?: string; role?: string } | null; created_at: string }
+interface RegisteredAccount { email: string; name: string | null; account_type: string; created_at: string; last_login_at: string | null; brand_count: number }
 interface Metrics {
   generatedAt: string;
   worker: { live: boolean; last_beat_at: string | null };
@@ -45,6 +46,7 @@ interface Metrics {
   top_niches: Array<{ token: string; n: number }>;
   logins_per_day: Array<{ bucket: string; n: number }>;
   recent_logins: RecentLogin[];
+  registered_accounts: RegisteredAccount[];
   creators_total: number;
   creator_growth: Array<{ bucket: string; n: number }>;
   creators_by_source: Array<{ source: string; n: number }>;
@@ -501,6 +503,53 @@ export default function MetricsPage() {
                 })}
                 {m && m.accounts.length === 0 && (
                   <tr><td colSpan={8} className="px-5 py-8 text-center text-[13px] text-[#aaa]">No accounts in the pool.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
+      {/* registered brand / agency accounts — who signed up and when they last signed in */}
+      <div className="mt-6">
+        <Card title="Registered accounts" right={<span className="text-[12px] text-[#999]">{m?.registered_accounts?.length ?? 0} accounts</span>}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-[#aab] border-b border-[#f1f1f6]">
+                  <th className="px-5 py-2.5 font-medium">Account</th>
+                  <th className="px-3 py-2.5 font-medium">Type</th>
+                  <th className="px-3 py-2.5 font-medium text-right">Brands</th>
+                  <th className="px-3 py-2.5 font-medium">Joined</th>
+                  <th className="px-5 py-2.5 font-medium">Last sign-in</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(m?.registered_accounts ?? []).map((a) => (
+                  <tr key={a.email} className="border-b border-[#f6f6fa] hover:bg-[#fafaff]">
+                    <td className="px-5 py-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-semibold text-[#6C4DF6] bg-[#f4f2ff] shrink-0 uppercase">
+                          {(a.name || a.email || '?').trim().charAt(0)}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-medium truncate">{a.name || a.email}</div>
+                          {a.name && <div className="text-[11px] text-[#aaa] truncate">{a.email}</div>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-block text-[11px] font-medium px-2 py-0.5 rounded-md ${a.account_type === 'agency' ? 'text-[#6C4DF6] bg-[#f4f2ff]' : 'text-emerald-700 bg-emerald-50'}`}>
+                        {a.account_type || 'brand'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-[#666]">{a.brand_count}</td>
+                    <td className="px-3 py-2.5 text-[#888]">{ago(a.created_at)}</td>
+                    <td className="px-5 py-2.5 text-[#888]">{a.last_login_at ? ago(a.last_login_at) : <span className="text-[#ccc]">never</span>}</td>
+                  </tr>
+                ))}
+                {m && (m.registered_accounts?.length ?? 0) === 0 && (
+                  <tr><td colSpan={5} className="px-5 py-8 text-center text-[13px] text-[#aaa]">No brand or agency accounts yet.</td></tr>
                 )}
               </tbody>
             </table>
