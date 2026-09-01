@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { LiveSearch } from '@/components/live-search';
+import { CreatorAvatar } from '@/components/creator-avatar';
 import { StatCard, PageHeader, LiveBadge, useTrend } from '@/components/admin-ui';
 import { PageDoodles } from '@/components/page-doodles';
 
@@ -248,12 +249,11 @@ export default function AdminScraperPage() {
             <div className="divide-y divide-[#f5f5f8] max-h-[420px] overflow-y-auto">
               {(recent?.creators ?? []).map((c) => (
                 <div key={c.handle} className="px-5 py-2.5 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
-                  <div className="w-8 h-8 rounded-full bg-[#eee] shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-[#e3def9]">
-                    {c.profile_photo_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={`/api/ig-image?u=${encodeURIComponent(c.profile_photo_url)}`} alt="" className="w-full h-full object-cover" />
-                    )}
-                  </div>
+                  <CreatorAvatar
+                    handle={c.handle}
+                    pic={c.profile_photo_url}
+                    className="w-8 h-8 ring-2 ring-transparent group-hover:ring-[#e3def9]"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="text-[14px] font-medium text-[#111] truncate">@{c.handle}{c.is_verified && <span className="text-[#3897f0] ml-1">✔</span>}</div>
                     <div className="text-[12px] text-[#999] truncate">{c.category || '—'}</div>
