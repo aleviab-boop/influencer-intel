@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
 import { signInAgency } from '@/lib/agency-auth';
 import { setAgencySession } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import type { BrandDnaProfile } from '@influencer-intel/shared/llm';
 
 export const runtime = 'nodejs';
@@ -21,6 +22,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const account = await signInAgency(email, password);
     await setAgencySession(account);
+    // Record the sign-in for the admin Metrics logins/DAU feed. Keyed by
+    // account_id (as brand_id) so each account counts as one distinct user;
+    // role tags the surface without tripping the feed's `role='admin'` filter.
+    void logActivity({ kind: 'login', brand_id: account.account_id, email: account.email, meta: { method: 'password', name: account.name, role: 'brand' } });
 
     let brands: { brand: string; category: string | null; dna: BrandDnaProfile }[] = [];
     try {

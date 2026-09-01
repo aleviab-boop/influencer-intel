@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signInAgency } from '@/lib/agency-auth';
 import { setAgencySession } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     const account = await signInAgency(email, password);
     await setAgencySession(account);
+    void logActivity({ kind: 'login', brand_id: account.account_id, email: account.email, meta: { method: 'password', name: account.name, role: 'agency' } });
     return NextResponse.json({ account });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Could not sign in.';
