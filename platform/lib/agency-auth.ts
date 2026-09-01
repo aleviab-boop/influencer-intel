@@ -79,5 +79,11 @@ export async function signInAgency(email: string, password: string): Promise<Age
   const row = rows[0];
   if (!row || !row.password_hash) throw new Error('No account found for this email — create one first.');
   if (!verifyPassword(password, row.password_hash)) throw new Error('Incorrect email or password.');
+  // Stamp the sign-in on the account row (fire-and-forget — a failed stamp must
+  // never block a valid login). Powers "last active" in the roster/admin views
+  // without scanning the append-only activity_events log.
+  void db
+    .query(`UPDATE agency_accounts SET last_login_at = now() WHERE id = $1`, [row.id])
+    .catch(() => {});
   return sessionFor(row);
 }
