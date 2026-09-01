@@ -81,7 +81,12 @@ function usePoll<T>(url: string, intervalMs = 8_000, refreshKey = 0): T | null {
     // field that doesn't exist and crash the whole page into the error boundary.
     const load = () =>
       fetch(url)
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          // A 401 means the admin session lapsed. Bounce to the staff sign-in so
+          // they can re-auth (the page is otherwise stuck showing empty stats).
+          if (r.status === 401) { window.location.href = '/staff'; return null; }
+          return r.ok ? r.json() : null;
+        })
         .then((d) => { if (alive && d && typeof d === 'object' && !('error' in d)) setData(d as T); })
         .catch(() => {});
     load();
