@@ -37,7 +37,7 @@ interface JobsData {
 }
 
 interface PipelineHealth {
-  status: 'healthy' | 'rate_limited' | 'cookie_dead' | 'relay_down' | 'no_relay' | 'no_cookie' | 'error';
+  status: 'healthy' | 'rate_limited' | 'cookie_dead' | 'relay_key_mismatch' | 'relay_down' | 'no_relay' | 'no_cookie' | 'error';
   label: string;
   detail: string;
   httpCode: number | null;
@@ -50,6 +50,7 @@ const PIPELINE_UI: Record<PipelineHealth['status'], { fg: string; bg: string; bd
   healthy: { fg: 'text-emerald-700', bg: 'bg-emerald-50', bd: 'border-emerald-200', dot: 'bg-emerald-500 animate-pulse' },
   rate_limited: { fg: 'text-amber-700', bg: 'bg-amber-50', bd: 'border-amber-200', dot: 'bg-amber-500' },
   cookie_dead: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
+  relay_key_mismatch: { fg: 'text-amber-700', bg: 'bg-amber-50', bd: 'border-amber-200', dot: 'bg-amber-500' },
   relay_down: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
   no_relay: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },
   no_cookie: { fg: 'text-rose-700', bg: 'bg-rose-50', bd: 'border-rose-200', dot: 'bg-rose-500' },

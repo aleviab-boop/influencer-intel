@@ -25,7 +25,7 @@ const HEADERS: Record<string, string> = {
 };
 
 type Health = {
-  status: 'healthy' | 'rate_limited' | 'cookie_dead' | 'relay_down' | 'no_relay' | 'no_cookie' | 'error';
+  status: 'healthy' | 'rate_limited' | 'cookie_dead' | 'relay_key_mismatch' | 'relay_down' | 'no_relay' | 'no_cookie' | 'error';
   label: string;
   detail: string;
   httpCode: number | null;
@@ -82,6 +82,8 @@ export async function GET() {
     // auth rejection and take the better outcome.
     let httpStatus = -1;
     let relayDown = false;
+    let authBody = ''; // body of a 401/403 — lets us tell the relay's plaintext
+                       // "unauthorized" (key mismatch) from IG's JSON (dead cookie)
     for (let attempt = 0; attempt < 2; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
       try {
@@ -92,7 +94,10 @@ export async function GET() {
         httpStatus = res.status;
         relayDown = false;
         if (res.ok) break;                                   // got a good one — stop
-        if (res.status === 401 || res.status === 403) break; // hard auth fail — no point retrying
+        if (res.status === 401 || res.status === 403) {      // hard auth fail — no point retrying
+          try { authBody = (await res.text()).slice(0, 200); } catch { /* body already consumed / stream error */ }
+          break;
+        }
       } catch {
         // igFetch throws / times out → relay (or network) is unreachable.
         httpStatus = -1;
@@ -104,7 +109,24 @@ export async function GET() {
     if (httpStatus >= 200 && httpStatus < 300) {
       status = 'healthy'; label = 'Live data flowing'; detail = 'Cookie + relay working — drawers show live posts & engagement.';
     } else if (httpStatus === 401 || httpStatus === 403) {
-      status = 'cookie_dead'; label = 'Cookie rejected'; detail = `Instagram rejected the session (HTTP ${httpStatus}) — re-capture an account: npm run scraper:capture -- <handle>.`;
+      // A 401/403 can come from two very different places on this path:
+      //   • the RELAY, rejecting a wrong/missing x-relay-key — it replies with a
+      //     plaintext "unauthorized" body (see tools/ig-relay.mjs). The cookie is
+      //     fine; live data is blocked purely because Vercel's IG_RELAY_KEY ≠ the
+      //     host's RELAY_KEY.
+      //   • INSTAGRAM, rejecting the session cookie — it replies with JSON.
+      // Blaming the cookie for a relay-key mismatch sends the operator to
+      // re-capture a perfectly good session (and fires a false "cookie dead"
+      // Slack alert), so disambiguate on the body: the relay's is non-JSON and
+      // literally "unauthorized".
+      const relayReject = /unauthorized/i.test(authBody) && !authBody.trim().startsWith('{');
+      if (relayReject) {
+        status = 'relay_key_mismatch';
+        label = 'Relay key mismatch';
+        detail = `The relay rejected this request (HTTP ${httpStatus} “unauthorized”) — Vercel’s IG_RELAY_KEY doesn’t match the relay host’s RELAY_KEY. The cookie is fine; live data is blocked until the keys match. Set IG_RELAY_KEY on Vercel to the host’s RELAY_KEY value, then redeploy.`;
+      } else {
+        status = 'cookie_dead'; label = 'Cookie rejected'; detail = `Instagram rejected the session (HTTP ${httpStatus}) — re-capture an account: npm run scraper:capture -- <handle>.`;
+      }
     } else if (httpStatus === 429 || httpStatus === 400) {
       // 400/429 from web_profile_info is IG soft-throttling this IP, not a
       // broken pipeline — live data still flows, just intermittently.
