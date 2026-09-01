@@ -75,7 +75,15 @@ function usePoll<T>(url: string, intervalMs = 8_000, refreshKey = 0): T | null {
   const [data, setData] = useState<T | null>(null);
   useEffect(() => {
     let alive = true;
-    const load = () => fetch(url).then((r) => r.json()).then((d) => { if (alive) setData(d as T); }).catch(() => {});
+    // Only store OK JSON. A 401 (expired admin cookie) or 500 returns an error
+    // body like {error:'unauthorized'}; storing that would poison state so the
+    // render's `stats.creators.total` / `recent.accounts.length` dereference a
+    // field that doesn't exist and crash the whole page into the error boundary.
+    const load = () =>
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (alive && d && typeof d === 'object' && !('error' in d)) setData(d as T); })
+        .catch(() => {});
     load();
     const t = setInterval(load, intervalMs);
     return () => { alive = false; clearInterval(t); };
@@ -143,18 +151,18 @@ export default function AdminScraperPage() {
   // an in-progress crawl too — otherwise the badge flickers to "idle" while the
   // "Crawling now" banner is showing.
   const live = stats?.worker_live || !!activeCrawl;
-  const readyAccounts = recent?.accounts.filter((a) => a.state === 'ready').length ?? null;
+  const readyAccounts = recent?.accounts?.filter((a) => a.state === 'ready').length ?? null;
   // Warn only when there's queued work and nothing is actually happening (no
   // recent scrape, no active crawl) — i.e. the worker genuinely needs starting.
-  const workerStalled = stats != null && !live && stats.jobs.queued > 0;
+  const workerStalled = stats != null && !live && (stats.jobs?.queued ?? 0) > 0;
   const noReadyAccounts = recent != null && readyAccounts === 0;
   // Coverage dashboard links here with ?prefill=<niche> creator in <city> so a
   // gap cell can kick off its crawl in one click.
   const [prefill] = useState(() =>
     typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('prefill') ?? '' : '',
   );
-  const scrapedTrend = useTrend(stats?.scraped.last_24h);
-  const queueTrend = useTrend(stats?.jobs.queued);
+  const scrapedTrend = useTrend(stats?.scraped?.last_24h);
+  const queueTrend = useTrend(stats?.jobs?.queued);
 
   return (
     <div className="relative isolate overflow-hidden px-8 py-7">
@@ -213,12 +221,12 @@ export default function AdminScraperPage() {
 
       {/* live status strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3.5 mb-7">
-        <StatCard label="Creators" value={(stats?.creators.total ?? 0).toLocaleString()} sub={`${(stats?.creators.active ?? 0).toLocaleString()} active`} />
-        <StatCard label="Scraped 24h" value={stats?.scraped.last_24h ?? 0} sub={`${stats?.scraped.last_1h ?? 0} in 1h`} color="#f59e0b" trend={scrapedTrend} />
-        <StatCard label="Queued" value={stats?.jobs.queued ?? 0} trend={queueTrend} />
-        <StatCard label="In progress" value={stats?.jobs.in_progress ?? 0} color="#0ea5e9" />
-        <StatCard label="Accounts" value={stats?.accounts.active ?? 0} sub="in rotation" color="#10b981" />
-        <StatCard label="Failed 24h" value={stats?.jobs.failed_24h ?? 0} color="#ef4444" />
+        <StatCard label="Creators" value={(stats?.creators?.total ?? 0).toLocaleString()} sub={`${(stats?.creators?.active ?? 0).toLocaleString()} active`} />
+        <StatCard label="Scraped 24h" value={stats?.scraped?.last_24h ?? 0} sub={`${stats?.scraped?.last_1h ?? 0} in 1h`} color="#f59e0b" trend={scrapedTrend} />
+        <StatCard label="Queued" value={stats?.jobs?.queued ?? 0} trend={queueTrend} />
+        <StatCard label="In progress" value={stats?.jobs?.in_progress ?? 0} color="#0ea5e9" />
+        <StatCard label="Accounts" value={stats?.accounts?.active ?? 0} sub="in rotation" color="#10b981" />
+        <StatCard label="Failed 24h" value={stats?.jobs?.failed_24h ?? 0} color="#ef4444" />
       </div>
 
       {/* monitoring: recently scraped + account pool */}
@@ -228,11 +236,11 @@ export default function AdminScraperPage() {
             Recently scraped
             {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
           </div>
-          {(recent?.creators.length ?? 0) === 0 ? (
+          {(recent?.creators?.length ?? 0) === 0 ? (
             <div className="px-5 py-10 text-center text-[14px] text-[#aaa]">Nothing scraped yet. Run the worker (or search below) to start crawling.</div>
           ) : (
             <div className="divide-y divide-[#f5f5f8] max-h-[420px] overflow-y-auto">
-              {recent!.creators.map((c) => (
+              {(recent?.creators ?? []).map((c) => (
                 <div key={c.handle} className="px-5 py-2.5 flex items-center gap-3 hover:bg-[#faf9ff] transition-colors">
                   <div className="w-8 h-8 rounded-full bg-[#eee] shrink-0 overflow-hidden ring-2 ring-transparent group-hover:ring-[#e3def9]">
                     {c.profile_photo_url && (
@@ -259,11 +267,11 @@ export default function AdminScraperPage() {
               <span className="text-[12px] font-medium text-emerald-600">{readyAccounts} ready</span>
             )}
           </div>
-          {(recent?.accounts.length ?? 0) === 0 ? (
+          {(recent?.accounts?.length ?? 0) === 0 ? (
             <div className="px-5 py-10 text-center text-[14px] text-[#aaa]">No accounts captured yet.</div>
           ) : (
             <div className="divide-y divide-[#f5f5f8]">
-              {recent!.accounts.map((a) => {
+              {(recent?.accounts ?? []).map((a) => {
                 const st = ACCT_STATE[a.state];
                 // For a resting account, show the concrete auto-resume ETA if we
                 // know it; otherwise fall back to the generic hint.
@@ -313,21 +321,21 @@ export default function AdminScraperPage() {
       <div className="rounded-2xl border border-[#ececf3] bg-white overflow-hidden shadow-[0_2px_16px_rgba(20,20,60,0.03)] mb-8">
         <div className="px-5 py-3 border-b border-[#f1f1f6] text-[13px] font-semibold text-[#555] flex items-center justify-between" style={{ background: 'linear-gradient(90deg, #faf9ff, #fff)' }}>
           <span>Recent crawls</span>
-          {jobsData && (
+          {jobsData?.counts && (
             <span className="text-[12px] font-normal text-[#999] flex items-center gap-2.5">
               <span className="text-emerald-600">{jobsData.counts.completed_24h} done</span>
               {jobsData.counts.failed_24h > 0 && <span className="text-rose-600">{jobsData.counts.failed_24h} failed</span>}
-              <span>{Math.max(0, jobsData.counts.queued - jobsData.jobs.filter((j) => j.status === 'queued' && cancelled.has(j.id)).length)} queued</span>
+              <span>{Math.max(0, jobsData.counts.queued - (jobsData.jobs ?? []).filter((j) => j.status === 'queued' && cancelled.has(j.id)).length)} queued</span>
               {jobsData.counts.in_progress > 0 && <span className="text-sky-600">{jobsData.counts.in_progress} running</span>}
               <span className="text-[#bbb]">· 24h</span>
             </span>
           )}
         </div>
-        {(jobsData?.jobs.length ?? 0) === 0 ? (
+        {(jobsData?.jobs?.length ?? 0) === 0 ? (
           <div className="px-5 py-8 text-center text-[13px] text-[#aaa]">No crawl jobs yet. Search below to start one.</div>
         ) : (
           <div className="divide-y divide-[#f5f5f8] max-h-[360px] overflow-y-auto">
-            {jobsData!.jobs.filter((j) => !cancelled.has(j.id)).map((j) => {
+            {(jobsData?.jobs ?? []).filter((j) => !cancelled.has(j.id)).map((j) => {
               const st = JOB_STATUS[j.status] ?? { fg: 'text-[#777]', bg: 'bg-[#f4f4f6]', label: j.status };
               const when = j.completed_at ?? j.started_at ?? j.queued_at;
               return (
