@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ACCENT, ACCENT_SOFT } from '@/components/marketing';
 import { PageDoodles } from '@/components/page-doodles';
+import { BackButton } from '@/components/back-button';
 
 // Agency account auth — real email + password. Signing in owns your roster of
 // brands server-side (brand_dna.account_id), so "your brands" follows you across
@@ -52,6 +53,7 @@ export default function AgencyLoginPage() {
   return (
     <div className="relative isolate overflow-hidden min-h-screen bg-[#fafafc] font-sans grid place-items-center px-6">
       <PageDoodles className="-z-10" />
+      <div className="absolute top-5 left-5 z-10"><BackButton /></div>
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <span className="inline-block px-3 py-1 rounded-full text-[12px] font-semibold" style={{ background: ACCENT_SOFT, color: ACCENT }}>

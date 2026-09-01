@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ACCENT, ACCENT_SOFT, BrandMark } from '@/components/marketing';
+import { BackButton } from '@/components/back-button';
 
 const inp =
   'w-full px-3.5 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-xl hover:border-[#c9bdfb] focus:outline-none focus:border-[#6C4DF6] focus:ring-4 focus:ring-[#6C4DF6]/10 transition-all duration-200';
@@ -54,6 +55,7 @@ export default function StaffLoginPage() {
     <div className="min-h-screen flex flex-col bg-white font-sans">
       <main className="flex-1 grid place-items-center px-4 sm:px-6 py-10 relative overflow-hidden">
         <div className="absolute inset-0" style={{ background: `radial-gradient(60% 60% at 12% 0%, rgba(108,77,246,.16), transparent 60%), radial-gradient(55% 50% at 88% 8%, rgba(108,77,246,.12), transparent 60%), linear-gradient(180deg, ${ACCENT_SOFT}, #ffffff)` }} />
+        <div className="absolute top-5 left-5 z-20"><BackButton /></div>
 
         <div
           className="relative z-10 w-full max-w-md rounded-3xl border border-border bg-white shadow-[0_30px_80px_rgba(108,77,246,0.18)] p-7 sm:p-9 transition-all duration-700"

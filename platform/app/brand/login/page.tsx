@@ -7,6 +7,7 @@ import { Doodle, DOODLE_HUES } from '@/components/doodles';
 import { setBrandSession, type BrandDnaProfile } from '@/lib/brand-session';
 import { addBrandToRoster } from '@/lib/agency-session';
 import { useAgencyAccount } from '@/lib/use-agency-account';
+import { BackButton } from '@/components/back-button';
 
 const inp =
   'w-full px-3.5 py-2.5 border border-border bg-white text-sm text-ink-900 rounded-xl focus:outline-none focus:border-[#6C4DF6] focus:ring-4 focus:ring-[#6C4DF6]/10 transition-all';
@@ -82,6 +83,7 @@ export default function BrandLoginPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafafc] font-sans">
+      <div className="absolute top-5 left-5 z-10"><BackButton /></div>
       {/* Soft colour glows behind the card */}
       <div aria-hidden className="pointer-events-none absolute -top-40 -left-32 h-[32rem] w-[32rem] rounded-full opacity-60 blur-3xl" style={{ background: 'radial-gradient(circle, rgba(108,77,246,.22), transparent 65%)' }} />
       <div aria-hidden className="pointer-events-none absolute -bottom-40 -right-24 h-[30rem] w-[30rem] rounded-full opacity-50 blur-3xl" style={{ background: 'radial-gradient(circle, rgba(236,72,153,.18), transparent 65%)' }} />
