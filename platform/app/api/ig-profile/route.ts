@@ -150,6 +150,101 @@ function coerceNum(v: unknown): number {
   return Number.isFinite(x) ? x : 0;
 }
 
+// ---- audience demographics --------------------------------------------------
+// The drawer's "Audience demographics" panel. Reconciles the TWO shapes stored
+// in creators.audience_demographics (a `json` column):
+//   • vision_inference   → gender {male, female, other}          (confidence med)
+//   • inferred_scraping   → gender {male_pct, female_pct, other_pct} (conf low)
+// Both also carry age_bands, top_cities[{city,pct}], top_languages[{lang,pct}],
+// country_india_pct, confidence, sample_size, source. We normalize to ONE shape
+// so the UI renders identically, and drop rows that came back empty (failed
+// scrapes with sample_size 0 and all-null values) → the panel simply hides.
+export interface AudienceDemographics {
+  available: boolean;
+  source: string | null;
+  confidence: string | null;
+  sample_size: number | null;
+  gender: { female: number; male: number; other: number } | null;
+  age_bands: { label: string; pct: number }[];
+  top_cities: { city: string; pct: number }[];
+  top_languages: { lang: string; pct: number }[];
+  country_india_pct: number | null;
+}
+
+function numOrNull(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+const AGE_LABELS: Record<string, string> = {
+  '13_17': '13–17', '18_24': '18–24', '25_34': '25–34', '35_44': '35–44', '45_64': '45–64', '65_plus': '65+',
+};
+
+function normalizeDemographics(raw: unknown): AudienceDemographics | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const d = raw as Record<string, unknown>;
+  const g = (d.gender ?? {}) as Record<string, unknown>;
+
+  const female = numOrNull(g.female ?? g.female_pct);
+  const male = numOrNull(g.male ?? g.male_pct);
+  const other = numOrNull(g.other ?? g.other_pct);
+  const gender = female != null || male != null
+    ? { female: female ?? 0, male: male ?? 0, other: other ?? 0 }
+    : null;
+
+  const ageRaw = (d.age_bands ?? {}) as Record<string, unknown>;
+  const age_bands = Object.entries(ageRaw)
+    .map(([k, v]) => ({ label: AGE_LABELS[k] ?? k.replace(/_/g, '–'), pct: numOrNull(v) ?? 0 }))
+    .filter((a) => a.pct > 0);
+
+  const top_cities = Array.isArray(d.top_cities)
+    ? (d.top_cities as Array<Record<string, unknown>>)
+        .map((c) => ({ city: String(c.city ?? c.name ?? '').trim(), pct: numOrNull(c.pct ?? c.share_pct) ?? 0 }))
+        .filter((c) => c.city && c.pct > 0)
+        .slice(0, 6)
+    : [];
+
+  const top_languages = Array.isArray(d.top_languages)
+    ? (d.top_languages as Array<Record<string, unknown>>)
+        .map((l) => ({ lang: String(l.lang ?? l.name ?? '').trim(), pct: numOrNull(l.pct) ?? 0 }))
+        .filter((l) => l.lang && l.pct > 0)
+        .slice(0, 5)
+    : [];
+
+  const country_india_pct = numOrNull(d.country_india_pct);
+  const sample_size = numOrNull(d.sample_size);
+
+  // Hide rows that carry no real signal (failed/empty scrapes).
+  if (!gender && top_cities.length === 0 && age_bands.length === 0) return null;
+
+  return {
+    available: true,
+    source: typeof d.source === 'string' ? d.source : null,
+    confidence: typeof d.confidence === 'string' ? d.confidence : null,
+    sample_size,
+    gender,
+    age_bands,
+    top_cities,
+    top_languages,
+    country_india_pct,
+  };
+}
+
+// One indexed lookup by handle → normalized demographics (or null). Best-effort:
+// a demographics hiccup must never break the drawer.
+async function loadDemographics(handle: string): Promise<AudienceDemographics | null> {
+  try {
+    const rows = await getBolticClient().query<{ audience_demographics: unknown }>(
+      `SELECT audience_demographics FROM creators
+       WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
+      [handle],
+    );
+    return normalizeDemographics(rows[0]?.audience_demographics ?? null);
+  } catch {
+    return null;
+  }
+}
+
 interface RecentPost {
   shortcode: string;
   thumbnail: string | null;
@@ -301,7 +396,7 @@ async function dbRelated(handle: string, niche: string, followers: number) {
 
 // ---- DB fallback (what the worker discovered / a previous live persist) ------
 
-async function dbProfile(handle: string) {
+async function dbProfile(handle: string, demographics: AudienceDemographics | null) {
   let rows: Record<string, unknown>[] = [];
   try {
     rows = await getBolticClient().query<Record<string, unknown>>(
@@ -341,6 +436,7 @@ async function dbProfile(handle: string) {
       collabs: [],
       sponsored_posts: 0,
       engagement: null,
+      audience_demographics: demographics,
       source: 'pending',
       refreshing: false,
       last_scraped_at: null,
@@ -442,6 +538,7 @@ async function dbProfile(handle: string) {
     collabs,
     sponsored_posts: sponsored,
     engagement: er,
+    audience_demographics: demographics,
     analytics: buildAnalytics(followers, recent),
     source: 'db',
     last_scraped_at: (c.last_scraped_at as string) ?? null,
@@ -451,7 +548,7 @@ async function dbProfile(handle: string) {
 
 // Shape an Apify ScrapedProfile into the EXACT drawer response the live path
 // returns, so the UI renders identically (photo + 12-tile grid with thumbnails).
-async function apifyDrawerResponse(handle: string, sp: ScrapedProfile): Promise<NextResponse> {
+async function apifyDrawerResponse(handle: string, sp: ScrapedProfile, demographics: AudienceDemographics | null): Promise<NextResponse> {
   const recent: RecentPost[] = sp.recent_posts.map((p) => ({
     shortcode: p.platform_post_id || (p.post_url.match(/\/(?:p|reel|tv)\/([^/?#]+)/)?.[1] ?? ''),
     thumbnail: p.thumbnail_url,
@@ -504,6 +601,7 @@ async function apifyDrawerResponse(handle: string, sp: ScrapedProfile): Promise<
     collabs,
     sponsored_posts: 0,
     engagement: er,
+    audience_demographics: demographics,
     analytics: buildAnalytics(sp.follower_count, recent),
     source: 'live',
     last_scraped_at: new Date().toISOString(),
@@ -564,6 +662,10 @@ export async function GET(req: NextRequest) {
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
+
+  // Audience demographics live in the DB regardless of which path serves the
+  // drawer, so load them in parallel with the live fetch (no added latency).
+  const demoPromise = loadDemographics(handle);
 
   // 1) LIVE via the cookie scraper (through the residential relay/proxy). This is
   //    the primary path: real followers, recent posts, live ER, reel-forecast
@@ -685,6 +787,7 @@ export async function GET(req: NextRequest) {
       collabs,
       sponsored_posts: 0,
       engagement: er,
+      audience_demographics: await demoPromise,
       analytics: buildAnalytics(followers, recent),
       source: 'live',
       last_scraped_at: new Date().toISOString(),
@@ -701,7 +804,7 @@ export async function GET(req: NextRequest) {
   //     so behavior is unchanged for anyone without Apify configured.
   if (!notFound) {
     const sp = await apifyProfileOrNull(handle);
-    if (sp) return apifyDrawerResponse(handle, sp);
+    if (sp) return apifyDrawerResponse(handle, sp, await demoPromise);
   }
 
   // Live fetch DEFINITIVELY 404'd → if this was an un-enriched hallucinated stub,
@@ -709,5 +812,5 @@ export async function GET(req: NextRequest) {
   if (notFound) after(() => pruneHallucinatedStub(handle));
 
   // 2) DB fallback (worker-discovered row or a prior live persist).
-  return dbProfile(handle);
+  return dbProfile(handle, await demoPromise);
 }

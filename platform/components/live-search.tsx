@@ -73,6 +73,17 @@ interface ProfileData {
   collabs?: { handle: string; count: number }[];
   sponsored_posts?: number;
   engagement?: number | null;
+  audience_demographics?: {
+    available: boolean;
+    source: string | null;
+    confidence: string | null;
+    sample_size: number | null;
+    gender: { female: number; male: number; other: number } | null;
+    age_bands: { label: string; pct: number }[];
+    top_cities: { city: string; pct: number }[];
+    top_languages: { lang: string; pct: number }[];
+    country_india_pct: number | null;
+  } | null;
   analytics?: {
     authenticity: {
       score: number;
@@ -3372,6 +3383,11 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
             <CampaignFitCard profile={profile} />
           </div>
         )}
+        {profile.audience_demographics?.available && (
+          <div className="break-inside-avoid mb-4">
+            <AudienceCard demo={profile.audience_demographics} />
+          </div>
+        )}
         <div className="break-inside-avoid mb-4">
           <BrandFitCard profile={profile} engagement={engagement} blacklistHits={blacklistHits} initialBrief={initialBrief} />
         </div>
@@ -3591,6 +3607,104 @@ function CampaignFitCard({ profile }: { profile: ProfileData }) {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Audience demographics panel: who FOLLOWS this creator (not the creator). Gender
+// split, where they're based, age skew, languages — reconciled server-side into
+// one shape (see /api/ig-profile normalizeDemographics). All figures are inferred
+// (vision/scrape signals), so we badge the confidence and keep it "directional".
+function AudienceCard({ demo }: { demo: NonNullable<ProfileData['audience_demographics']> }) {
+  const g = demo.gender;
+  const confLabel =
+    demo.confidence === 'high'
+      ? 'Estimated · high confidence'
+      : demo.confidence === 'medium'
+        ? 'Estimated · medium confidence'
+        : 'Estimated · directional';
+  const maxCity = Math.max(...demo.top_cities.map((c) => c.pct), 1);
+  const maxAge = Math.max(...demo.age_bands.map((a) => a.pct), 1);
+  const fPct = g ? Math.round(g.female) : 0;
+  const mPct = g ? Math.round(g.male) : 0;
+
+  return (
+    <div className="rounded-2xl border border-[#e3def9] bg-white p-4" style={{ animation: 'ii-fadeup .4s .1s both' }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999]">Audience demographics</div>
+        <span className="text-[10px] text-[#bbb]">{confLabel}</span>
+      </div>
+
+      {g && (
+        <div className="mb-4">
+          <div className="flex items-center justify-between text-[12px] mb-1.5">
+            <span className="font-semibold" style={{ color: '#ec4899' }}>♀ Female {fPct}%</span>
+            <span className="font-semibold" style={{ color: ACCENT }}>{mPct}% Male ♂</span>
+          </div>
+          <div className="flex h-2.5 rounded-full overflow-hidden bg-[#f0eefb]">
+            <div style={{ width: `${g.female}%`, background: '#ec4899' }} />
+            <div style={{ width: `${g.male}%`, background: ACCENT }} />
+            {g.other > 0 && <div style={{ width: `${g.other}%`, background: '#cbd5e1' }} />}
+          </div>
+        </div>
+      )}
+
+      {demo.country_india_pct != null && (
+        <div className="mb-3 flex items-center justify-between text-[12px]">
+          <span className="text-[#444] font-medium">🇮🇳 India-based audience</span>
+          <span className="tabular-nums font-bold" style={{ color: ACCENT }}>{Math.round(demo.country_india_pct)}%</span>
+        </div>
+      )}
+
+      {demo.top_cities.length > 0 && (
+        <div className="mb-3.5">
+          <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Top locations</div>
+          <div className="space-y-1.5">
+            {demo.top_cities.map((c) => (
+              <div key={c.city}>
+                <div className="flex items-center justify-between text-[12px]">
+                  <span className="text-[#444] font-medium">📍 {c.city}</span>
+                  <span className="tabular-nums text-[#888] font-semibold">{Math.round(c.pct)}%</span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full bg-[#f0eefb] overflow-hidden">
+                  <div className="h-full rounded-full transition-all" style={{ width: `${(c.pct / maxCity) * 100}%`, background: ACCENT }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {demo.age_bands.length > 0 && (
+        <div className="mb-3.5">
+          <div className="text-[10px] uppercase tracking-wide text-[#999] mb-1.5">Age of audience</div>
+          <div className="flex items-end gap-2 h-16">
+            {demo.age_bands.map((a) => (
+              <div key={a.label} className="flex-1 flex flex-col items-center gap-1 justify-end">
+                <span className="text-[10px] font-semibold text-[#666] tabular-nums">{Math.round(a.pct)}%</span>
+                <div className="w-full rounded-t bg-[#ddd6fb]" style={{ height: `${Math.max(6, (a.pct / maxAge) * 100)}%` }} title={`${a.label}: ${a.pct}%`} />
+                <span className="text-[9px] text-[#999] whitespace-nowrap">{a.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {demo.top_languages.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {demo.top_languages.map((l) => (
+            <span key={l.lang} className="text-[10px] px-2 py-0.5 rounded-full bg-[#f5f3ff] font-semibold uppercase" style={{ color: ACCENT }}>
+              {l.lang} {Math.round(l.pct)}%
+            </span>
+          ))}
+        </div>
+      )}
+
+      {demo.sample_size != null && demo.sample_size > 0 && (
+        <p className="mt-3 text-[10px] text-[#bbb] leading-snug">
+          Inferred from ~{demo.sample_size} engaged-audience signals. Directional, not exact.
+        </p>
       )}
     </div>
   );
