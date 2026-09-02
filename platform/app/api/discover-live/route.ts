@@ -28,6 +28,43 @@ import { searchCreatorsInDb } from '@/lib/creator-db-search';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+// Attach each creator's STORED home location (city / country) to a result page
+// so the cards can show "Based in …" at a glance and the UI can filter by place
+// — one batch query, no per-card LLM. Mutates in place and returns the array.
+// Best-effort: never fails the search over a location hiccup. Shared by the
+// fast (dbOnly), trends and full search paths so locations show everywhere.
+async function attachStoredLocations<T extends LiveProfile>(results: T[]): Promise<T[]> {
+  try {
+    const handleList = Array.from(new Set(results.map((r) => r.username.toLowerCase())));
+    if (handleList.length === 0) return results;
+    const rows = await getBolticClient().query<{
+      handle: string; primary_city: string | null; region: string | null; is_indian: boolean | null;
+    }>(
+      `SELECT handle, primary_city, region, is_indian FROM creators
+        WHERE platform = 'instagram' AND lower(handle) = ANY($1)`,
+      [handleList],
+    );
+    const byHandle = new Map<string, { location: string | null; is_indian: boolean | null }>();
+    for (const r of rows) {
+      const city = (r.primary_city ?? '').trim();
+      const region = (r.region ?? '').trim();
+      // Prefer city; fall back to region (country/state). Skip bare compass
+      // directions ("north"/"south") that aren't a real place label.
+      const label = city || (/^(north|south|east|west|central)$/i.test(region) ? '' : region);
+      byHandle.set(r.handle.toLowerCase(), { location: label || null, is_indian: r.is_indian });
+    }
+    for (const r of results) {
+      const hit = byHandle.get(r.username.toLowerCase());
+      const rr = r as T & { location?: string | null; is_indian?: boolean | null };
+      if (hit?.location) rr.location = hit.location;
+      if (rr.is_indian == null && hit?.is_indian != null) rr.is_indian = hit.is_indian;
+    }
+  } catch {
+    /* location is a nice-to-have; never fail the search over it */
+  }
+  return results;
+}
+
 // POST /api/discover-live
 //   { prompt, seeds?: string[], names?: string[], depth?, max? }
 //   → { prompt, tokens, results, from_db, from_live, persisted, ... }
@@ -185,6 +222,7 @@ export async function POST(req: NextRequest) {
         })
         .slice(0, max)
         .map((p) => ({ ...p, completeness: completenessScore(p) }));
+      await attachStoredLocations(trendsResults);
       return NextResponse.json({
         prompt,
         tokens,
@@ -219,6 +257,7 @@ export async function POST(req: NextRequest) {
         })
         .slice(0, max)
         .map((p) => ({ ...p, completeness: completenessScore(p) }));
+      await attachStoredLocations(fast);
       return NextResponse.json({
         prompt,
         tokens,
@@ -631,43 +670,9 @@ export async function POST(req: NextRequest) {
     if (i > 0) results.unshift(results.splice(i, 1)[0]!);
   }
 
-  // Attach each creator's STORED home location (city / country) so the result
-  // cards can show "Based in …" at a glance and the UI can filter by place —
-  // one batch query over the page we're returning, no per-card LLM. The drawer
-  // still does live inference on open, which caches into these same columns, so
-  // coverage improves over time.
-  try {
-    const handleList = Array.from(new Set(results.map((r) => r.username.toLowerCase())));
-    if (handleList.length > 0) {
-      const locRows = await getBolticClient().query<{
-        handle: string; primary_city: string | null; region: string | null; is_indian: boolean | null;
-      }>(
-        `SELECT handle, primary_city, region, is_indian FROM creators
-          WHERE platform = 'instagram' AND lower(handle) = ANY($1)`,
-        [handleList],
-      );
-      const locByHandle = new Map<string, { location: string | null; is_indian: boolean | null }>();
-      for (const lr of locRows) {
-        const city = (lr.primary_city ?? '').trim();
-        const region = (lr.region ?? '').trim();
-        // Prefer city; fall back to region (country/state). Skip generic
-        // direction tags ("north"/"south") that aren't a real place label.
-        const label = city || (/^(north|south|east|west|central)$/i.test(region) ? '' : region);
-        locByHandle.set(lr.handle.toLowerCase(), {
-          location: label || null,
-          is_indian: lr.is_indian,
-        });
-      }
-      for (const r of results) {
-        const hit = locByHandle.get(r.username.toLowerCase());
-        const rr = r as typeof r & { location?: string | null; is_indian?: boolean | null };
-        if (hit?.location) rr.location = hit.location;
-        if (rr.is_indian == null && hit?.is_indian != null) rr.is_indian = hit.is_indian;
-      }
-    }
-  } catch {
-    /* location is a nice-to-have; never fail the search over it */
-  }
+  // Attach each creator's stored home location (city/country) for the cards +
+  // location filter. Runs on the full path; the fast/trends paths do the same.
+  await attachStoredLocations(results);
 
   // Tag saved creators with the search's region/niche. When the prompt has no
   // niche (e.g. a bare seed handle), infer it from the crawled network so a
