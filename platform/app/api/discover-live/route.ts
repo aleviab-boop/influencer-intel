@@ -631,6 +631,44 @@ export async function POST(req: NextRequest) {
     if (i > 0) results.unshift(results.splice(i, 1)[0]!);
   }
 
+  // Attach each creator's STORED home location (city / country) so the result
+  // cards can show "Based in …" at a glance and the UI can filter by place —
+  // one batch query over the page we're returning, no per-card LLM. The drawer
+  // still does live inference on open, which caches into these same columns, so
+  // coverage improves over time.
+  try {
+    const handleList = Array.from(new Set(results.map((r) => r.username.toLowerCase())));
+    if (handleList.length > 0) {
+      const locRows = await getBolticClient().query<{
+        handle: string; primary_city: string | null; region: string | null; is_indian: boolean | null;
+      }>(
+        `SELECT handle, primary_city, region, is_indian FROM creators
+          WHERE platform = 'instagram' AND lower(handle) = ANY($1)`,
+        [handleList],
+      );
+      const locByHandle = new Map<string, { location: string | null; is_indian: boolean | null }>();
+      for (const lr of locRows) {
+        const city = (lr.primary_city ?? '').trim();
+        const region = (lr.region ?? '').trim();
+        // Prefer city; fall back to region (country/state). Skip generic
+        // direction tags ("north"/"south") that aren't a real place label.
+        const label = city || (/^(north|south|east|west|central)$/i.test(region) ? '' : region);
+        locByHandle.set(lr.handle.toLowerCase(), {
+          location: label || null,
+          is_indian: lr.is_indian,
+        });
+      }
+      for (const r of results) {
+        const hit = locByHandle.get(r.username.toLowerCase());
+        const rr = r as typeof r & { location?: string | null; is_indian?: boolean | null };
+        if (hit?.location) rr.location = hit.location;
+        if (rr.is_indian == null && hit?.is_indian != null) rr.is_indian = hit.is_indian;
+      }
+    }
+  } catch {
+    /* location is a nice-to-have; never fail the search over it */
+  }
+
   // Tag saved creators with the search's region/niche. When the prompt has no
   // niche (e.g. a bare seed handle), infer it from the crawled network so a
   // search for one fashion creator still tags the whole network as "fashion".
