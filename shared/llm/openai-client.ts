@@ -1153,14 +1153,39 @@ Return ONLY JSON: {"results":[{"id":"<id>","tags":["stripes","pastel palette"]}]
         ? t.toLowerCase().trim().replace(/^#+/, '').replace(/[^a-z0-9 &+-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32)
         : '';
 
-    const instruction = `Each line below is an Instagram post caption, preceded by its id. For EACH id, return 1-3 short lowercase TOPIC tags naming the SUBJECT of the post — what it's actually about — so we can see which topics are trending.
-Good topics: content genres and subjects like "grwm", "get ready with me", "budget travel", "street food", "skincare routine", "gym transformation", "day in my life", "unboxing", "recipe", "study with me", "diwali fashion", "wedding outfit", "product review", "morning routine", "car review", "makeup tutorial".
+    // Bare NICHE names and generic filler are categories, not trends — a brand
+    // learns nothing from "fashion" topping the board. Drop them so only the
+    // specific micro-trend inside a niche ("oversized blazer", "glass skin")
+    // survives. Kept in sync with the "BANNED" list in the prompt below.
+    const STOP = new Set([
+      'fashion', 'beauty', 'makeup', 'skincare', 'skincare routine', 'skin care',
+      'haircare', 'hair care', 'style', 'styling', 'outfit', 'outfits', 'ootd',
+      'outfit inspiration', 'outfit inspo', 'fashion collection', 'lifestyle',
+      'wellness', 'health', 'fitness', 'workout', 'gym', 'travel', 'food',
+      'cooking', 'cooking tips', 'recipe', 'recipes', 'art', 'motivation',
+      'self care', 'selfcare', 'product review', 'review', 'comedy', 'family',
+      'nature', 'photography', 'tips', 'beauty tips', 'skincare tips',
+      'health tips', 'shopping', 'makeup tutorial', 'hair', 'reels', 'reel',
+      'trending', 'viral', 'content', 'daily', 'inspiration', 'inspo', 'love',
+      'life', 'fun', 'happy', 'mood', 'vibes', 'aesthetic', 'photooftheday',
+    ]);
+
+    const instruction = `Each line below is an Instagram post caption, preceded by its id. For EACH id, return 1-3 short lowercase SPECIFIC topic tags naming the concrete SUBJECT of the post — the exact thing shown or done — so a brand can see the MICRO-TRENDS inside a niche.
+
+Be SPECIFIC, never a broad category. The tag must name the concrete item / trend / technique / subject:
+- Fashion → "oversized blazer", "co-ord set", "cargo pants", "corset top", "saree draping", "festive lehenga", "y2k outfit", "old money look", "monochrome fit", "linen coord", "cutout dress", "baggy jeans"
+- Beauty → "glass skin", "glazed donut skin", "latte makeup", "blush draping", "underpainting", "gel nails", "hair oiling", "bridal makeup", "lip combo"
+- Fitness → "pilates", "hyrox", "12-3-30 walk", "calisthenics", "protein shake", "mobility drills"
+- Food → "high protein breakfast", "street food", "one pot pasta", "millet recipe", "matcha recipe"
+- Travel → "budget travel", "solo trip", "himalaya trek", "cafe hopping", "hidden beaches"
+
+BANNED as tags — these are broad NICHES/filler, never return them: fashion, beauty, makeup, skincare, skincare routine, haircare, hair care, style, outfit, ootd, outfit inspiration, lifestyle, wellness, health, fitness, workout, travel, food, cooking, recipe, art, motivation, self care, product review, comedy, family, nature, photography, tips, beauty tips, skincare tips, shopping, makeup tutorial, trending, viral, aesthetic.
+
 Rules:
-- Tag the SUBJECT/genre, NOT hashtags, NOT visual aesthetics (no "pastel", "stripes"), NOT the brand name, NOT emojis.
-- Use canonical, singular-ish forms so the same topic doesn't fragment (prefer "street food" over "eating street food in delhi").
-- 2-4 words max per tag. Lowercase. No '#'.
-- If a caption has no clear topic (just emojis, a handle, one word), return an empty tags array for it.
-Return ONLY JSON: {"results":[{"id":"<id>","topics":["grwm","skincare routine"]}]} — one entry per id.`;
+- 2-4 words per tag. Lowercase. No '#', no emojis, no brand names, no city-only tags.
+- Prefer canonical forms so one micro-trend doesn't fragment ("oversized blazer", not "wearing an oversized blazer today").
+- If a caption is generic (emojis, a handle, or you can only tell the broad niche), return an EMPTY tags array. Better empty than broad.
+Return ONLY JSON: {"results":[{"id":"<id>","topics":["oversized blazer","old money look"]}]} — one entry per id.`;
 
     const lines = usable.map((it) => `id ${it.postId}: ${it.caption}`).join('\n');
 
@@ -1179,7 +1204,13 @@ Return ONLY JSON: {"results":[{"id":"<id>","topics":["grwm","skincare routine"]}
       for (const r of parsed.results ?? []) {
         if (!r.id) continue;
         const topics = Array.isArray(r.topics)
-          ? Array.from(new Set(r.topics.map(norm).filter((t) => t.length >= 3))).slice(0, 3)
+          ? Array.from(
+              new Set(
+                r.topics
+                  .map(norm)
+                  .filter((t) => t.length >= 3 && !STOP.has(t)), // drop bare niche words / filler
+              ),
+            ).slice(0, 3)
           : [];
         out[String(r.id)] = topics;
       }
