@@ -61,6 +61,37 @@ interface Bucket {
 const HASHTAG_RE = /#([\p{L}0-9_]{2,60})/gu;
 const MS_PER_DAY = 86_400_000;
 
+// First-party FASHION-MOTIF lexicon. Patterns/prints + a few named aesthetics we
+// mine straight from post CAPTIONS (no images, no vision cost), so the "Visual
+// aesthetics" board shows real momentum even before post thumbnails are
+// backfilled. The optional vision pass (withVisual) augments the SAME buckets
+// when thumbnails exist, so text + image signal combine into one trend.
+const MOTIF_LEXICON: { id: string; label: string; re: RegExp }[] = [
+  { id: 'polka dots', label: 'Polka dots', re: /polka[\s-]?dots?/i },
+  { id: 'stripes', label: 'Stripes', re: /\bstripe[sd]?\b|\bpinstripe|\bbreton\b/i },
+  { id: 'floral print', label: 'Floral print', re: /\bfloral[s]?\b/i },
+  { id: 'checks', label: 'Checks', re: /\bcheck(?:s|ed|ered)?\b/i },
+  { id: 'gingham', label: 'Gingham', re: /\bgingham\b/i },
+  { id: 'plaid', label: 'Plaid / tartan', re: /\bplaid\b|\btartan\b/i },
+  { id: 'houndstooth', label: 'Houndstooth', re: /\bhoundstooth\b/i },
+  { id: 'paisley', label: 'Paisley', re: /\bpaisley\b/i },
+  { id: 'animal print', label: 'Animal print', re: /\banimal print\b|\bleopard\b|\bcheetah print\b|\bzebra print\b|\bsnake ?skin\b/i },
+  { id: 'tie dye', label: 'Tie dye', re: /\btie[\s-]?dye\b/i },
+  { id: 'camo', label: 'Camo', re: /\bcamo(?:uflage)?\b/i },
+  { id: 'sequins', label: 'Sequins', re: /\bsequin(?:s|ned)?\b/i },
+  { id: 'metallic', label: 'Metallic', re: /\bmetallic\b|\bchrome\b/i },
+  { id: 'denim', label: 'Denim', re: /\bdenim\b/i },
+  { id: 'pastel palette', label: 'Pastel palette', re: /\bpastel[s]?\b/i },
+  { id: 'monochrome', label: 'Monochrome', re: /\bmonochrome\b|\bmonochromatic\b/i },
+  { id: 'y2k', label: 'Y2K', re: /\by2k\b/i },
+  { id: 'cottagecore', label: 'Cottagecore', re: /\bcottagecore\b/i },
+  { id: 'old money', label: 'Old money', re: /\bold[\s-]?money\b|\bquiet luxury\b/i },
+  { id: 'streetwear', label: 'Streetwear', re: /\bstreetwear\b/i },
+  { id: 'athleisure', label: 'Athleisure', re: /\bathleisure\b/i },
+  { id: 'coquette', label: 'Coquette', re: /\bcoquette\b/i },
+  { id: 'boho', label: 'Boho', re: /\bboho\b|\bbohemian\b/i },
+];
+
 // Map an Instagram post_type to a small, stable set of format identifiers so
 // "Reel", "CLIPS", "video" etc. don't fragment into separate trends.
 function normaliseFormat(postType: string | null): { id: string; label: string } | null {
@@ -134,6 +165,10 @@ export async function ingestTrendSignals(
 
   const hashtags = new Map<string, Bucket>();
   const formats = new Map<string, Bucket>();
+  // Fashion motifs (patterns/aesthetics). Seeded from caption keywords below and
+  // augmented by the optional vision pass, so both text and image signal land in
+  // the same buckets and surface as one `visual` trend.
+  const visuals = new Map<string, Bucket>();
   // Posts (with a thumbnail, in the 2×window range) that are candidates for
   // visual tagging. Deduped by post id; keeps the timing + categories so the
   // motif aggregation uses the same current-vs-prior windowing as hashtags.
@@ -184,6 +219,14 @@ export async function ingestTrendSignals(
           if (!tag || seen.has(tag)) continue; // count a tag once per post
           seen.add(tag);
           bump(hashtags, tag, `#${m[1]}`, ts, cats);
+        }
+      }
+
+      // Fashion motifs straight from the caption text — first-party pattern
+      // signal that works today (most posts have a caption, few have a thumbnail).
+      if (p.caption) {
+        for (const m of MOTIF_LEXICON) {
+          if (m.re.test(p.caption)) bump(visuals, m.id, m.label, ts, cats);
         }
       }
 
@@ -261,9 +304,9 @@ export async function ingestTrendSignals(
   const formatsWritten = await upsert('format', formats, { minCount, cap: 20 });
 
   // ── Visual / aesthetic motifs ────────────────────────────────────────────
-  // Vision-tag post thumbnails (budgeted + cached), then aggregate the motifs
-  // exactly like hashtags so image-only trends surface with velocity + phase.
-  const visuals = new Map<string, Bucket>();
+  // Caption-derived motifs are already in `visuals` (above). When enabled, the
+  // vision pass tags post thumbnails (budgeted + cached) and bumps the SAME
+  // buckets, so text + image signal combine before we compute velocity + phase.
   let postsVisuallyTagged = 0;
   let visualsWritten = 0;
   if (withVisual && visualPosts.size > 0) {
@@ -323,9 +366,13 @@ export async function ingestTrendSignals(
       for (const tag of tags) bump(visuals, tag, titleCase(tag), p.when, p.cats);
     }
 
-    // Visual coverage is budget-limited, so counts run lower than hashtags —
-    // use a gentler threshold and a modest cap.
-    visualsWritten = await upsert('visual', visuals, { minCount: 2, cap: 60 });
+  }
+
+  // Write the combined caption+vision motif buckets. Runs regardless of the
+  // vision pass so caption-derived pattern trends surface on their own. Gentler
+  // threshold than hashtags since coverage is thinner.
+  if (visuals.size > 0) {
+    visualsWritten = await upsert('visual', visuals, { minCount: 2, cap: 80 });
   }
 
   // ── Topics ────────────────────────────────────────────────────────────────
