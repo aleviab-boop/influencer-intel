@@ -1190,6 +1190,121 @@ Return ONLY JSON: {"results":[{"id":"<id>","topics":["grwm","skincare routine"]}
   }
 
   /**
+   * ESTIMATE a creator's likely AUDIENCE demographics from the creator's own
+   * public signals — bio, category/niche, follower tier, and recent post
+   * captions — in ONE cheap gpt-4o-mini call. This is a CONTENT-based estimate
+   * (what audience this kind of creator tends to attract), NOT a follower sample
+   * — so it always returns something for any creator, including brand-new ones
+   * never scraped, but it is lower-confidence than follower sampling and is
+   * labelled source:'content_inference' so the UI can badge it honestly.
+   *
+   * Returns a blob shaped like AudienceDemographics (gender/age_bands/top_cities/
+   * top_languages/country_india_pct + confidence/sample_size/source), or null on
+   * failure. India-first city vocabulary to match the platform's market.
+   */
+  async inferAudienceFromContent(input: {
+    handle: string;
+    display_name?: string | null;
+    bio?: string | null;
+    category?: string | null;
+    follower_count?: number | null;
+    captions?: string[];
+  }): Promise<Record<string, unknown> | null> {
+    const captions = (input.captions ?? [])
+      .map((c) => (c ?? '').replace(/\s+/g, ' ').trim().slice(0, 200))
+      .filter((c) => c.length >= 4)
+      .slice(0, 12);
+    const followers = Number(input.follower_count ?? 0) || 0;
+
+    const sys = `You are an audience-research analyst for an Indian influencer-marketing platform. From a creator's OWN public profile (bio, niche, follower tier, recent post captions) ESTIMATE the demographics of the audience this creator most likely attracts. This is an informed estimate from the creator's content — not a measured follower sample — so be calibrated and conservative, and lean on the niche + language of the captions.
+
+Output STRICT JSON only, with EXACTLY these keys:
+{
+  "gender": { "female": <0-100 int>, "male": <0-100 int>, "other": <0-100 int> },   // must sum to ~100
+  "age_bands": { "18_24": <int>, "25_34": <int>, "35_44": <int>, "45_64": <int> },   // shares, sum to ~100
+  "top_cities": [ { "city": "Mumbai", "pct": <int> }, ... 3-5 Indian cities, descending, plausible spread ],
+  "top_languages": [ { "lang": "EN"|"HI"|"local", "pct": <int> }, ... ],
+  "country_india_pct": <0-100 int>
+}
+Rules:
+- Infer gender skew from niche: beauty/fashion → female-leaning; tech/gaming/automotive → male-leaning; food/travel/comedy → balanced. Don't force 50/50.
+- Infer cities from language/regional cues in captions when present (e.g. Bengali → Kolkata weight, Marathi → Pune/Mumbai, Tamil → Chennai); otherwise spread across metros.
+- Age skews younger for larger/entertainment accounts, older for finance/parenting/home.
+- Numbers are shares (percent), each group summing to ~100. Use whole integers.
+- Return ONLY the JSON object.`;
+
+    const user = JSON.stringify({
+      handle: input.handle,
+      name: input.display_name ?? '',
+      bio: (input.bio ?? '').slice(0, 400),
+      niche: input.category ?? '',
+      follower_count: followers,
+      recent_captions: captions,
+    });
+
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.classificationModel, // gpt-4o-mini — text-only, cheap
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: user },
+        ],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const p = JSON.parse(raw) as Record<string, unknown>;
+
+      const g = (p.gender ?? {}) as Record<string, unknown>;
+      const gender = {
+        female: Math.round(Number(g.female) || 0),
+        male: Math.round(Number(g.male) || 0),
+        other: Math.round(Number(g.other) || 0),
+      };
+      // Reject an empty/degenerate answer.
+      if (gender.female + gender.male + gender.other <= 0) return null;
+
+      const cities = Array.isArray(p.top_cities)
+        ? (p.top_cities as Array<Record<string, unknown>>)
+            .map((c) => ({ city: String(c.city ?? '').trim(), pct: Math.round(Number(c.pct) || 0) }))
+            .filter((c) => c.city && c.pct > 0)
+            .slice(0, 5)
+        : [];
+      const languages = Array.isArray(p.top_languages)
+        ? (p.top_languages as Array<Record<string, unknown>>)
+            .map((l) => ({ lang: String(l.lang ?? '').trim(), pct: Math.round(Number(l.pct) || 0) }))
+            .filter((l) => l.lang && l.pct > 0)
+            .slice(0, 5)
+        : [];
+      const ageRaw = (p.age_bands ?? {}) as Record<string, unknown>;
+      const age_bands = {
+        '18_24': Math.round(Number(ageRaw['18_24']) || 0),
+        '25_34': Math.round(Number(ageRaw['25_34']) || 0),
+        '35_44': Math.round(Number(ageRaw['35_44']) || 0),
+        '45_64': Math.round(Number(ageRaw['45_64']) || 0),
+      };
+
+      // Confidence scales with how much signal we had (captions + bio).
+      const signal = captions.length + (input.bio && input.bio.length > 20 ? 2 : 0);
+      const confidence = signal >= 8 ? 'medium' : 'low';
+
+      return {
+        source: 'content_inference',
+        confidence,
+        sample_size: captions.length,
+        gender,
+        age_bands,
+        top_cities: cities,
+        top_languages: languages,
+        country_india_pct: Math.round(Number(p.country_india_pct) || 0) || null,
+        computed_at: new Date().toISOString(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Generate per-creator reasoning for a shortlist position.
    * Uses gpt-4o (quality matters here for brand trust).
    */

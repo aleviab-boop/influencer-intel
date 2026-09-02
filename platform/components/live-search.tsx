@@ -3618,8 +3618,10 @@ function CampaignFitCard({ profile }: { profile: ProfileData }) {
 // (vision/scrape signals), so we badge the confidence and keep it "directional".
 function AudienceCard({ demo }: { demo: NonNullable<ProfileData['audience_demographics']> }) {
   const g = demo.gender;
-  const confLabel =
-    demo.confidence === 'high'
+  const fromContent = demo.source === 'content_inference';
+  const confLabel = fromContent
+    ? 'Estimated from content'
+    : demo.confidence === 'high'
       ? 'Estimated · high confidence'
       : demo.confidence === 'medium'
         ? 'Estimated · medium confidence'
@@ -3701,11 +3703,15 @@ function AudienceCard({ demo }: { demo: NonNullable<ProfileData['audience_demogr
         </div>
       )}
 
-      {demo.sample_size != null && demo.sample_size > 0 && (
+      {fromContent ? (
+        <p className="mt-3 text-[10px] text-[#bbb] leading-snug">
+          Estimated from this creator&rsquo;s bio and recent posts — not a follower sample. Directional only.
+        </p>
+      ) : demo.sample_size != null && demo.sample_size > 0 ? (
         <p className="mt-3 text-[10px] text-[#bbb] leading-snug">
           Inferred from ~{demo.sample_size} engaged-audience signals. Directional, not exact.
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

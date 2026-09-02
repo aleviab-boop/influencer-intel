@@ -14,7 +14,7 @@ import { getBolticClient } from '@influencer-intel/shared/db';
 import { getOpenAIClient } from '@influencer-intel/shared/llm';
 
 export const runtime = 'nodejs';
-export const maxDuration = 20;
+export const maxDuration = 30; // headroom for the on-the-fly audience estimate
 
 // GET /api/ig-profile?handle=X
 //   Powers the profile drawer. HYBRID model:
@@ -240,6 +240,62 @@ async function loadDemographics(handle: string): Promise<AudienceDemographics | 
       [handle],
     );
     return normalizeDemographics(rows[0]?.audience_demographics ?? null);
+  } catch {
+    return null;
+  }
+}
+
+// Cache an on-the-fly estimate back onto the creator row so the next open is
+// instant and other surfaces (search, media kit) benefit. Guarded to NULL so an
+// estimate NEVER clobbers a real vision/follower-sampled blob. No-op for a brand
+// -new handle with no row yet — a later open persists it once the row exists.
+async function persistDemographics(handle: string, blob: Record<string, unknown>): Promise<void> {
+  try {
+    await getBolticClient().query(
+      `UPDATE creators SET audience_demographics = $1::json
+       WHERE platform = 'instagram' AND lower(handle) = lower($2)
+         AND audience_demographics IS NULL`,
+      [JSON.stringify(blob), handle],
+    );
+  } catch {
+    /* best-effort cache write */
+  }
+}
+
+// The "mandatory demographics" path. If the DB already has a demographics blob
+// (real follower-sampled or a prior estimate), use it. Otherwise ESTIMATE from
+// the creator's own content (bio + niche + captions) via gpt-4o-mini — so EVERY
+// profile opened shows an audience read, even a brand-new handle never saved.
+// Content estimates are labelled source:'content_inference' + low/medium
+// confidence so the UI badges them honestly. Never throws.
+async function resolveDemographics(
+  handle: string,
+  existing: AudienceDemographics | null,
+  content: {
+    display_name?: string | null;
+    bio?: string | null;
+    category?: string | null;
+    follower_count?: number | null;
+    captions?: string[];
+  },
+): Promise<AudienceDemographics | null> {
+  if (existing) return existing;
+  const captions = (content.captions ?? []).filter((c) => (c ?? '').trim().length >= 4);
+  const hasSignal = (content.bio ?? '').trim().length > 0 || captions.length > 0;
+  if (!hasSignal) return null; // nothing to estimate from → hide rather than hallucinate
+  try {
+    const blob = await getOpenAIClient().inferAudienceFromContent({
+      handle,
+      display_name: content.display_name ?? null,
+      bio: content.bio ?? null,
+      category: content.category ?? null,
+      follower_count: content.follower_count ?? null,
+      captions,
+    });
+    if (!blob) return null;
+    const normalized = normalizeDemographics(blob);
+    if (normalized) after(() => persistDemographics(handle, blob));
+    return normalized;
   } catch {
     return null;
   }
@@ -519,6 +575,16 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
 
   const related = await dbRelated(handle, niche, followers);
 
+  // Mandatory audience read: stored blob if present, else estimate from the
+  // creator's stored bio + post captions.
+  const resolvedDemo = await resolveDemographics(handle, demographics, {
+    display_name: (c.display_name as string) ?? '',
+    bio,
+    category: niche,
+    follower_count: followers,
+    captions: recent.map((p) => p.caption),
+  });
+
   return NextResponse.json({
     handle: c.handle,
     full_name: (c.display_name as string) ?? '',
@@ -538,7 +604,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
     collabs,
     sponsored_posts: sponsored,
     engagement: er,
-    audience_demographics: demographics,
+    audience_demographics: resolvedDemo,
     analytics: buildAnalytics(followers, recent),
     source: 'db',
     last_scraped_at: (c.last_scraped_at as string) ?? null,
@@ -579,6 +645,16 @@ async function apifyDrawerResponse(handle: string, sp: ScrapedProfile, demograph
 
   const related = await dbRelated(handle, sp.category ?? '', sp.follower_count);
 
+  // Mandatory audience read: use the stored blob if present, else estimate from
+  // this Apify profile's bio + captions.
+  const resolvedDemo = await resolveDemographics(handle, demographics, {
+    display_name: sp.display_name,
+    bio,
+    category: sp.category ?? '',
+    follower_count: sp.follower_count,
+    captions: recent.map((p) => p.caption),
+  });
+
   // Warm the DB copy in the background so a later DB-serve still has the grid.
   after(() => persistApify(handle, sp, er));
 
@@ -601,7 +677,7 @@ async function apifyDrawerResponse(handle: string, sp: ScrapedProfile, demograph
     collabs,
     sponsored_posts: 0,
     engagement: er,
-    audience_demographics: demographics,
+    audience_demographics: resolvedDemo,
     analytics: buildAnalytics(sp.follower_count, recent),
     source: 'live',
     last_scraped_at: new Date().toISOString(),
@@ -768,6 +844,14 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const demographics = await resolveDemographics(handle, await demoPromise, {
+      display_name: u.full_name,
+      bio,
+      category: niche,
+      follower_count: followers,
+      captions: recent.map((p) => p.caption),
+    });
+
     return NextResponse.json({
       handle: u.username,
       full_name: u.full_name ?? '',
@@ -787,7 +871,7 @@ export async function GET(req: NextRequest) {
       collabs,
       sponsored_posts: 0,
       engagement: er,
-      audience_demographics: await demoPromise,
+      audience_demographics: demographics,
       analytics: buildAnalytics(followers, recent),
       source: 'live',
       last_scraped_at: new Date().toISOString(),
