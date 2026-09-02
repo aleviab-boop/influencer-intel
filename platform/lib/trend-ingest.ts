@@ -92,6 +92,123 @@ const MOTIF_LEXICON: { id: string; label: string; re: RegExp }[] = [
   { id: 'boho', label: 'Boho', re: /\bboho\b|\bbohemian\b/i },
 ];
 
+// ── Curated topic vocabulary ────────────────────────────────────────────────
+// The caption topic model returns free-text micro-trends; this lexicon keeps the
+// board ON-DOMAIN (fashion / beauty / fitness / food / travel / wellness that a
+// creator-marketing brand cares about) and CANONICAL (merges "coord set" /
+// "co-ord set" → one "Co-ord Set"). A topic that matches NO entry is dropped, so
+// one-off subjects (telescope launches, supplements, real estate) never rank.
+// Add entries here to admit new trends. Order doesn't matter — first match wins.
+const TOPIC_LEXICON: { id: string; label: string; re: RegExp }[] = [
+  // Western fashion
+  { id: 'oversized blazer', label: 'Oversized Blazer', re: /oversized blazer|power blazer|\bblazer\b/i },
+  { id: 'co-ord set', label: 'Co-ord Set', re: /co[\s-]?ord|coordinate set/i },
+  { id: 'cargo pants', label: 'Cargo Pants', re: /cargo pant/i },
+  { id: 'baggy jeans', label: 'Baggy Jeans', re: /baggy jean|wide[\s-]?leg/i },
+  { id: 'corset top', label: 'Corset Top', re: /corset/i },
+  { id: 'cutout dress', label: 'Cut-out Dress', re: /cut[\s-]?out dress/i },
+  { id: 'slip dress', label: 'Slip Dress', re: /slip dress/i },
+  { id: 'summer dress', label: 'Summer Dress', re: /summer dress|sundress|summer outfit/i },
+  { id: 'linen outfit', label: 'Linen Outfit', re: /linen (shirt|coord|co[\s-]?ord|set|outfit|dress)/i },
+  { id: 'oversized shirt', label: 'Oversized Shirt', re: /oversized shirt|boyfriend shirt|tunic/i },
+  { id: 'high heels', label: 'High Heels', re: /high heel|stiletto|\bpumps?\b/i },
+  { id: 'chunky sneakers', label: 'Chunky Sneakers', re: /chunky sneaker|dad shoe|\bsneaker/i },
+  { id: 'double denim', label: 'Double Denim', re: /denim on denim|double denim/i },
+  { id: 'y2k style', label: 'Y2K / 2000s Style', re: /\by2k\b|2000s|2k style|noughties/i },
+  { id: 'old money', label: 'Old Money', re: /old[\s-]?money|quiet luxury|clean girl/i },
+  { id: 'monochrome fit', label: 'Monochrome Fit', re: /monochrome/i },
+  { id: 'streetwear', label: 'Streetwear', re: /streetwear/i },
+  { id: 'athleisure', label: 'Athleisure', re: /athleisure/i },
+  { id: 'fashion week', label: 'Fashion Week', re: /fashion week/i },
+  // Indian / ethnic wear
+  { id: 'saree draping', label: 'Saree Draping', re: /saree drap|sari drap|drape.*sar[ei]/i },
+  { id: 'kurta set', label: 'Kurta Set', re: /\bkurt[ai]/i },
+  { id: 'lehenga', label: 'Lehenga', re: /leh[en]?ga/i },
+  { id: 'anarkali', label: 'Anarkali', re: /anarkali/i },
+  { id: 'farshi salwar', label: 'Farshi Salwar', re: /farshi|salwar|shalwar/i },
+  { id: 'indo western', label: 'Indo-Western', re: /indo[\s-]?western/i },
+  { id: 'bandhani', label: 'Bandhani', re: /bandhani|bandhej/i },
+  { id: 'banarasi', label: 'Banarasi', re: /banarasi/i },
+  { id: 'festive wear', label: 'Festive Wear', re: /festive (wear|outfit|look|collection)|diwali outfit|pujo|navratri/i },
+  { id: 'bridal wear', label: 'Bridal Wear', re: /bridal (lehenga|collection|wear|outfit)|wedding (outfit|guest|look)/i },
+  // Beauty / makeup
+  { id: 'glass skin', label: 'Glass Skin', re: /glass skin/i },
+  { id: 'glazed donut', label: 'Glazed Donut Skin', re: /glazed donut|donut skin/i },
+  { id: 'latte makeup', label: 'Latte Makeup', re: /latte makeup/i },
+  { id: 'sunkissed makeup', label: 'Sun-kissed Makeup', re: /sun[\s-]?kissed/i },
+  { id: 'blush draping', label: 'Blush Draping', re: /blush drap/i },
+  { id: 'underpainting', label: 'Underpainting', re: /underpaint/i },
+  { id: 'bridal makeup', label: 'Bridal Makeup', re: /bridal makeup/i },
+  { id: 'soft glam', label: 'Soft Glam', re: /soft glam/i },
+  { id: 'no makeup makeup', label: 'No-makeup Makeup', re: /no[\s-]?makeup[\s-]?makeup/i },
+  { id: 'lip combo', label: 'Lip Combo', re: /lip combo/i },
+  { id: 'lip liner', label: 'Lip Liner', re: /lip liner|lip pencil/i },
+  { id: 'lip gloss', label: 'Lip Gloss', re: /lip gloss|lip oil/i },
+  { id: 'contouring', label: 'Contouring', re: /contour/i },
+  { id: 'makeup masterclass', label: 'Makeup Masterclass', re: /makeup (masterclass|class)/i },
+  { id: 'korean beauty', label: 'Korean Beauty', re: /korean (makeup|beauty)|k[\s-]?beauty/i },
+  // Skincare
+  { id: 'retinol', label: 'Retinol', re: /retinol/i },
+  { id: 'vitamin c serum', label: 'Vitamin C Serum', re: /vitamin c|vit[\s.]?c serum/i },
+  { id: 'niacinamide', label: 'Niacinamide', re: /niacinamide/i },
+  { id: 'sunscreen', label: 'Sunscreen / SPF', re: /sunscreen|\bspf\b/i },
+  { id: 'double cleansing', label: 'Double Cleansing', re: /double cleans/i },
+  { id: 'face yoga', label: 'Face Yoga', re: /face yoga/i },
+  { id: 'skin cycling', label: 'Skin Cycling', re: /skin cycling/i },
+  { id: 'gua sha', label: 'Gua Sha', re: /gua sha/i },
+  // Hair / nails
+  { id: 'hair oiling', label: 'Hair Oiling', re: /hair oil/i },
+  { id: 'rice water', label: 'Rice Water Hair', re: /rice water/i },
+  { id: 'heatless curls', label: 'Heatless Curls', re: /heatless curl/i },
+  { id: 'chrome nails', label: 'Chrome Nails', re: /chrome nail/i },
+  { id: 'gel nails', label: 'Gel Nails', re: /gel (nails|extension|manicure)/i },
+  { id: 'french tips', label: 'French Tips', re: /french (tip|manicure)/i },
+  // Fitness
+  { id: 'pilates', label: 'Pilates', re: /pilates/i },
+  { id: 'calisthenics', label: 'Calisthenics', re: /calisthenic/i },
+  { id: 'strength training', label: 'Strength Training', re: /strength train|weight train/i },
+  { id: 'hyrox', label: 'Hyrox', re: /hyrox/i },
+  { id: 'mobility', label: 'Mobility Work', re: /mobility (drill|training|work|routine)/i },
+  { id: 'meal prep', label: 'Meal Prep', re: /meal prep/i },
+  { id: 'protein recipe', label: 'Protein Recipe', re: /protein (shake|recipe|smoothie|bowl)/i },
+  { id: 'home workout', label: 'Home Workout', re: /home workout/i },
+  { id: 'yoga flow', label: 'Yoga Flow', re: /yoga (flow|routine|practice)/i },
+  // Food
+  { id: 'high protein', label: 'High-protein Meals', re: /high[\s-]?protein/i },
+  { id: 'street food', label: 'Street Food', re: /street food/i },
+  { id: 'pasta recipe', label: 'Pasta Recipe', re: /one[\s-]?pot pasta|pasta recipe/i },
+  { id: 'millet recipe', label: 'Millet Recipe', re: /millet/i },
+  { id: 'matcha', label: 'Matcha', re: /matcha/i },
+  { id: 'vegan recipe', label: 'Vegan Recipe', re: /vegan (cake|recipe|dessert|food)/i },
+  { id: 'gluten free', label: 'Gluten-free', re: /gluten[\s-]?free/i },
+  { id: 'air fryer', label: 'Air Fryer', re: /air fryer/i },
+  { id: 'healthy breakfast', label: 'Healthy Breakfast', re: /healthy breakfast|breakfast recipe/i },
+  { id: 'sourdough', label: 'Sourdough', re: /sourdough/i },
+  // Travel
+  { id: 'budget travel', label: 'Budget Travel', re: /budget travel/i },
+  { id: 'solo travel', label: 'Solo Travel', re: /solo (trip|travel)/i },
+  { id: 'cafe hopping', label: 'Cafe Hopping', re: /cafe hop/i },
+  { id: 'trekking', label: 'Trekking', re: /\btrek|himalaya/i },
+  { id: 'hidden gems', label: 'Hidden Gems', re: /hidden gem/i },
+  { id: 'staycation', label: 'Staycation', re: /staycation/i },
+  { id: 'road trip', label: 'Road Trip', re: /road trip/i },
+  // Wellness / lifestyle
+  { id: 'essential oils', label: 'Essential Oils', re: /essential oil/i },
+  { id: 'gut health', label: 'Gut Health', re: /gut health/i },
+  { id: 'cold plunge', label: 'Cold Plunge', re: /cold plunge|ice bath/i },
+  { id: 'journaling', label: 'Journaling', re: /journal/i },
+  { id: 'digital detox', label: 'Digital Detox', re: /digital detox/i },
+  // Home / creative
+  { id: 'home decor', label: 'Home Decor', re: /home decor|room (makeover|decor|tour)/i },
+  { id: 'cinematic edit', label: 'Cinematic Edit', re: /cinematic (portrait|reel|edit|shot)/i },
+];
+
+// Map a free-text topic tag to a curated canonical trend, or null to drop it.
+function canonicalTopic(tag: string): { id: string; label: string } | null {
+  for (const t of TOPIC_LEXICON) if (t.re.test(tag)) return { id: t.id, label: t.label };
+  return null;
+}
+
 // Map an Instagram post_type to a small, stable set of format identifiers so
 // "Reel", "CLIPS", "video" etc. don't fragment into separate trends.
 function normaliseFormat(postType: string | null): { id: string; label: string } | null {
@@ -437,10 +554,14 @@ export async function ingestTrendSignals(
       const tags = cachedTags.get(id);
       if (!tags || tags.length === 0) continue;
       const p = topicPosts.get(id)!;
-      for (const tag of tags) bump(topics, tag, titleCase(tag), p.when, p.cats);
+      for (const tag of tags) {
+        // Keep only curated, on-domain trends; merge variants to one canonical id.
+        const canon = canonicalTopic(tag);
+        if (canon) bump(topics, canon.id, canon.label, p.when, p.cats);
+      }
     }
 
-    topicsWritten = await upsert('topic', topics, { minCount: 3, cap: 120 });
+    topicsWritten = await upsert('topic', topics, { minCount: 2, cap: 120 });
   }
 
   return {
