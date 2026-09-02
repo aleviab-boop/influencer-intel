@@ -84,6 +84,14 @@ interface ProfileData {
     top_languages: { lang: string; pct: number }[];
     country_india_pct: number | null;
   } | null;
+  creator_location?: {
+    country: string | null;
+    country_code: string | null;
+    city: string | null;
+    confidence: 'low' | 'medium' | 'high' | null;
+    source: 'stored' | 'content_inference';
+    evidence: string[];
+  } | null;
   analytics?: {
     authenticity: {
       score: number;
@@ -3209,6 +3217,21 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
                 </span>
               )}
             </div>
+            {profile.creator_location && (profile.creator_location.city || profile.creator_location.country) && (() => {
+              const loc = profile.creator_location;
+              const where = [loc.city, loc.country].filter(Boolean).join(', ');
+              const estimated = loc.source === 'content_inference';
+              const tip = estimated
+                ? `Estimated from the creator's own content${loc.evidence.length ? ` — signals: ${loc.evidence.join(', ')}` : ''}. Not from Instagram (IG doesn't expose a creator's city).`
+                : 'From stored profile data.';
+              return (
+                <div className="text-[12px] text-[#666] mt-0.5 flex items-center gap-1 truncate" title={tip}>
+                  <span aria-hidden>📍</span>
+                  <span className="truncate">Based in {where}</span>
+                  {estimated && <span className="text-[10px] text-[#aaa] whitespace-nowrap">· estimated</span>}
+                </div>
+              );
+            })()}
           </div>
         </div>
 

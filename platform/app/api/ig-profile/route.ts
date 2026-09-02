@@ -301,6 +301,111 @@ async function resolveDemographics(
   }
 }
 
+// ---- creator location ("Based in …") --------------------------------------
+// Where the CREATOR is based — distinct from audience demographics. IG exposes
+// no city field, so we use whatever the DB already knows, else infer it from the
+// creator's own content signals (bio, captions, country-coded brand handles).
+export interface CreatorLocation {
+  country: string | null;
+  country_code: string | null;
+  city: string | null;
+  confidence: 'low' | 'medium' | 'high' | null;
+  source: 'stored' | 'content_inference';
+  evidence: string[];
+}
+
+// Read the stored home-location columns (best-effort). Returns null when the
+// creator has no row or no location on record → the caller then infers.
+async function loadStoredLocation(handle: string): Promise<CreatorLocation | null> {
+  try {
+    const rows = await getBolticClient().query<{
+      primary_city: string | null;
+      primary_state: string | null;
+      region: string | null;
+    }>(
+      `SELECT primary_city, primary_state, region FROM creators
+       WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
+      [handle],
+    );
+    const r = rows[0];
+    if (!r) return null;
+    const city = (r.primary_city ?? '').trim() || null;
+    const region = (r.region ?? r.primary_state ?? '').trim() || null;
+    if (!city && !region) return null; // nothing stored → infer instead
+    return {
+      country: region,
+      country_code: null,
+      city,
+      confidence: 'high',
+      source: 'stored',
+      evidence: [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Cache an inferred location back onto the creator row so the next open is
+// instant. Only fills columns that are currently empty (never clobbers a
+// human/curated value) and only writes a country/city we're reasonably sure of.
+async function persistCreatorLocation(handle: string, loc: CreatorLocation): Promise<void> {
+  if (loc.source !== 'content_inference' || loc.confidence === 'low') return;
+  try {
+    const db = getBolticClient();
+    const isIndian = loc.country_code === 'IN' || /india/i.test(loc.country ?? '');
+    await db.query(
+      `UPDATE creators
+          SET primary_city = COALESCE(NULLIF(primary_city, ''), $2),
+              region       = COALESCE(NULLIF(region, ''), $3),
+              is_indian    = $4
+        WHERE platform = 'instagram' AND lower(handle) = lower($1)
+          AND (primary_city IS NULL OR primary_city = '' OR region IS NULL OR region = '')`,
+      [handle, loc.city ?? '', loc.country ?? '', isIndian],
+    );
+  } catch {
+    /* best-effort cache write */
+  }
+}
+
+// The "Based in …" resolver. Stored columns win; otherwise infer from the
+// creator's own bio + captions + country-coded brand handles. Never throws.
+async function resolveCreatorLocation(
+  handle: string,
+  stored: CreatorLocation | null,
+  content: {
+    display_name?: string | null;
+    bio?: string | null;
+    captions?: string[];
+    brand_handles?: string[];
+    external_url?: string | null;
+  },
+): Promise<CreatorLocation | null> {
+  if (stored) return stored;
+  try {
+    const inferred = await getOpenAIClient().inferCreatorLocation({
+      handle,
+      display_name: content.display_name ?? null,
+      bio: content.bio ?? null,
+      captions: content.captions ?? [],
+      brand_handles: content.brand_handles ?? [],
+      external_url: content.external_url ?? null,
+    });
+    if (!inferred) return null;
+    const loc: CreatorLocation = {
+      country: inferred.country,
+      country_code: inferred.country_code,
+      city: inferred.city,
+      confidence: inferred.confidence,
+      source: 'content_inference',
+      evidence: inferred.evidence,
+    };
+    after(() => persistCreatorLocation(handle, loc));
+    return loc;
+  } catch {
+    return null;
+  }
+}
+
 interface RecentPost {
   shortcode: string;
   thumbnail: string | null;
@@ -493,6 +598,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
       sponsored_posts: 0,
       engagement: null,
       audience_demographics: demographics,
+      creator_location: null,
       source: 'pending',
       refreshing: false,
       last_scraped_at: null,
@@ -585,6 +691,19 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
     captions: recent.map((p) => p.caption),
   });
 
+  // "Based in …": stored columns win, else infer from bio + captions + collabs.
+  const storedCity = ((c.primary_city as string) ?? '').trim() || null;
+  const storedLoc: CreatorLocation | null = storedCity
+    ? { country: null, country_code: null, city: storedCity, confidence: 'high', source: 'stored', evidence: [] }
+    : null;
+  const creatorLocation = await resolveCreatorLocation(handle, storedLoc, {
+    display_name: (c.display_name as string) ?? '',
+    bio,
+    captions: recent.map((p) => p.caption),
+    brand_handles: collabs.map((cb) => cb.handle),
+    external_url: contact.link,
+  });
+
   return NextResponse.json({
     handle: c.handle,
     full_name: (c.display_name as string) ?? '',
@@ -605,6 +724,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
     sponsored_posts: sponsored,
     engagement: er,
     audience_demographics: resolvedDemo,
+    creator_location: creatorLocation,
     analytics: buildAnalytics(followers, recent),
     source: 'db',
     last_scraped_at: (c.last_scraped_at as string) ?? null,
@@ -655,6 +775,14 @@ async function apifyDrawerResponse(handle: string, sp: ScrapedProfile, demograph
     captions: recent.map((p) => p.caption),
   });
 
+  const creatorLocation = await resolveCreatorLocation(handle, await loadStoredLocation(handle), {
+    display_name: sp.display_name,
+    bio,
+    captions: recent.map((p) => p.caption),
+    brand_handles: collabs.map((c) => c.handle),
+    external_url: contact.link ?? sp.external_url,
+  });
+
   // Warm the DB copy in the background so a later DB-serve still has the grid.
   after(() => persistApify(handle, sp, er));
 
@@ -678,6 +806,7 @@ async function apifyDrawerResponse(handle: string, sp: ScrapedProfile, demograph
     sponsored_posts: 0,
     engagement: er,
     audience_demographics: resolvedDemo,
+    creator_location: creatorLocation,
     analytics: buildAnalytics(sp.follower_count, recent),
     source: 'live',
     last_scraped_at: new Date().toISOString(),
@@ -739,9 +868,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
 
-  // Audience demographics live in the DB regardless of which path serves the
-  // drawer, so load them in parallel with the live fetch (no added latency).
+  // Audience demographics + the creator's stored home location live in the DB
+  // regardless of which path serves the drawer, so load both in parallel with
+  // the live fetch (no added latency).
   const demoPromise = loadDemographics(handle);
+  const locPromise = loadStoredLocation(handle);
 
   // 1) LIVE via the cookie scraper (through the residential relay/proxy). This is
   //    the primary path: real followers, recent posts, live ER, reel-forecast
@@ -852,6 +983,14 @@ export async function GET(req: NextRequest) {
       captions: recent.map((p) => p.caption),
     });
 
+    const creatorLocation = await resolveCreatorLocation(handle, await locPromise, {
+      display_name: u.full_name,
+      bio,
+      captions: recent.map((p) => p.caption),
+      brand_handles: collabs.map((c) => c.handle),
+      external_url: contact.link ?? u.external_url ?? null,
+    });
+
     return NextResponse.json({
       handle: u.username,
       full_name: u.full_name ?? '',
@@ -872,6 +1011,7 @@ export async function GET(req: NextRequest) {
       sponsored_posts: 0,
       engagement: er,
       audience_demographics: demographics,
+      creator_location: creatorLocation,
       analytics: buildAnalytics(followers, recent),
       source: 'live',
       last_scraped_at: new Date().toISOString(),

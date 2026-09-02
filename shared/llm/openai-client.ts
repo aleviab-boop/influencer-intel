@@ -1336,6 +1336,115 @@ Rules:
   }
 
   /**
+   * Infer the CREATOR'S OWN home location (where THEY are based) — NOT their
+   * audience. Instagram exposes no city field on a profile, so this reads the
+   * signals a human would: country cues in hashtags (#gorkhaedition → Nepal),
+   * handle/brand suffixes (@royalenfield.np → Nepal, .pk/.bd/.lk), language,
+   * place names and tagged brands. Deliberately does NOT default to India —
+   * returns country:null / "Unknown" with low confidence when there's no signal,
+   * so we stop mislabelling Nepali/Bangladeshi/Sri-Lankan creators as Indian.
+   * Cheap (gpt-4o-mini, text-only). Returns null on a degenerate answer.
+   */
+  async inferCreatorLocation(input: {
+    handle: string;
+    display_name?: string | null;
+    bio?: string | null;
+    captions?: string[];
+    brand_handles?: string[];
+    external_url?: string | null;
+  }): Promise<{
+    country: string | null;
+    country_code: string | null;
+    city: string | null;
+    confidence: 'low' | 'medium' | 'high';
+    evidence: string[];
+    source: string;
+    computed_at: string;
+  } | null> {
+    const captions = (input.captions ?? [])
+      .map((c) => (c ?? '').replace(/\s+/g, ' ').trim().slice(0, 200))
+      .filter((c) => c.length >= 3)
+      .slice(0, 12);
+    const brandHandles = (input.brand_handles ?? [])
+      .map((h) => (h ?? '').trim().replace(/^@/, ''))
+      .filter(Boolean)
+      .slice(0, 15);
+
+    // No signal at all → don't call the model, don't guess.
+    const hasSignal =
+      (input.bio ?? '').trim().length > 0 || captions.length > 0 || brandHandles.length > 0;
+    if (!hasSignal) return null;
+
+    const sys = `You are a location analyst for a South-Asia influencer-marketing platform. From a creator's OWN public profile, determine where the CREATOR is based (their home country/city) — NOT their audience.
+
+Read the signals a human would:
+- Country-coded handles/brands: a "@..np" suffix → Nepal, ".pk" → Pakistan, ".bd" → Bangladesh, ".lk" → Sri Lanka, ".in" → India.
+- Country cues in hashtags/words: "gorkha", "kathmandu", "nepali" → Nepal; "dhaka", "bangla" → Bangladesh; "lahore", "karachi" → Pakistan; Indian city/state names → India.
+- Tagged local brands, currency, language, place names.
+
+Output STRICT JSON only:
+{
+  "country": "<full country name, or null if genuinely no signal>",
+  "country_code": "<ISO-2 like IN, NP, PK, BD, LK, or null>",
+  "city": "<city if inferable, else null>",
+  "confidence": "low" | "medium" | "high",
+  "evidence": ["<short signal you used>", ...]   // 1-4 concrete tokens, e.g. "@royalenfield.np", "#gorkhaedition"
+}
+Rules:
+- DO NOT default to India. If the signals point to Nepal/Pakistan/Bangladesh/Sri Lanka, say so.
+- If there is truly no location signal, return country:null, city:null, confidence:"low", evidence:[].
+- "high" only when a country-coded handle/brand or an explicit place name is present; otherwise "low" or "medium".
+- Return ONLY the JSON object.`;
+
+    const user = JSON.stringify({
+      handle: input.handle,
+      name: input.display_name ?? '',
+      bio: (input.bio ?? '').slice(0, 400),
+      external_url: input.external_url ?? '',
+      brand_handles: brandHandles,
+      recent_captions: captions,
+    });
+
+    try {
+      const res = await this.client.chat.completions.create({
+        model: this.classificationModel, // gpt-4o-mini — text-only, cheap
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: user },
+        ],
+      });
+      const raw = res.choices[0]?.message?.content ?? '{}';
+      const p = JSON.parse(raw) as Record<string, unknown>;
+
+      const country = typeof p.country === 'string' && p.country.trim() ? p.country.trim() : null;
+      const city = typeof p.city === 'string' && p.city.trim() ? p.city.trim() : null;
+      // Nothing usable came back.
+      if (!country && !city) return null;
+
+      const cc = typeof p.country_code === 'string' ? p.country_code.trim().toUpperCase().slice(0, 2) : '';
+      const confRaw = String(p.confidence ?? 'low').toLowerCase();
+      const confidence = confRaw === 'high' ? 'high' : confRaw === 'medium' ? 'medium' : 'low';
+      const evidence = Array.isArray(p.evidence)
+        ? (p.evidence as unknown[]).map((e) => String(e).trim()).filter(Boolean).slice(0, 4)
+        : [];
+
+      return {
+        country,
+        country_code: cc || null,
+        city,
+        confidence,
+        evidence,
+        source: 'content_inference',
+        computed_at: new Date().toISOString(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Generate per-creator reasoning for a shortlist position.
    * Uses gpt-4o (quality matters here for brand trust).
    */
