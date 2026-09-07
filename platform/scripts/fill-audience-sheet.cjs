@@ -168,8 +168,16 @@ async function inferLocation(p) {
   const user = JSON.stringify({ handle: p.handle, name: p.display_name ?? '', bio: (p.bio ?? '').slice(0, 400), external_url: p.external_url ?? '', brand_handles: brands, recent_captions: captions });
   const r = await chatJSON(LOC_SYS, user, 0.1);
   if (!r) return null;
-  const country = typeof r.country === 'string' && r.country.trim() ? r.country.trim() : null;
-  const city = typeof r.city === 'string' && r.city.trim() ? r.city.trim() : null;
+  // Model sometimes emits the literal string "null"/"none"/"unknown" instead of
+  // JSON null — treat those as no-signal so we never write "null, null".
+  const clean = (v) => {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    if (!s || /^(null|none|n\/a|na|unknown|not sure|undefined)$/i.test(s)) return null;
+    return s;
+  };
+  const country = clean(r.country);
+  const city = clean(r.city);
   if (!country && !city) return null;
   return [city, country].filter(Boolean).join(', ');
 }
