@@ -111,6 +111,7 @@ interface ApifyPost {
   videoViewCount?: number;
   displayUrl?: string; // the grid tile image (Apify's post thumbnail)
   images?: string[]; // sometimes populated instead of displayUrl on carousels
+  ownerUsername?: string; // Apify includes tagged/collab posts owned by OTHER accounts
 }
 
 interface ApifyProfile {
@@ -132,7 +133,18 @@ interface ApifyProfile {
 // fetchInstagramProfile so downstream (quality score, ER filters) sees identical
 // numbers regardless of which path produced them.
 function toScrapedProfile(u: ApifyProfile, handle: string): ScrapedProfile {
-  const recent_posts: ScrapedPost[] = (u.latestPosts ?? []).slice(0, 12).map((p) => {
+  // Apify's latestPosts mixes in TAGGED/COLLAB posts owned by OTHER accounts — a
+  // 500K-like post by a mega-creator can land in a nano-creator's feed and blow up
+  // their engagement numbers. Keep only the creator's OWN posts before any math.
+  const owner = (u.username ?? handle).toLowerCase();
+  const ownPosts = (u.latestPosts ?? [])
+    .filter((p) => {
+      const o = p.ownerUsername ? p.ownerUsername.toLowerCase() : '';
+      return !o || o === owner;
+    })
+    .slice(0, 12);
+
+  const recent_posts: ScrapedPost[] = ownPosts.map((p) => {
     const kind = (p.type ?? '').toLowerCase();
     return {
       platform_post_id: String(p.shortCode ?? ''),
@@ -148,13 +160,16 @@ function toScrapedProfile(u: ApifyProfile, handle: string): ScrapedProfile {
   });
 
   const followers = num(u.followersCount);
-  const withLikes = recent_posts.filter((p) => p.like_count > 0);
-  const avg_likes = withLikes.length
-    ? Math.round(withLikes.reduce((s, p) => s + p.like_count, 0) / withLikes.length)
-    : null;
-  const avg_comments = recent_posts.length
-    ? Math.round(recent_posts.reduce((s, p) => s + p.comment_count, 0) / recent_posts.length)
-    : null;
+  // MEDIAN, not mean — robust to viral-reel spikes and dud posts, which otherwise
+  // produce misleading (sometimes impossible: likes > followers) "average" values.
+  const median = (arr: number[]): number | null => {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m]! : Math.round((s[m - 1]! + s[m]!) / 2);
+  };
+  const avg_likes = median(recent_posts.map((p) => p.like_count).filter((x) => x > 0));
+  const avg_comments = median(recent_posts.map((p) => p.comment_count));
   const engagement_rate =
     followers > 0 && (avg_likes != null || avg_comments != null)
       ? ((avg_likes ?? 0) + (avg_comments ?? 0)) / followers
