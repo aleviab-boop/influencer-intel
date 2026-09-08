@@ -455,10 +455,15 @@ export function expandStateTokens(tokens: string[]): string[] {
   return Array.from(out);
 }
 
-// A token is a "location" (excluded from the niche gate) if it's a city OR a state.
+// A token is a "location" (excluded from the niche gate) if it's an Indian city,
+// an Indian state, OR a foreign place explicitly named in the query (nepal,
+// dubai, london…). Foreign places must count as locations too, otherwise a
+// "nepal" search treats "nepal" as a NICHE term — the niche gate then requires
+// "nepal" in the creator's niche/handle and drops Nepali creators who only carry
+// it in their location field. (See FOREIGN_LOCATIONS below.)
 export function isLocationToken(t: string): boolean {
   const l = t.toLowerCase();
-  return KNOWN_CITIES.has(l) || l in STATE_CITIES;
+  return KNOWN_CITIES.has(l) || l in STATE_CITIES || isForeignLocationToken(l);
 }
 
 const NICHE_SYNONYMS: Record<string, string[]> = {
@@ -1052,6 +1057,19 @@ const FOREIGN_MARKERS = [
   'france', 'paris', 'netherlands', 'amsterdam', 'spain', 'italy', 'pakistan', 'bangladesh',
   'nepal', 'sri lanka',
 ];
+
+// Foreign place tokens the user might EXPLICITLY search for ("creators in nepal",
+// "dubai fashion"). Derived from FOREIGN_MARKERS, normalized to single lowercase
+// tokens (spaces/dots stripped) so a query token matches: "new york" → "newyork",
+// "u.s.a" → "usa", "sri lanka" → "srilanka". When such a token is present the
+// caller knows the user WANTS foreign creators, so the India-first ranking sink
+// is switched off for that query (see creator-db-search.ts).
+export const FOREIGN_LOCATIONS = new Set(
+  FOREIGN_MARKERS.map((m) => m.replace(/[^a-z]/g, '')).filter(Boolean),
+);
+export function isForeignLocationToken(t: string): boolean {
+  return FOREIGN_LOCATIONS.has(t.toLowerCase().replace(/[^a-z]/g, ''));
+}
 function detectIndian(text: string, externalUrl?: string | null): boolean | undefined {
   const t = ` ${text.toLowerCase()} `;
   const url = (externalUrl ?? '').toLowerCase();

@@ -4,7 +4,7 @@
 // creator's searchable text fields; the score is how many tokens matched.
 
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { extractContact, expandStateTokens, isLocationToken, type LiveProfile } from './live-discovery';
+import { extractContact, expandStateTokens, isLocationToken, isForeignLocationToken, type LiveProfile } from './live-discovery';
 
 // Searchable text split by field group, so a token's relevance depends on
 // WHERE it matched — not just whether it matched. For a campaign brief
@@ -109,6 +109,11 @@ export async function searchCreatorsInDb(
   // location search leads with genuine locals, not global niche mega-creators.
   const locTokenIdx = tokens.map((t, i) => (isLocationToken(t) ? i : -1)).filter((i) => i >= 0);
   const hasLocToken = locTokenIdx.length > 0;
+  // Did the user explicitly name a FOREIGN place ("nepal", "dubai", "london")?
+  // If so they WANT foreign creators, so the India-first ranking sink below must
+  // NOT bury them — a "nepal" search should lead with Nepali (is_indian=false)
+  // creators, not push them under every unflagged Indian one.
+  const hasForeignLocToken = tokens.some((t) => isForeignLocationToken(t));
   const locHitExpr = hasLocToken
     ? locTokenIdx
         .map((i) => `(${LOC_TXT} like $${i + 1} or ${ID_TXT} like $${i + 1} or ${BIO_TXT} like $${i + 1} or ${NICHE_TXT} like $${i + 1})`)
@@ -227,8 +232,11 @@ export async function searchCreatorsInDb(
     -- is_indian is only ~half-populated, so a hard filter would also hide genuine
     -- Indian creators not yet flagged; sinking only the KNOWN-foreign is safe.)
     -- Then LOCALS LEAD when the query names a place, weighted relevance, then reach.
+    -- The India-first sink is SKIPPED when the query explicitly names a foreign
+    -- place (hasForeignLocToken) — a "nepal"/"dubai" search must surface those
+    -- foreign creators, not bury them under every unflagged Indian one.
     order by source_bucket asc,
-             (case when is_indian = false then 1 else 0 end) asc,
+             ${hasForeignLocToken ? '' : `(case when is_indian = false then 1 else 0 end) asc,`}
              ${hasLocToken ? `loc_match desc,` : ''}
              score desc,
              follower_count desc nulls last
