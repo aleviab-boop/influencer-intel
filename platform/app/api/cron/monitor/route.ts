@@ -59,6 +59,45 @@ async function alertOnce(key: string, text: string, cooldownMin = 60): Promise<v
   }
 }
 
+// Read a stored timestamp (ms epoch, 0 if unset) — used to age a throttle spell.
+async function readTs(key: string): Promise<number> {
+  const db = getBolticClient();
+  try {
+    const rows = await db.query<{ last_sent_at: string }>(
+      `SELECT last_sent_at FROM alert_state WHERE key = $1`,
+      [key],
+    );
+    return rows[0]?.last_sent_at ? new Date(rows[0].last_sent_at).getTime() : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Record when a problem spell FIRST started — preserves the original timestamp on
+// repeat calls (ON CONFLICT DO NOTHING), so we can measure how long it's persisted.
+async function armSince(key: string): Promise<void> {
+  const db = getBolticClient();
+  try {
+    await db.query(
+      `INSERT INTO alert_state (key, last_sent_at) VALUES ($1, now())
+       ON CONFLICT (key) DO NOTHING`,
+      [key],
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
+// Delete a bookkeeping key silently (no recovery ping).
+async function clearKey(key: string): Promise<void> {
+  const db = getBolticClient();
+  try {
+    await db.query(`DELETE FROM alert_state WHERE key = $1`, [key]);
+  } catch {
+    /* best-effort */
+  }
+}
+
 // Clear a problem's alert state; if it was active, fire a one-line recovery ping.
 async function clearAlert(key: string, recoveryText?: string): Promise<void> {
   const db = getBolticClient();
@@ -82,11 +121,11 @@ export async function GET(req: NextRequest) {
   const db = getBolticClient();
   const fired: string[] = [];
 
-  // 1) LIVE DATA PIPELINE — best-of-2 authenticated probe through the relay +
+  // 1) LIVE DATA PIPELINE — best-of-3 authenticated probe through the relay +
   //    cookie. web_profile_info flaps 400/empty on a single throttled egress IP,
-  //    so a lone failure isn't actionable — retry once before alerting.
+  //    so a lone failure isn't actionable — retry before alerting.
   let status = -1; // last HTTP status seen (-1 = never got a response = relay down)
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
     try {
       const res = await igFetch(PROBE, { headers: PROBE_HEADERS });
@@ -102,15 +141,30 @@ export async function GET(req: NextRequest) {
     await clearAlert('live_cookie', ':white_check_mark: Live data flowing again — cookie/relay recovered.');
     await clearAlert('live_relay', ':white_check_mark: Relay reachable again — live data flowing.');
     await clearAlert('live_ratelimit');
+    await clearKey('live_ratelimit_since'); // clean 200 ends the throttle spell → reset the clock
     await clearAlert('live_http');
   } else if (status === 401 || status === 403) {
     fired.push('cookie_dead');
     await alertOnce('live_cookie', `:red_circle: *Live cookie rejected* (HTTP ${status}) — every IG session cookie is being refused. Live posts/engagement are down. Revive an account (\`npm run scraper:capture -- <handle>\`).`);
   } else if (status === 400 || status === 429) {
     // IG returns 400 (not just 429) as a soft anti-bot throttle on this endpoint
-    // when one egress IP hits it repeatedly — intermittent, self-clears.
-    fired.push('rate_limited');
-    await alertOnce('live_ratelimit', `:warning: *Instagram is soft-throttling (HTTP ${status})* — live data intermittent. Usually clears in 30–60 min; revive more accounts / spread egress to steady it.`);
+    // when one egress IP hits it repeatedly — intermittent, self-clears, and NOT
+    // tied to account health (all 6 accounts can be perfectly healthy while this
+    // one hot endpoint returns a transient 400 from the shared egress IP). The
+    // relay keeper curls this monitor every ~2 min, so a lone blip must NOT ping.
+    // Require the throttle to PERSIST for SUSTAIN_MIN of UNBROKEN throttling — any
+    // clean 200 in between resets the spell (see the healthy branch) — before it
+    // alerts at all; alertOnce then still caps repeats at once/hour. This is what
+    // stops the near-constant "soft-throttling" pings while accounts are fine.
+    const SUSTAIN_MIN = 15;
+    await armSince('live_ratelimit_since'); // record first-seen (no-op if already armed)
+    const since = await readTs('live_ratelimit_since');
+    if (since && Date.now() - since >= SUSTAIN_MIN * 60_000) {
+      fired.push('rate_limited');
+      await alertOnce('live_ratelimit', `:warning: *Instagram has soft-throttled the egress IP for ${SUSTAIN_MIN}+ min straight (HTTP ${status})* — live data is intermittent. This is an IP/egress issue, not an account problem (accounts can all be healthy). Usually self-clears; spread egress / revive more accounts to steady it.`);
+    } else {
+      fired.push('rate_limited_pending'); // observed, still within the grace window → staying silent
+    }
   } else if (status > 0) {
     fired.push(`http_${status}`);
     await alertOnce('live_http', `:warning: *Live probe returned HTTP ${status}* — unexpected response from Instagram.`);
@@ -118,6 +172,11 @@ export async function GET(req: NextRequest) {
     fired.push('relay_down');
     await alertOnce('live_relay', ':red_circle: *Relay unreachable* — the cloud app can’t reach Instagram. Is the relay + tunnel running on the crawl host? (`./run-relay.sh`)');
   }
+  // The throttle spell is only "unbroken" while we keep seeing 400/429. Any other
+  // outcome (cookie fail, relay down, unexpected HTTP) means we're no longer in a
+  // pure throttle state, so reset the clock — otherwise a stale timer could fire a
+  // premature throttle ping when 400s later resume.
+  if (status !== 400 && status !== 429) await clearKey('live_ratelimit_since');
 
   // 2) ACCOUNT POOL — ready count + accounts expiring soon.
   try {

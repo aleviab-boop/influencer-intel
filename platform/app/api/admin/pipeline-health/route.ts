@@ -45,6 +45,16 @@ let cookieDeadAlertedAt = 0;
 let cookieWasDead = false;
 const ALERT_COOLDOWN = 60 * 60_000; // 1h
 
+// Throttle hysteresis: web_profile_info on a hot target (the `instagram` account)
+// soft-throttles with an intermittent HTTP 400 on roughly 1-in-3 hits EVEN WHILE
+// real drawer fetches succeed — so a lone bad probe is noise, not a broken
+// pipeline. We only surface the "Soft-throttled" banner once the throttle is
+// SUSTAINED across several consecutive fresh checks; a single/occasional blip
+// stays "healthy" because live data is still flowing. This is what kills the
+// near-constant false banner (page re-polls every 30s and kept catching blips).
+let throttleStreak = 0;
+const THROTTLE_STREAK_TO_ALERT = 3; // ~3 fresh checks × 60s TTL ≈ a few sustained minutes
+
 async function maybeAlertCookieDead(data: Health) {
   if (data.status === 'cookie_dead') {
     const now = Date.now();
@@ -76,15 +86,16 @@ export async function GET() {
   } else {
     let status: Health['status'] = 'error';
     let label = 'Unknown', detail = '', httpCode: number | null = null;
-    // Best-of-2: web_profile_info on a single IP flaps between 200 and a
+    // Best-of-3: web_profile_info on a single IP flaps between 200 and a
     // soft-throttle 400 (~1/3 of hits). One bad probe should NOT flip the whole
-    // pipeline "down", so we retry once on any non-ok that isn't a hard
-    // auth rejection and take the better outcome.
+    // pipeline "down", so we retry on any non-ok that isn't a hard auth
+    // rejection and take the better outcome. Three tries drops the odds of a
+    // pure-noise all-fail cycle from ~1/9 to ~1/27.
     let httpStatus = -1;
     let relayDown = false;
     let authBody = ''; // body of a 401/403 — lets us tell the relay's plaintext
                        // "unauthorized" (key mismatch) from IG's JSON (dead cookie)
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 800));
       try {
         const ctrl = new AbortController();
@@ -148,6 +159,24 @@ export async function GET() {
       detail = `The relay tunnel returned a Cloudflare error (HTTP ${httpStatus}) — the cloudflared tunnel on the crawl host is down or restarting, so live reads can’t reach it (the worker keeps crawling locally regardless). Restart the relay daemon on the host; it republishes a fresh URL to the DB and live data self-heals within ~60s.`;
     } else {
       status = 'error'; label = `HTTP ${httpStatus}`; detail = `Unexpected response (HTTP ${httpStatus}).`;
+    }
+
+    // Throttle hysteresis (see note by throttleStreak): only surface the
+    // "Soft-throttled" banner once the throttle is sustained across several
+    // consecutive fresh checks. A lone/occasional 400/429 from the flaky probe
+    // endpoint is downgraded to "healthy" because live data is still flowing —
+    // this is what stops the near-constant false banner.
+    if (status === 'rate_limited') {
+      throttleStreak++;
+      if (throttleStreak < THROTTLE_STREAK_TO_ALERT) {
+        status = 'healthy';
+        label = 'Live data flowing';
+        detail = `Cookie + relay working — drawers show live posts & engagement. (A health probe soft-throttled on HTTP ${httpCode}, but that endpoint flaps intermittently and real fetches are unaffected; retrying transparently.)`;
+      }
+    } else {
+      // any non-throttle outcome (healthy, cookie_dead, relay_down, …) breaks the
+      // streak so a future lone blip starts counting fresh
+      throttleStreak = 0;
     }
     data = { status, label, detail, httpCode, relayConfigured, cookieConfigured, checkedAt: new Date().toISOString() };
   }
