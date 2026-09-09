@@ -161,7 +161,80 @@ function sendOnce(url: string, init: RequestInit, authedHeaders: Record<string, 
   return fetch(url, { ...init, headers: authedHeaders, ...(d ? { dispatcher: d } : {}) } as RequestInit);
 }
 
+// ---- profile-endpoint circuit breaker ---------------------------------------
+// Instagram clamps the web_profile_info endpoint hard (429 for hours) when it's
+// hammered, and every fetch fired DURING that window resets its decay clock — so
+// a busy app can keep itself blocked indefinitely (exactly what happened after
+// the worker crash-loop). This breaker records a shared cooldown in the DB
+// (system_config) that every serverless instance reads, and short-circuits live
+// fetches while it's active so the endpoint actually gets the quiet it needs to
+// recover. It self-heals: once the cooldown lapses, the next fetch probes IG for
+// real — a clean 200 clears the breaker, another 429 escalates the backoff — so
+// there's nothing to reset by hand.
+const BREAKER_ENABLED = process.env.IG_LIVE_BREAKER !== 'off';
+const COOLDOWN_KEY = 'ig_live_cooldown_until';
+const COOLDOWN_STEPS_MS = [5, 10, 20, 40, 60].map((m) => m * 60_000); // escalate, cap 60m
+let cooldownCache: { at: number; until: number } | null = null;
+const COOLDOWN_TTL = 30_000;
+
+async function cooldownUntil(): Promise<number> {
+  if (cooldownCache && Date.now() - cooldownCache.at < COOLDOWN_TTL) return cooldownCache.until;
+  let until = 0;
+  try {
+    const rows = await getBolticClient().query<{ value: string | null }>(
+      `SELECT value FROM system_config WHERE key = $1`,
+      [COOLDOWN_KEY],
+    );
+    until = Number(rows[0]?.value ?? 0) || 0;
+  } catch {
+    /* DB unreachable → fail OPEN (assume no cooldown) so a DB blip never blocks live data */
+  }
+  cooldownCache = { at: Date.now(), until };
+  return until;
+}
+
+async function tripCooldown(): Promise<void> {
+  const now = Date.now();
+  const remaining = Math.max(0, (cooldownCache?.until ?? 0) - now);
+  // Escalate: jump to the next step ABOVE whatever cooldown is already pending,
+  // so repeated 429s back off 5→10→20→40→60m instead of re-arming a flat delay.
+  const maxStep = COOLDOWN_STEPS_MS[COOLDOWN_STEPS_MS.length - 1] ?? 60 * 60_000;
+  const next = COOLDOWN_STEPS_MS.find((s) => s > remaining) ?? maxStep;
+  const until = now + next;
+  cooldownCache = { at: now, until };
+  try {
+    await getBolticClient().query(
+      `INSERT INTO system_config (key, value, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()`,
+      [COOLDOWN_KEY, String(until)],
+    );
+  } catch {
+    /* best-effort — the in-memory cache still trips this instance */
+  }
+}
+
+async function clearCooldown(): Promise<void> {
+  if ((cooldownCache?.until ?? 0) === 0) return; // already clear → skip the write per success
+  cooldownCache = { at: Date.now(), until: 0 };
+  try {
+    await getBolticClient().query(
+      `INSERT INTO system_config (key, value, updated_at) VALUES ($1, '0', now())
+       ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = now()`,
+      [COOLDOWN_KEY],
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
 export async function igFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  // Circuit breaker: while the profile endpoint is in a rate-limit cooldown,
+  // don't touch Instagram at all — return a synthetic 429 so callers fall back to
+  // cached/DB data and the endpoint gets the quiet it needs to recover.
+  if (BREAKER_ENABLED && Date.now() < (await cooldownUntil())) {
+    return new Response('ig live cooldown active', { status: 429, headers: { 'content-type': 'text/plain' } });
+  }
+
   const baseHeaders = headersToObject(init.headers);
   const relay = await relayUrl(); // current tunnel URL from DB (self-updating), env fallback
 
@@ -186,6 +259,7 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
   // circuit on the first JSON 200, so the extra tries only happen while throttled.
   const maxTries = Math.min(candidates.length, 6);
   let res!: Response;
+  let htmlWall = false;
   for (let i = 0; i < maxTries; i++) {
     res = await sendOnce(url, init, withAuth(baseHeaders, candidates[i]!), relay);
     // Fail over to the next account on a dead cookie (401/403) OR a throttle
@@ -202,8 +276,19 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
     // the pool. Every igFetch caller expects JSON, so an HTML 200 is always a
     // failed auth we should retry past. Any real result (JSON 200, 404, 5xx) → stop.
     const ct = res.headers.get('content-type') ?? '';
-    const htmlWall = res.status === 200 && ct.includes('text/html');
+    htmlWall = res.status === 200 && ct.includes('text/html');
     if (res.status !== 401 && res.status !== 403 && res.status !== 429 && !htmlWall) break;
+  }
+
+  // Trip or clear the breaker on the FINAL outcome (after exhausting every
+  // candidate). A 429/HTML-wall with no account left to try = the endpoint is
+  // clamped → arm the shared cooldown so we stop hammering. A clean JSON 200 =
+  // it's healthy again → clear the cooldown. A 401/403 (dead cookie) is NOT an
+  // endpoint throttle, so it neither trips nor clears. Fire-and-forget so the
+  // breaker bookkeeping never adds latency to the response.
+  if (BREAKER_ENABLED) {
+    if (res.status === 429 || htmlWall) void tripCooldown();
+    else if (res.status === 200) void clearCooldown();
   }
   return res;
 }
