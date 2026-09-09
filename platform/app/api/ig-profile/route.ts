@@ -1021,12 +1021,18 @@ export async function GET(req: NextRequest) {
 
   // 1b) The free cookie path failed but IG did NOT say the handle is gone (401/
   //     403/429/network → the pool is blocked/throttled, not a real 404). The
-  //     account is almost certainly live, so fall through to the PAID Apify actor
-  //     BEFORE dropping to the (possibly grid-less) DB row. This is what keeps the
-  //     drawer's photo + full 12-post grid rendering during a throttle instead of
-  //     going blank. No-op when APIFY_TOKEN is unset (apifyProfileOrNull → null),
-  //     so behavior is unchanged for anyone without Apify configured.
-  if (!notFound) {
+  //     account is almost certainly live, so we CAN fall through to the PAID Apify
+  //     actor BEFORE dropping to the (possibly grid-less) DB row — that keeps the
+  //     drawer's photo + full 12-post grid rendering during a throttle.
+  //
+  //     BUT this is a paid path, and during a sustained throttle EVERY live drawer
+  //     load falls through here — silently billing Apify on every profile view.
+  //     So it is GATED OFF by default: even with APIFY_TOKEN set, the fallback
+  //     only fires when IG_APIFY_FALLBACK === 'true'. Off, the drawer degrades to
+  //     the free DB row (partial data) instead of spending. Flip the flag on only
+  //     when you deliberately want the paid grid-during-throttle behavior.
+  const apifyFallbackEnabled = process.env.IG_APIFY_FALLBACK === 'true';
+  if (!notFound && apifyFallbackEnabled) {
     const sp = await apifyProfileOrNull(handle);
     if (sp) return apifyDrawerResponse(handle, sp, await demoPromise);
   }
