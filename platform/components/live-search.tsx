@@ -789,7 +789,6 @@ export function LiveSearch({
   const [tierFilter, setTierFilter] = useState<'all' | 'micro' | 'macro' | 'mega'>('all');
   // Location filter (client-side): free-text match against a creator's stored
   // home location (city/country), e.g. "nepal", "mumbai". Empty = no filter.
-  const [locFilter, setLocFilter] = useState('');
   // shortlist / recruit
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programId, setProgramId] = useState('');
@@ -1428,11 +1427,11 @@ export function LiveSearch({
   const anyFilterActive =
     minFollowers !== 0 || maxFollowers !== 0 || minER !== 0 || verifiedOnly ||
     healthyOnly || hideContacted || genderFilter !== 'any' || tierFilter !== 'all' ||
-    locFilter.trim() !== '' || !!briefFilter;
+    !!briefFilter;
   const clearFilters = () => {
     setMinFollowers(0); setMaxFollowers(0); setMinER(0);
     setVerifiedOnly(false); setHealthyOnly(false); setHideContacted(false);
-    setGenderFilter('any'); setTierFilter('all'); setLocFilter(''); setBriefFilter(null);
+    setGenderFilter('any'); setTierFilter('all'); setBriefFilter(null);
   };
 
   const shown = (() => {
@@ -1462,13 +1461,6 @@ export function LiveSearch({
           (tierFilter === 'micro' && followers < 100_000) ||
           (tierFilter === 'macro' && followers >= 100_000 && followers < 1_000_000) ||
           (tierFilter === 'mega' && followers >= 1_000_000)) &&
-        // Location filter: match the stored home location, and also the
-        // name/bio/category as a fallback so a place typed here still works even
-        // before that creator's location column is filled.
-        (locFilter.trim() === '' ||
-          `${p.location ?? ''} ${p.full_name ?? ''} ${p.biography ?? ''} ${p.category ?? ''}`
-            .toLowerCase()
-            .includes(locFilter.trim().toLowerCase())) &&
         (!hideContacted || !isContacted(p.username))
       );
     });
@@ -2100,20 +2092,6 @@ export function LiveSearch({
                 {label}
               </button>
             ))}
-          </div>
-          {/* location filter — free-text match on stored home location (city/country) */}
-          <div className="inline-flex items-center rounded-xl border border-[#e3def9] bg-[#faf9ff] px-2.5 py-1">
-            <span aria-hidden className="text-[12px] text-[#999] mr-1">📍</span>
-            <input
-              value={locFilter}
-              onChange={(e) => setLocFilter(e.target.value)}
-              placeholder="Based in… e.g. Nepal, Mumbai"
-              className="bg-transparent text-[13px] text-[#333] placeholder:text-[#aaa] outline-none w-[150px]"
-              title="Filter results by the creator's home location (city or country)"
-            />
-            {locFilter && (
-              <button onClick={() => setLocFilter('')} className="text-[12px] text-[#bbb] hover:text-[#777] ml-1" title="Clear location filter">✕</button>
-            )}
           </div>
         </div>
       )}
