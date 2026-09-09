@@ -12,6 +12,66 @@ import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } f
 let pool: Pool | null = null;
 let vectorParserRegistered = false;
 
+// ── Transient-fault retry ────────────────────────────────────────────────────
+// A brief DNS/network blip resolving the Boltic proxy host (getaddrinfo
+// ENOTFOUND / EAI_AGAIN, or a dropped connection) used to throw straight out of
+// every query. In the scraper that error propagated to the top-level
+// `run().catch(process.exit(1))`, so a *single* DNS hiccup killed the whole
+// worker process — and the shell's 5s restart loop then relaunched the browser
+// and machine-gunned Instagram's login endpoint, which is exactly what got the
+// egress IP rate-limited. Retrying the transient fault IN-PROCESS (with
+// exponential backoff) keeps the worker alive across blips so it never crashes
+// or relaunches on a network flake.
+//
+// Only errors that mean "the query never reached the server" are retried
+// (connection could not be established / was reset before a response), so a
+// retry can't double-apply a write. Query-level/SQL errors are never retried.
+const TRANSIENT_DB_CODES = new Set([
+  'ENOTFOUND',    // DNS: host not found (the boltic proxy blip we actually hit)
+  'EAI_AGAIN',    // DNS: temporary resolver failure
+  'ECONNREFUSED', // nothing listening yet / proxy restarting
+  'ECONNRESET',   // connection dropped before response
+  'ETIMEDOUT',    // connect timed out
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'EPIPE',
+]);
+
+function isTransientDbError(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  if (e?.code && TRANSIENT_DB_CODES.has(e.code)) return true;
+  // Some pg/undici errors carry the code only in the message.
+  const m = e?.message ?? '';
+  return /getaddrinfo|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|Connection terminated|terminating connection|Client has encountered a connection error/i.test(m);
+}
+
+const RETRY_MAX = Number(process.env.BOLTIC_RETRY_MAX ?? 5);
+const RETRY_BASE_MS = Number(process.env.BOLTIC_RETRY_BASE_MS ?? 500);
+
+/**
+ * Run a DB operation, retrying only transient connection faults with capped
+ * exponential backoff + jitter. Non-transient (SQL/constraint) errors rethrow
+ * immediately so real bugs still surface.
+ */
+async function withDbRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (err) {
+      attempt++;
+      if (attempt > RETRY_MAX || !isTransientDbError(err)) throw err;
+      const backoff =
+        Math.min(30_000, RETRY_BASE_MS * 2 ** (attempt - 1)) + Math.floor(Math.random() * 400);
+      const code = (err as { code?: string })?.code ?? 'net';
+      console.warn(
+        `[boltic] transient DB fault (${code}) on ${label} — retry ${attempt}/${RETRY_MAX} in ${backoff}ms`,
+      );
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
+}
+
 export function getPool(): Pool {
   if (pool) return pool;
   const connectionString = process.env.BOLTIC_DATABASE_URL;
@@ -124,12 +184,16 @@ export class BolticClient {
     sql: string,
     params: unknown[] = [],
   ): Promise<T[]> {
-    const res: QueryResult<T> = await this.pool.query<T>(sql, params as unknown[]);
+    const res: QueryResult<T> = await withDbRetry('query', () =>
+      this.pool.query<T>(sql, params as unknown[]),
+    );
     return res.rows.map(parseVectorFields) as T[];
   }
 
   async withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
+    // Retry only the client *acquisition* on a transient connect fault; once a
+    // BEGIN is issued we never re-run the body (that could double-apply writes).
+    const client = await withDbRetry('transaction:connect', () => this.pool.connect());
     try {
       await client.query('BEGIN');
       const result = await fn(client);

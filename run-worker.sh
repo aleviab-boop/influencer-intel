@@ -29,11 +29,27 @@ if [ -f .env ]; then
 fi
 
 exec caffeinate -i bash -c '
+  # Restart backoff. A flat 5s restart turns a *persistent* failure (DNS/DB
+  # down, bad config) into a machine-gun: the worker relaunches every 5s and
+  # each launch re-hits Instagram’s login endpoint, which is what got the egress
+  # IP rate-limited. So: a run that lasted a healthy while resets to 5s, but
+  # rapid consecutive crashes back off exponentially (5→10→20…→300s cap).
+  delay=5
+  max_delay=300
   while true; do
     echo "[run-worker] starting scraper worker ($(date "+%H:%M:%S"))…"
+    start=$(date +%s)
     npm run scraper:start
     code=$?
-    echo "[run-worker] worker exited (code $code) — restarting in 5s… (Ctrl+C to stop)"
-    sleep 5
+    ran=$(( $(date +%s) - start ))
+    if [ "$ran" -ge 60 ]; then
+      delay=5   # real session, not a crash-loop → reset backoff
+    fi
+    echo "[run-worker] worker exited (code $code) after ${ran}s — restarting in ${delay}s… (Ctrl+C to stop)"
+    sleep "$delay"
+    if [ "$ran" -lt 60 ]; then
+      delay=$(( delay * 2 ))
+      [ "$delay" -gt "$max_delay" ] && delay=$max_delay
+    fi
   done
 '
