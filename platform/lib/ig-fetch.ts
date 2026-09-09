@@ -193,6 +193,15 @@ async function cooldownUntil(): Promise<number> {
   return until;
 }
 
+// Public read of the breaker so background jobs (e.g. the enrich cron) can skip
+// their whole run up front when a cooldown is active — instead of picking a batch
+// and firing a throwaway fetch that only gets short-circuited to a 429 inside
+// igFetch. Returns ms remaining (0 = clear). Honors IG_LIVE_BREAKER=off.
+export async function liveCooldownRemainingMs(): Promise<number> {
+  if (!BREAKER_ENABLED) return 0;
+  return Math.max(0, (await cooldownUntil()) - Date.now());
+}
+
 async function tripCooldown(): Promise<void> {
   const now = Date.now();
   const remaining = Math.max(0, (cooldownCache?.until ?? 0) - now);

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { igFetch } from '@/lib/ig-fetch';
+import { igFetch, liveCooldownRemainingMs } from '@/lib/ig-fetch';
 import { completenessScore } from '@/lib/live-discovery';
 
 export const runtime = 'nodejs';
@@ -55,6 +55,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
   const db = getBolticClient();
+
+  // SAFETY GATE 0: respect the live circuit breaker. If the web_profile_info
+  // endpoint is in cooldown (a recent 429/HTML-wall tripped it), skip the ENTIRE
+  // run — don't even pick a batch or fire one probe. Every enrich hit during
+  // cooldown just resets the endpoint's decay clock and keeps us blocked. This
+  // makes the guard hold no matter what triggers enrich (launchd relay daemon,
+  // the 2-min watchdog, Vercel cron, or a manual curl).
+  const cooldownMs = await liveCooldownRemainingMs();
+  if (cooldownMs > 0) {
+    return NextResponse.json({ skipped: 'ig live cooldown active', cooldownMinutes: Math.ceil(cooldownMs / 60_000) });
+  }
 
   // SAFETY GATE 1: need >= 3 healthy accounts before enrichment runs, so a small
   // pool is reserved ENTIRELY for user-facing live search. With only 1-2 accounts,
