@@ -243,21 +243,26 @@ export async function igFetch(url: string, init: RequestInit = {}): Promise<Resp
   // no single session is hammered; the retry chain means a dead cookie fails over
   // to the next instead of taking the whole request down.
   const pool = await poolCookies();
-  const candidates: (SessionCookie | null)[] = [];
+  const poolCandidates: (SessionCookie | null)[] = [];
   if (pool.length > 0) {
     const start = rr++ % pool.length;
-    for (let i = 0; i < pool.length; i++) candidates.push(pool[(start + i) % pool.length]!);
+    for (let i = 0; i < pool.length; i++) poolCandidates.push(pool[(start + i) % pool.length]!);
   }
-  if (SESSIONID) candidates.push(null); // env fallback
+
+  // Cap POOL fan-out so a fully-dead pool doesn't hammer IG many times, but ALWAYS
+  // keep the env cookie reachable as a last resort. The env fallback is candidate
+  // N+1 after N pool accounts; a flat `Math.min(candidates.length, 6)` cap would
+  // never reach it once the pool holds 6 accounts (indices 0-5 fill the cap), so
+  // adding a cookie to Vercel's env silently did nothing. Instead: cap the pool
+  // tries, then append the env fallback after the cap so it's guaranteed to run.
+  // Healthy cookies short-circuit on the first JSON 200, so the extra tries only
+  // happen while throttled/dead.
+  const POOL_CAP = 6;
+  const candidates: (SessionCookie | null)[] = poolCandidates.slice(0, POOL_CAP);
+  if (SESSIONID) candidates.push(null); // env fallback — always tried last
   if (candidates.length === 0) candidates.push(null); // no auth configured → plain fetch
 
-  // Cap failover attempts so a fully-dead pool doesn't fan out into many IG hits,
-  // but keep the cap at least as large as a small pool so a request always reaches
-  // the one healthy cookie even when most of the pool is transiently throttled
-  // (a burst of fetches can 401 several accounts at once; capping at 3 would then
-  // miss the lone survivor and degrade to the DB fallback). Healthy cookies short-
-  // circuit on the first JSON 200, so the extra tries only happen while throttled.
-  const maxTries = Math.min(candidates.length, 6);
+  const maxTries = candidates.length;
   let res!: Response;
   let htmlWall = false;
   for (let i = 0; i < maxTries; i++) {
