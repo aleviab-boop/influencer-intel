@@ -192,11 +192,14 @@ function parseCountToken(t: string): number {
 
 const decodeEntities = (s: string) =>
   s
-    .replace(/&#064;/g, '@')
-    .replace(/&#x2022;/g, '•')
-    .replace(/&amp;/g, '&')
+    // numeric entities first: &#x1f525; (emoji), &#x2019; (curly '), &#x2013; (–), &#064; (@) …
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
+    .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
+    .replace(/&quot;/g, '"')
     .replace(/&#0?39;/g, "'")
-    .replace(/&quot;/g, '"');
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&'); // amp LAST so we never double-decode
 
 // Fetches the public profile page with a crawler UA and parses the og: tags.
 // Goes through the home-IP og proxy on the server (IG blanks the og: payload for
@@ -208,6 +211,15 @@ const decodeEntities = (s: string) =>
 const CRAWLER_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
 const ogMeta = (body: string, prop: string): string | null =>
   body.match(new RegExp(`<meta property="${prop}" content="([^"]+)"`))?.[1] ?? null;
+
+// og:image URLs come HTML-encoded (`&amp;` between query params). Left as-is they
+// corrupt the CDN signature (`oh`/`oe`) and every thumbnail 403s in the browser.
+// Decode the entities so the image actually loads. (Percent-encoding is left
+// untouched — decodeEntities only maps HTML entities, not %XX.)
+const ogImage = (body: string): string | null => {
+  const u = ogMeta(body, 'og:image');
+  return u ? decodeEntities(u) : null;
+};
 
 // The og: crawler payload is served to residential IPs but NOT to Vercel's
 // data-center IPs (verified: works locally, returns blank on prod). So on the
@@ -283,7 +295,7 @@ async function fetchPublicProfile(handle: string): Promise<PublicProfile | null>
       followers: parseCountToken(m[1] ?? ''),
       following: parseCountToken(m[2] ?? ''),
       posts: parseCountToken(m[3] ?? ''),
-      profile_pic_url: ogMeta(body, 'og:image'),
+      profile_pic_url: ogImage(body),
       grid: parsePublicGrid(body), // recent shortcodes from the SAME page fetch
     };
   } catch {
@@ -317,12 +329,14 @@ async function fetchPublicPost(shortcode: string): Promise<PublicPost | null> {
     if (Number.isFinite(t)) taken_at = t;
   }
   const title = ogMeta(body, 'og:title') ?? '';
-  const cm = decodeEntities(title).match(/on Instagram:\s*[""]?(.+?)[""]?\s*$/i);
+  // og:title = `Name on Instagram: "caption…"`. Caption can be multi-line, so match
+  // across newlines ([\s\S]) and strip the surrounding straight/curly quotes.
+  const cm = decodeEntities(title).match(/on Instagram:\s*["\u201c\u201d]?([\s\S]+?)["\u201c\u201d]?\s*$/i);
   const caption = cm?.[1] ? cm[1].trim() : '';
   return {
     likes: m ? parseCountToken(m[1] ?? '') : 0,
     comments: m ? parseCountToken(m[2] ?? '') : 0,
-    thumbnail: ogMeta(body, 'og:image'),
+    thumbnail: ogImage(body),
     caption,
     taken_at,
   };
