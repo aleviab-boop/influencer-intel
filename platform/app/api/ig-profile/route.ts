@@ -123,12 +123,57 @@ async function fetchLiveUser(handle: string): Promise<{ user: LiveUser | null; n
 // API, so it keeps returning data from an IP that's throttled on the API — with
 // no login/cookie. It only carries the top-line numbers (no post grid / live ER),
 // so we use it to fill the drawer's headline stats when the live scrape is blocked.
+// One recent post discovered from the logged-out profile page. IG embeds each
+// recent media as an object carrying a numeric `pk` (→ shortcode) even in the
+// crawler view — so we can list a creator's recent shortcodes for FREE, with no
+// login and without touching the throttled feed API. Engagement isn't in this
+// payload (IG hides it logged-out), so callers top each post up via the per-post
+// og: path.
+interface PublicGridPost {
+  shortcode: string;
+  is_video: boolean;
+  thumbnail: string | null;
+}
 interface PublicProfile {
   full_name: string;
   followers: number;
   following: number;
   posts: number;
   profile_pic_url: string | null;
+  grid: PublicGridPost[];
+}
+
+// IG media pk (a big integer) → post shortcode. IG derives the shortcode by
+// base64-encoding the pk with this URL-safe alphabet, so the map is exact and
+// reversible. e.g. 3982925818644395585 → "DdGMe37B_ZB".
+const IG_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function pkToShortcode(pk: string): string {
+  let n: bigint;
+  try { n = BigInt(pk); } catch { return ''; }
+  if (n <= 0n) return '';
+  let s = '';
+  while (n > 0n) { s = IG_B64[Number(n % 64n)] + s; n /= 64n; }
+  return s;
+}
+
+// Extract the recent-media grid from the logged-out profile HTML. Each recent
+// post shows up as `…Media","is_timeline_pinned":<bool>,"pk":"<id>"`. We convert
+// the pk to a shortcode and infer video-ness from the media-type token. Capped so
+// a runaway match can never blow up the parse.
+function parsePublicGrid(body: string, limit = 12): PublicGridPost[] {
+  const out: PublicGridPost[] = [];
+  const seen = new Set<string>();
+  const re = /(\w*)Media","is_timeline_pinned":(?:false|true),"pk":"(\d{12,})"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) && out.length < limit) {
+    const pk = m[2] ?? '';
+    if (!pk || seen.has(pk)) continue;
+    seen.add(pk);
+    const code = pkToShortcode(pk);
+    if (!code) continue;
+    out.push({ shortcode: code, is_video: /Video/i.test(m[1] ?? ''), thumbnail: null });
+  }
+  return out;
 }
 
 // "104M" / "2,990" / "1.2K" / "680B" → number. IG rounds large counts in og text,
@@ -239,6 +284,7 @@ async function fetchPublicProfile(handle: string): Promise<PublicProfile | null>
       following: parseCountToken(m[2] ?? ''),
       posts: parseCountToken(m[3] ?? ''),
       profile_pic_url: ogMeta(body, 'og:image'),
+      grid: parsePublicGrid(body), // recent shortcodes from the SAME page fetch
     };
   } catch {
     return null;
@@ -254,16 +300,31 @@ interface PublicPost {
   likes: number;
   comments: number;
   thumbnail: string | null;
+  caption: string;
+  taken_at: number | null;
 }
 async function fetchPublicPost(shortcode: string): Promise<PublicPost | null> {
   const body = await ogFetch(`https://www.instagram.com/p/${encodeURIComponent(shortcode)}/`, 8_000);
   if (!body) return null;
   const desc = ogMeta(body, 'og:description');
   const m = desc?.match(/([\d.,KMB]+)\s+likes?,\s+([\d.,KMB]+)\s+comments?/i) ?? null;
+  // og:description tail = "… - handle on September 9, 2026: \"caption…\"" — pull
+  // the post date out of it. og:title = "Name on Instagram: \"caption…\"".
+  let taken_at: number | null = null;
+  const dm = desc?.match(/on ([A-Z][a-z]+ \d{1,2}, \d{4})/) ?? null;
+  if (dm?.[1]) {
+    const t = Math.floor(Date.parse(dm[1]) / 1000);
+    if (Number.isFinite(t)) taken_at = t;
+  }
+  const title = ogMeta(body, 'og:title') ?? '';
+  const cm = decodeEntities(title).match(/on Instagram:\s*[""]?(.+?)[""]?\s*$/i);
+  const caption = cm?.[1] ? cm[1].trim() : '';
   return {
     likes: m ? parseCountToken(m[1] ?? '') : 0,
     comments: m ? parseCountToken(m[2] ?? '') : 0,
     thumbnail: ogMeta(body, 'og:image'),
+    caption,
+    taken_at,
   };
 }
 
@@ -271,7 +332,7 @@ async function fetchPublicPost(shortcode: string): Promise<PublicPost | null> {
 // og: path, with a small concurrency cap so we don't fan out a huge burst. Only
 // the shortcodes we already hold are fetched (no discovery). Mutates a shallow
 // copy and returns the refreshed list; posts that fail keep their stored values.
-async function refreshPostsViaOg<T extends { shortcode: string; likes: number; comments: number; thumbnail: string | null }>(
+async function refreshPostsViaOg<T extends { shortcode: string; likes: number; comments: number; thumbnail: string | null; caption?: string; taken_at?: number | null }>(
   posts: T[],
   limit = 12,
 ): Promise<T[]> {
@@ -290,6 +351,8 @@ async function refreshPostsViaOg<T extends { shortcode: string; likes: number; c
       if (fresh.likes > 0) row.likes = fresh.likes;
       if (fresh.comments > 0) row.comments = fresh.comments;
       if (fresh.thumbnail) row.thumbnail = fresh.thumbnail;
+      if (fresh.caption && (!row.caption || row.caption.trim() === '')) row.caption = fresh.caption;
+      if (fresh.taken_at && (row.taken_at == null)) row.taken_at = fresh.taken_at;
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
@@ -760,6 +823,29 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
   // an empty shell. Otherwise return the empty 'pending' shell for a manual retry.
   if (!c) {
     if (pub) {
+      // Discover the recent grid from the public page and top up engagement via
+      // the free per-post og: path — so a creator we've never scraped still gets a
+      // real post grid + live ER, not just headline numbers.
+      let recent = pub.grid.map((g) => ({
+        shortcode: g.shortcode,
+        thumbnail: g.thumbnail,
+        likes: 0,
+        comments: 0,
+        is_video: g.is_video,
+        taken_at: null as number | null,
+        caption: '',
+      }));
+      let pubEr: number | null = null;
+      if (recent.length > 0) {
+        recent = await refreshPostsViaOg(recent);
+        if (pub.followers > 0) {
+          const withEng = recent.filter((p) => p.likes > 0 || p.comments > 0);
+          if (withEng.length > 0) {
+            const avg = withEng.reduce((s, p) => s + p.likes + p.comments, 0) / withEng.length;
+            pubEr = Math.round((avg / pub.followers) * 1000) / 10;
+          }
+        }
+      }
       return NextResponse.json({
         handle,
         full_name: pub.full_name,
@@ -774,14 +860,14 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
         external_url: null,
         email: null,
         phone: null,
-        recent: [],
+        recent,
         related: [],
         collabs: [],
         sponsored_posts: 0,
-        engagement: null,
+        engagement: pubEr,
         audience_demographics: demographics,
         creator_location: null,
-        analytics: buildAnalytics(pub.followers, []),
+        analytics: buildAnalytics(pub.followers, recent),
         source: 'public',
         refreshing: false,
         last_scraped_at: null,
@@ -891,12 +977,31 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
   // zeroes out a known creator's real follower count.
   const followers = pub && pub.followers > 0 ? pub.followers : Number(c.follower_count ?? 0);
 
-  // When we're in public-fallback mode (live API throttled) and we hold stored
-  // shortcodes, top up each post's likes/comments/thumbnail from the free post-
-  // page og: path. This refreshes stale engagement AND replaces expired thumbnail
-  // CDN URLs (which otherwise render as broken tiles), then recomputes a live ER
-  // from the fresh numbers. Skipped entirely on the normal (non-throttled) DB path.
+  // Public-fallback mode (live API throttled): rebuild the post grid for FREE.
+  //   1) If the DB has no usable posts (worker-discovery stub, or stored posts
+  //      with zero engagement), seed `recent` from the recent shortcodes we
+  //      discovered on the public profile page (pub.grid). This is the piece that
+  //      lets an un-scraped creator's drawer show a real grid + engagement.
+  //   2) Then top up EVERY post's likes/comments/thumbnail/caption from the free
+  //      per-post og: path and recompute a live ER from the fresh numbers.
+  // None of this touches the throttled feed API — only the un-throttled crawler
+  // pages, through the residential og proxy. Skipped on the normal DB path.
   let liveEr: number | null = null;
+  if (pub) {
+    const haveUsable =
+      recent.length > 0 && recent.some((p) => p.shortcode) && recent.some((p) => p.likes > 0 || p.comments > 0);
+    if (!haveUsable && pub.grid.length > 0) {
+      recent = pub.grid.map((g) => ({
+        shortcode: g.shortcode,
+        thumbnail: g.thumbnail,
+        likes: 0,
+        comments: 0,
+        is_video: g.is_video,
+        taken_at: null as number | null,
+        caption: '',
+      }));
+    }
+  }
   if (pub && recent.length > 0 && recent.some((p) => p.shortcode)) {
     recent = await refreshPostsViaOg(recent);
     if (followers > 0) {
