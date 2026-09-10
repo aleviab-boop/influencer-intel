@@ -154,25 +154,78 @@ const decodeEntities = (s: string) =>
     .replace(/&quot;/g, '"');
 
 // Fetches the public profile page with a crawler UA and parses the og: tags.
-// Direct (no relay, no cookie): the crawler/link-preview path is designed to be
-// hit by data-center crawlers, so it does NOT need the residential relay. Returns
-// null on any failure so callers cleanly fall through to the DB row.
+// Goes through the home-IP og proxy on the server (IG blanks the og: payload for
+// data-center IPs), or direct when running locally. Cookieless + page-only, so it
+// never touches the throttled API. Returns null on any failure so callers cleanly
+// fall through to the DB row.
 // Social-crawler UA that makes IG serve the link-preview og: tags (not the JS app
 // shell). Shared by the profile and per-post fetchers.
 const CRAWLER_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
 const ogMeta = (body: string, prop: string): string | null =>
   body.match(new RegExp(`<meta property="${prop}" content="([^"]+)"`))?.[1] ?? null;
 
-async function fetchPublicProfile(handle: string): Promise<PublicProfile | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10_000);
+// The og: crawler payload is served to residential IPs but NOT to Vercel's
+// data-center IPs (verified: works locally, returns blank on prod). So on the
+// server we route the og: page fetch through a tiny home-IP proxy (tools/
+// og-relay.mjs) whose URL lives in system_config.og_proxy_url — SEPARATE from
+// the throttle-prone `relay_url`. That proxy ONLY ever fetches profile/post
+// PAGES with the crawler UA (no cookies, no /api/ endpoint), so it can never
+// touch the rate-limited web_profile_info or burn an account. Cached ~60s so
+// this adds at most ~1 DB read/min. Env IG_OG_RELAY is a static fallback.
+const OG_RELAY_KEY = process.env.IG_OG_RELAY_KEY?.trim() ?? '';
+let ogProxyCache: { at: number; url: string | undefined } | null = null;
+async function ogProxyUrl(): Promise<string | undefined> {
+  if (ogProxyCache && Date.now() - ogProxyCache.at < 60_000) return ogProxyCache.url;
+  let url = process.env.IG_OG_RELAY?.trim() || undefined;
   try {
-    const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {
-      headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html' },
-      signal: ctrl.signal,
-    });
+    const rows = await getBolticClient().query<{ value: string | null }>(
+      `SELECT value FROM system_config WHERE key = 'og_proxy_url'`,
+    );
+    const dbUrl = rows[0]?.value?.trim();
+    if (dbUrl) url = dbUrl; // DB wins (self-updates when the tunnel churns)
+  } catch {
+    /* DB down → keep env fallback */
+  }
+  ogProxyCache = { at: Date.now(), url };
+  return url;
+}
+
+// Fetch an Instagram profile/post PAGE for its og: tags. Goes through the home-IP
+// og proxy when configured (so it works from Vercel), else direct (works locally).
+// Returns the HTML body on a 2xx, or null on any failure/non-2xx.
+async function ogFetch(igUrl: string, timeoutMs: number): Promise<string | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const proxy = await ogProxyUrl();
+    let res: Response;
+    if (proxy) {
+      res = await fetch(proxy, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          ...(OG_RELAY_KEY ? { 'x-relay-key': OG_RELAY_KEY } : {}),
+        },
+        body: JSON.stringify({ url: igUrl }),
+        signal: ctrl.signal,
+      });
+    } else {
+      res = await fetch(igUrl, { headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html' }, signal: ctrl.signal });
+    }
     if (!res.ok) return null;
-    const body = await res.text();
+    return await res.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchPublicProfile(handle: string): Promise<PublicProfile | null> {
+  try {
+    const body = await ogFetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, 10_000);
+    if (!body) return null;
     const desc = ogMeta(body, 'og:description');
     if (!desc) return null;
     const m = desc.match(/([\d.,KMB]+)\s+Followers,\s+([\d.,KMB]+)\s+Following,\s+([\d.,KMB]+)\s+Posts/i);
@@ -189,8 +242,6 @@ async function fetchPublicProfile(handle: string): Promise<PublicProfile | null>
     };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -205,27 +256,15 @@ interface PublicPost {
   thumbnail: string | null;
 }
 async function fetchPublicPost(shortcode: string): Promise<PublicPost | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 8_000);
-  try {
-    const res = await fetch(`https://www.instagram.com/p/${encodeURIComponent(shortcode)}/`, {
-      headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html' },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) return null;
-    const body = await res.text();
-    const desc = ogMeta(body, 'og:description');
-    const m = desc?.match(/([\d.,KMB]+)\s+likes?,\s+([\d.,KMB]+)\s+comments?/i) ?? null;
-    return {
-      likes: m ? parseCountToken(m[1] ?? '') : 0,
-      comments: m ? parseCountToken(m[2] ?? '') : 0,
-      thumbnail: ogMeta(body, 'og:image'),
-    };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  const body = await ogFetch(`https://www.instagram.com/p/${encodeURIComponent(shortcode)}/`, 8_000);
+  if (!body) return null;
+  const desc = ogMeta(body, 'og:description');
+  const m = desc?.match(/([\d.,KMB]+)\s+likes?,\s+([\d.,KMB]+)\s+comments?/i) ?? null;
+  return {
+    likes: m ? parseCountToken(m[1] ?? '') : 0,
+    comments: m ? parseCountToken(m[2] ?? '') : 0,
+    thumbnail: ogMeta(body, 'og:image'),
+  };
 }
 
 // Refresh a batch of stored posts' engagement + thumbnails via the free post-page
