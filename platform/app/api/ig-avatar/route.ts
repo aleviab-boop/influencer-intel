@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { igFetch } from '@/lib/ig-fetch';
+import { fetchProfileOgImage } from '@/lib/og-proxy';
 import { getBolticClient } from '@influencer-intel/shared/db';
 
 export const runtime = 'nodejs';
@@ -73,7 +74,26 @@ export async function GET(req: NextRequest) {
     /* DB unreachable — fall through to the live lookup */
   }
 
-  // 2) Live lookup (also refreshes the cached URL via the crawl path elsewhere).
+  // 2) FREE og-proxy lookup — fetches the public profile PAGE through the home-IP
+  //    og proxy and reads og:image (the profile photo). Cookieless, page-only, so
+  //    it NEVER touches the throttled web_profile_info endpoint and works even
+  //    while that endpoint is in cooldown. This is what fills avatars for creators
+  //    we've never crawled, at zero cost.
+  try {
+    const ogPic = await fetchProfileOgImage(handle);
+    if (ogPic) {
+      void getBolticClient()
+        .query(`UPDATE creators SET profile_photo_url = $2, updated_at = now() WHERE platform = 'instagram' AND lower(handle) = lower($1)`, [handle, ogPic])
+        .catch(() => {});
+      const streamed = await streamImage(ogPic);
+      if (streamed) return streamed;
+      // else: og:image didn't stream (rare) → fall through to the live lookup
+    }
+  } catch {
+    /* og proxy down → fall through to the live lookup */
+  }
+
+  // 3) Live lookup (also refreshes the cached URL via the crawl path elsewhere).
   try {
     const infoRes = await igFetch(
       `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,

@@ -3570,10 +3570,18 @@ function CampaignFitCard({ profile }: { profile: ProfileData }) {
       <div className="text-[11px] font-semibold uppercase tracking-wide text-[#999] mb-3">Campaign fit score</div>
 
       <div className="flex items-center gap-4">
-        <div className="shrink-0 w-16 h-16 rounded-2xl grid place-items-center text-white" style={{ background: `linear-gradient(135deg, ${gradeColor}, ${gradeColor}cc)` }}>
-          <div className="text-center leading-none">
-            <div className="text-[26px] font-black">{fit.grade}</div>
-          </div>
+        {/* Creator photo with a grade-colored ring — keeps the fit signal (ring
+            color = A/B/C/D) but shows the actual profile pic instead of a bare
+            letter. Ring falls back to a gradient initial when there's no photo. */}
+        <div className="shrink-0 rounded-[18px] p-[3px]" style={{ background: `linear-gradient(135deg, ${gradeColor}, ${gradeColor}cc)` }} title={`Fit grade ${fit.grade}`}>
+          <Avatar
+            name={profile.full_name || profile.handle}
+            url={profile.profile_pic_url}
+            handle={profile.handle}
+            size="w-[58px] h-[58px]"
+            rounded="rounded-[15px]"
+            textSize="text-[22px]"
+          />
         </div>
         <div className="min-w-0">
           <div className="text-[22px] font-black tabular-nums text-[#111] leading-none">{fit.score}<span className="text-[13px] font-semibold text-[#999]">/100</span></div>
@@ -4241,7 +4249,21 @@ function IconBtn({ children, onClick, title, disabled }: { children: React.React
   );
 }
 
-function Avatar({ name, url, handle }: { name: string; url?: string | null; handle?: string | null }) {
+function Avatar({
+  name,
+  url,
+  handle,
+  size = 'w-9 h-9',
+  rounded = 'rounded-full',
+  textSize = 'text-[12px]',
+}: {
+  name: string;
+  url?: string | null;
+  handle?: string | null;
+  size?: string;
+  rounded?: string;
+  textSize?: string;
+}) {
   // Image source falls through stages, ordered by reliability: the handle-based
   // proxy FIRST (it re-derives a fresh photo URL when the stored one has expired —
   // stored IG CDN links are short-lived signed URLs, so trying them first just
@@ -4261,7 +4283,7 @@ function Avatar({ name, url, handle }: { name: string; url?: string | null; hand
         src={src}
         alt={name}
         onError={() => setStage((s) => s + 1)}
-        className="w-9 h-9 rounded-full object-cover shrink-0 bg-[#eee]"
+        className={`${size} ${rounded} object-cover shrink-0 bg-[#eee]`}
       />
     );
   }
@@ -4276,7 +4298,7 @@ function Avatar({ name, url, handle }: { name: string; url?: string | null; hand
   const hue = h % 360;
   return (
     <div
-      className="w-9 h-9 rounded-full grid place-items-center text-white text-[12px] font-semibold shrink-0"
+      className={`${size} ${rounded} ${textSize} grid place-items-center text-white font-semibold shrink-0`}
       style={{ background: `linear-gradient(135deg, hsl(${hue} 70% 55%), hsl(${(hue + 40) % 360} 70% 45%))` }}
     >
       {initials}
