@@ -814,14 +814,50 @@ async function dbRelated(handle: string, niche: string, followers: number) {
 
 // ---- DB fallback (what the worker discovered / a previous live persist) ------
 
-async function dbProfile(handle: string, demographics: AudienceDemographics | null, pub: PublicProfile | null = null) {
+// Cache freshness for the enriched recent-posts grid. Opening a drawer live-
+// enriches up to 12 posts (~13 proxy fetches through the home-IP og proxy); we
+// persist the enriched grid so repeat opens read straight from the DB instead of
+// re-hammering the proxy. Engagement moves slowly, so a few hours is a safe
+// staleness window; the "Refresh live" button (force=1) bypasses it on demand.
+const RECENT_POSTS_TTL_MS = 6 * 60 * 60 * 1000;
+
+// Write the freshly-enriched grid back to creators.recent_posts in the CLEAN
+// shape (already round-trip readable by dbProfile below) and stamp
+// recent_posts_cached_at, so the next open can skip the live enrichment.
+// Best-effort — never throws, returns a promise the caller can hand to after().
+function persistRecentPostsCache(
+  handle: string,
+  recent: Array<{ shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; taken_at: number | null; caption?: string }>,
+): Promise<void> {
+  const usable = recent.filter((p) => p.shortcode && (p.likes > 0 || p.comments > 0 || p.thumbnail));
+  if (usable.length === 0) return Promise.resolve(); // nothing worth caching
+  const payload = usable.map((p) => ({
+    shortcode: p.shortcode,
+    thumbnail: p.thumbnail,
+    likes: p.likes,
+    comments: p.comments,
+    is_video: p.is_video,
+    taken_at: p.taken_at,
+    caption: p.caption ?? '',
+  }));
+  return getBolticClient()
+    .query(
+      `UPDATE creators SET recent_posts = $2::json, recent_posts_cached_at = now(), updated_at = now()
+       WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
+      [handle, JSON.stringify(payload)],
+    )
+    .then(() => {})
+    .catch(() => {});
+}
+
+async function dbProfile(handle: string, demographics: AudienceDemographics | null, pub: PublicProfile | null = null, force = false) {
   let rows: Record<string, unknown>[] = [];
   try {
     rows = await getBolticClient().query<Record<string, unknown>>(
       `SELECT handle, display_name, bio, primary_category, niche, follower_count,
               following_count, posts_count, engagement_rate, profile_photo_url,
               profile_url, is_verified, primary_city, raw_metadata, recent_posts,
-              last_scraped_at
+              recent_posts_cached_at, last_scraped_at
        FROM creators WHERE platform = 'instagram' AND lower(handle) = lower($1) LIMIT 1`,
       [handle],
     );
@@ -1001,23 +1037,40 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
   // None of this touches the throttled feed API — only the un-throttled crawler
   // pages, through the residential og proxy. Skipped on the normal DB path.
   let liveEr: number | null = null;
+  let postsFromCache = false;
   if (pub) {
+    const cachedAt = c.recent_posts_cached_at ? new Date(c.recent_posts_cached_at as string).getTime() : 0;
+    const cacheFresh = !force && cachedAt > 0 && Date.now() - cachedAt < RECENT_POSTS_TTL_MS;
     const haveUsable =
       recent.length > 0 && recent.some((p) => p.shortcode) && recent.some((p) => p.likes > 0 || p.comments > 0);
-    if (!haveUsable && pub.grid.length > 0) {
-      recent = pub.grid.map((g) => ({
-        shortcode: g.shortcode,
-        thumbnail: g.thumbnail,
-        likes: 0,
-        comments: 0,
-        is_video: g.is_video,
-        taken_at: null as number | null,
-        caption: '',
-      }));
+
+    if (cacheFresh && haveUsable) {
+      // CACHE HIT — the DB already holds a fresh enriched grid (persisted on a
+      // previous open, < TTL old), so skip the ~13 live per-post proxy fetches
+      // entirely. The drawer fills instantly straight from the DB row.
+      postsFromCache = true;
+    } else {
+      // CACHE MISS / STALE / force=1: seed the grid from the public page if the DB
+      // has nothing usable, then live-enrich every post through the free og path
+      // and persist the result so the NEXT open is a cache hit.
+      if (!haveUsable && pub.grid.length > 0) {
+        recent = pub.grid.map((g) => ({
+          shortcode: g.shortcode,
+          thumbnail: g.thumbnail,
+          likes: 0,
+          comments: 0,
+          is_video: g.is_video,
+          taken_at: null as number | null,
+          caption: '',
+        }));
+      }
+      if (recent.length > 0 && recent.some((p) => p.shortcode)) {
+        recent = await refreshPostsViaOg(recent);
+        const enriched = recent;
+        after(() => persistRecentPostsCache(handle, enriched)); // write-back after response
+      }
     }
-  }
-  if (pub && recent.length > 0 && recent.some((p) => p.shortcode)) {
-    recent = await refreshPostsViaOg(recent);
+
     if (followers > 0) {
       const withEng = recent.filter((p) => p.likes > 0 || p.comments > 0);
       if (withEng.length > 0) {
@@ -1075,6 +1128,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
     creator_location: creatorLocation,
     analytics: buildAnalytics(followers, recent),
     source: pub ? 'public+db' : 'db',
+    posts_from_cache: postsFromCache,
     last_scraped_at: (c.last_scraped_at as string) ?? null,
     refreshing: false,
   });
@@ -1215,6 +1269,9 @@ export async function GET(req: NextRequest) {
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
     return NextResponse.json({ error: 'bad handle' }, { status: 400 });
   }
+  // "Refresh live" sends force=1 — bypass the persisted recent-posts cache and
+  // re-enrich the grid from the live og path.
+  const force = req.nextUrl.searchParams.get('force') === '1';
 
   // Audience demographics + the creator's stored home location live in the DB
   // regardless of which path serves the drawer, so load both in parallel with
@@ -1396,5 +1453,5 @@ export async function GET(req: NextRequest) {
   //    so the drawer shows real numbers instead of zeros during a throttle. Skip
   //    it on a confirmed 404 (nothing to show).
   const pub = notFound ? null : await fetchPublicProfile(handle);
-  return dbProfile(handle, await demoPromise, pub);
+  return dbProfile(handle, await demoPromise, pub, force);
 }
