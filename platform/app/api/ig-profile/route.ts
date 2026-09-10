@@ -116,6 +116,82 @@ async function fetchLiveUser(handle: string): Promise<{ user: LiveUser | null; n
   }
 }
 
+// ---- free public (og:) fallback --------------------------------------------
+// Instagram embeds follower/following/post counts + name + profile pic in og:
+// meta tags for social-crawler user-agents (the link-preview path used by FB/
+// Twitter). That is a DIFFERENT endpoint from the rate-limited web_profile_info
+// API, so it keeps returning data from an IP that's throttled on the API — with
+// no login/cookie. It only carries the top-line numbers (no post grid / live ER),
+// so we use it to fill the drawer's headline stats when the live scrape is blocked.
+interface PublicProfile {
+  full_name: string;
+  followers: number;
+  following: number;
+  posts: number;
+  profile_pic_url: string | null;
+}
+
+// "104M" / "2,990" / "1.2K" / "680B" → number. IG rounds large counts in og text,
+// so this is approximate for big accounts and exact for small ones.
+function parseCountToken(t: string): number {
+  const s = t.trim().replace(/,/g, '');
+  const m = s.match(/^([\d.]+)\s*([KMB]?)$/i);
+  if (!m) return 0;
+  let n = parseFloat(m[1] ?? '0');
+  const suf = (m[2] || '').toUpperCase();
+  if (suf === 'K') n *= 1e3;
+  else if (suf === 'M') n *= 1e6;
+  else if (suf === 'B') n *= 1e9;
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+const decodeEntities = (s: string) =>
+  s
+    .replace(/&#064;/g, '@')
+    .replace(/&#x2022;/g, '•')
+    .replace(/&amp;/g, '&')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&quot;/g, '"');
+
+// Fetches the public profile page with a crawler UA and parses the og: tags.
+// Direct (no relay, no cookie): the crawler/link-preview path is designed to be
+// hit by data-center crawlers, so it does NOT need the residential relay. Returns
+// null on any failure so callers cleanly fall through to the DB row.
+async function fetchPublicProfile(handle: string): Promise<PublicProfile | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {
+      headers: {
+        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+        Accept: 'text/html',
+      },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const body = await res.text();
+    const grab = (p: string) => body.match(new RegExp(`<meta property="${p}" content="([^"]+)"`))?.[1] ?? null;
+    const desc = grab('og:description');
+    if (!desc) return null;
+    const m = desc.match(/([\d.,KMB]+)\s+Followers,\s+([\d.,KMB]+)\s+Following,\s+([\d.,KMB]+)\s+Posts/i);
+    if (!m) return null;
+    const title = grab('og:title');
+    // og:title = "NASA (@nasa) • Instagram photos and videos" → keep just the name.
+    const full_name = title ? decodeEntities(title).replace(/\s*\(@[^)]+\).*$/, '').replace(/\s*[•·].*$/, '').trim() : '';
+    return {
+      full_name,
+      followers: parseCountToken(m[1] ?? ''),
+      following: parseCountToken(m[2] ?? ''),
+      posts: parseCountToken(m[3] ?? ''),
+      profile_pic_url: grab('og:image'),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // A stub we couldn't verify at discovery time just came back DEFINITIVELY 404 on
 // enrichment → it was an AI hallucination. Soft-delete it (is_active = false) so
 // it drops out of search, but ONLY if it's a sparse, never-enriched scrape stub.
@@ -557,7 +633,7 @@ async function dbRelated(handle: string, niche: string, followers: number) {
 
 // ---- DB fallback (what the worker discovered / a previous live persist) ------
 
-async function dbProfile(handle: string, demographics: AudienceDemographics | null) {
+async function dbProfile(handle: string, demographics: AudienceDemographics | null, pub: PublicProfile | null = null) {
   let rows: Record<string, unknown>[] = [];
   try {
     rows = await getBolticClient().query<Record<string, unknown>>(
@@ -575,9 +651,38 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
   const c = rows[0];
 
   // Not in the DB and the live cookie fetch already failed (relay/proxy down or
-  // IG throttled). Nothing to deep-scrape any more — the browser worker is
-  // discovery-only. Return an empty shell; the drawer can offer a manual retry.
+  // IG throttled). If the free public (og:) path returned headline stats, serve
+  // those — a real drawer with followers/following/posts + name + pic — instead of
+  // an empty shell. Otherwise return the empty 'pending' shell for a manual retry.
   if (!c) {
+    if (pub) {
+      return NextResponse.json({
+        handle,
+        full_name: pub.full_name,
+        biography: '',
+        category: '',
+        followers: pub.followers,
+        following: pub.following,
+        posts: pub.posts,
+        is_verified: false,
+        is_private: false,
+        profile_pic_url: pub.profile_pic_url,
+        external_url: null,
+        email: null,
+        phone: null,
+        recent: [],
+        related: [],
+        collabs: [],
+        sponsored_posts: 0,
+        engagement: null,
+        audience_demographics: demographics,
+        creator_location: null,
+        analytics: buildAnalytics(pub.followers, []),
+        source: 'public',
+        refreshing: false,
+        last_scraped_at: null,
+      });
+    }
     return NextResponse.json({
       handle,
       full_name: '',
@@ -677,7 +782,10 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
       : [];
   const sponsored = typeof meta.sponsored_posts === 'number' ? meta.sponsored_posts : 0;
   const niche = ((c.primary_category as string) || (c.niche as string)) ?? '';
-  const followers = Number(c.follower_count ?? 0);
+  // Prefer the FRESH public (og:) count when we have one — it's pulled live this
+  // request, vs a possibly-stale DB value. Guard on > 0 so a parse miss never
+  // zeroes out a known creator's real follower count.
+  const followers = pub && pub.followers > 0 ? pub.followers : Number(c.follower_count ?? 0);
 
   const related = await dbRelated(handle, niche, followers);
 
@@ -706,15 +814,15 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
 
   return NextResponse.json({
     handle: c.handle,
-    full_name: (c.display_name as string) ?? '',
+    full_name: (pub?.full_name || (c.display_name as string)) ?? '',
     biography: bio,
     category: niche,
     followers,
-    following: Number(c.following_count ?? 0),
-    posts: Number(c.posts_count ?? 0),
+    following: pub && pub.following > 0 ? pub.following : Number(c.following_count ?? 0),
+    posts: pub && pub.posts > 0 ? pub.posts : Number(c.posts_count ?? 0),
     is_verified: Boolean(c.is_verified),
     is_private: false,
-    profile_pic_url: (c.profile_photo_url as string) ?? null,
+    profile_pic_url: (pub?.profile_pic_url ?? (c.profile_photo_url as string)) ?? null,
     external_url: contact.link,
     email: contact.email,
     phone: contact.phone,
@@ -726,7 +834,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
     audience_demographics: resolvedDemo,
     creator_location: creatorLocation,
     analytics: buildAnalytics(followers, recent),
-    source: 'db',
+    source: pub ? 'public+db' : 'db',
     last_scraped_at: (c.last_scraped_at as string) ?? null,
     refreshing: false,
   });
@@ -1041,6 +1149,12 @@ export async function GET(req: NextRequest) {
   // retire it in the background so it stops polluting future searches.
   if (notFound) after(() => pruneHallucinatedStub(handle));
 
-  // 2) DB fallback (worker-discovered row or a prior live persist).
-  return dbProfile(handle, await demoPromise);
+  // 2) FREE public fallback + DB fallback. The live API is throttled, but IG's
+  //    un-throttled link-preview (og:) path still serves headline stats from the
+  //    same IP with no login. Pull the fresh followers/following/posts + name +
+  //    pic and merge them over whatever the DB has (recent-post grid, demographics)
+  //    so the drawer shows real numbers instead of zeros during a throttle. Skip
+  //    it on a confirmed 404 (nothing to show).
+  const pub = notFound ? null : await fetchPublicProfile(handle);
+  return dbProfile(handle, await demoPromise, pub);
 }
