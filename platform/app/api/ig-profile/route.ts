@@ -157,25 +157,27 @@ const decodeEntities = (s: string) =>
 // Direct (no relay, no cookie): the crawler/link-preview path is designed to be
 // hit by data-center crawlers, so it does NOT need the residential relay. Returns
 // null on any failure so callers cleanly fall through to the DB row.
+// Social-crawler UA that makes IG serve the link-preview og: tags (not the JS app
+// shell). Shared by the profile and per-post fetchers.
+const CRAWLER_UA = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
+const ogMeta = (body: string, prop: string): string | null =>
+  body.match(new RegExp(`<meta property="${prop}" content="([^"]+)"`))?.[1] ?? null;
+
 async function fetchPublicProfile(handle: string): Promise<PublicProfile | null> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 10_000);
   try {
     const res = await fetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, {
-      headers: {
-        'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-        Accept: 'text/html',
-      },
+      headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html' },
       signal: ctrl.signal,
     });
     if (!res.ok) return null;
     const body = await res.text();
-    const grab = (p: string) => body.match(new RegExp(`<meta property="${p}" content="([^"]+)"`))?.[1] ?? null;
-    const desc = grab('og:description');
+    const desc = ogMeta(body, 'og:description');
     if (!desc) return null;
     const m = desc.match(/([\d.,KMB]+)\s+Followers,\s+([\d.,KMB]+)\s+Following,\s+([\d.,KMB]+)\s+Posts/i);
     if (!m) return null;
-    const title = grab('og:title');
+    const title = ogMeta(body, 'og:title');
     // og:title = "NASA (@nasa) • Instagram photos and videos" → keep just the name.
     const full_name = title ? decodeEntities(title).replace(/\s*\(@[^)]+\).*$/, '').replace(/\s*[•·].*$/, '').trim() : '';
     return {
@@ -183,13 +185,76 @@ async function fetchPublicProfile(handle: string): Promise<PublicProfile | null>
       followers: parseCountToken(m[1] ?? ''),
       following: parseCountToken(m[2] ?? ''),
       posts: parseCountToken(m[3] ?? ''),
-      profile_pic_url: grab('og:image'),
+      profile_pic_url: ogMeta(body, 'og:image'),
     };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Free per-post refresh: IG's post page (instagram.com/p/{code}/) exposes fresh
+// likes/comments + a live thumbnail in its og: tags to the crawler UA — the same
+// un-throttled path as the profile fetch. Used to top up the DB's stored grid
+// during a throttle so engagement + thumbnails aren't stale/expired. Returns null
+// on any failure so the stored values are kept.
+interface PublicPost {
+  likes: number;
+  comments: number;
+  thumbnail: string | null;
+}
+async function fetchPublicPost(shortcode: string): Promise<PublicPost | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  try {
+    const res = await fetch(`https://www.instagram.com/p/${encodeURIComponent(shortcode)}/`, {
+      headers: { 'User-Agent': CRAWLER_UA, Accept: 'text/html' },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const body = await res.text();
+    const desc = ogMeta(body, 'og:description');
+    const m = desc?.match(/([\d.,KMB]+)\s+likes?,\s+([\d.,KMB]+)\s+comments?/i) ?? null;
+    return {
+      likes: m ? parseCountToken(m[1] ?? '') : 0,
+      comments: m ? parseCountToken(m[2] ?? '') : 0,
+      thumbnail: ogMeta(body, 'og:image'),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Refresh a batch of stored posts' engagement + thumbnails via the free post-page
+// og: path, with a small concurrency cap so we don't fan out a huge burst. Only
+// the shortcodes we already hold are fetched (no discovery). Mutates a shallow
+// copy and returns the refreshed list; posts that fail keep their stored values.
+async function refreshPostsViaOg<T extends { shortcode: string; likes: number; comments: number; thumbnail: string | null }>(
+  posts: T[],
+  limit = 12,
+): Promise<T[]> {
+  const targets = posts.slice(0, limit).filter((p) => p.shortcode);
+  const CONCURRENCY = 4;
+  const out = posts.map((p) => ({ ...p }));
+  const byCode = new Map(out.map((p) => [p.shortcode, p]));
+  let i = 0;
+  async function worker() {
+    while (i < targets.length) {
+      const t = targets[i++]!;
+      const fresh = await fetchPublicPost(t.shortcode);
+      if (!fresh) continue;
+      const row = byCode.get(t.shortcode);
+      if (!row) continue;
+      if (fresh.likes > 0) row.likes = fresh.likes;
+      if (fresh.comments > 0) row.comments = fresh.comments;
+      if (fresh.thumbnail) row.thumbnail = fresh.thumbnail;
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
+  return out;
 }
 
 // A stub we couldn't verify at discovery time just came back DEFINITIVELY 404 on
@@ -787,6 +852,23 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
   // zeroes out a known creator's real follower count.
   const followers = pub && pub.followers > 0 ? pub.followers : Number(c.follower_count ?? 0);
 
+  // When we're in public-fallback mode (live API throttled) and we hold stored
+  // shortcodes, top up each post's likes/comments/thumbnail from the free post-
+  // page og: path. This refreshes stale engagement AND replaces expired thumbnail
+  // CDN URLs (which otherwise render as broken tiles), then recomputes a live ER
+  // from the fresh numbers. Skipped entirely on the normal (non-throttled) DB path.
+  let liveEr: number | null = null;
+  if (pub && recent.length > 0 && recent.some((p) => p.shortcode)) {
+    recent = await refreshPostsViaOg(recent);
+    if (followers > 0) {
+      const withEng = recent.filter((p) => p.likes > 0 || p.comments > 0);
+      if (withEng.length > 0) {
+        const avg = withEng.reduce((s, p) => s + p.likes + p.comments, 0) / withEng.length;
+        liveEr = Math.round((avg / followers) * 1000) / 10; // %
+      }
+    }
+  }
+
   const related = await dbRelated(handle, niche, followers);
 
   // Mandatory audience read: stored blob if present, else estimate from the
@@ -830,7 +912,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
     related,
     collabs,
     sponsored_posts: sponsored,
-    engagement: er,
+    engagement: liveEr ?? er,
     audience_demographics: resolvedDemo,
     creator_location: creatorLocation,
     analytics: buildAnalytics(followers, recent),
