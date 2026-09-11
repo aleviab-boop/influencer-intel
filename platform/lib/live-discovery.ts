@@ -381,10 +381,8 @@ function categoryFromBio(bio: string | null): string | null {
   //    category list, not a sentence.
   const tagList = lines.find((l) => l.hadSep && l.text.split(' ').length <= 5);
   if (tagList) return tagList.text;
-  // 3) Fallback: line 1, but only if it's short enough to be a label (≤4 words)
-  //    rather than a sentence-like personal tagline.
-  const first = lines[0]!.text;
-  if (first.split(' ').length <= 4) return first;
+  // No niche keyword and no tag-list line → leave blank rather than surfacing a
+  // personal tagline as the category. Better a "—" than a misleading label.
   return null;
 }
 // Fetch a creator's og profile page and pull bio + category from it. FREE +
