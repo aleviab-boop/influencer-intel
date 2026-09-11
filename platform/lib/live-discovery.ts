@@ -294,7 +294,47 @@ function parseOgGrid(body: string, limit = 12): string[] {
 // shape the pipeline speaks — a drop-in for the cookie/Apify enrichers, minus the
 // fields the page doesn't expose (bio, captions, related graph). Returns null when
 // the page doesn't resolve (404 / private-blank / proxy down).
-async function ogPageToRawUser(username: string, timeoutMs = 8_000): Promise<RawUser | null> {
+// A recent POST's public link-preview page carries "3,267 likes, 15 comments -
+// user on <date>: caption" in its og:description — cookieless + un-throttled, same
+// as the profile page. Parse the likes/comments out of it.
+function parsePostEngagement(body: string): { likes: number; comments: number } | null {
+  const desc = ogMeta(body, 'og:description');
+  if (!desc) return null;
+  const l = desc.match(/([\d.,KMB]+)\s+likes/i);
+  const c = desc.match(/([\d.,KMB]+)\s+comments/i);
+  if (!l && !c) return null;
+  return { likes: l ? parseCountToken(l[1] ?? '') : 0, comments: c ? parseCountToken(c[1] ?? '') : 0 };
+}
+
+// The profile og-page gives recent-post SHORTCODES but no likes/comments, so a
+// creator reached via the free og path shows engagement "—". Fill it by fetching a
+// few of those post pages (also free/cookieless/un-throttled) IN PARALLEL and
+// stamping their like/comment counts onto the timeline edges — then engagementRate()
+// computes a real % automatically. Bounded (maxPosts, budgetMs) so it never balloons
+// a request; best-effort — a post that fails just keeps 0 and is ignored by the avg.
+async function enrichOgEngagement(user: RawUser, budgetMs: number, maxPosts = 4): Promise<void> {
+  const edges = user.edge_owner_to_timeline_media?.edges ?? [];
+  const targets = edges.slice(0, maxPosts).filter((e) => e.node?.shortcode);
+  if (targets.length === 0) return;
+  const per = Math.max(2_500, Math.min(6_000, budgetMs));
+  await Promise.all(
+    targets.map(async (e) => {
+      const code = e.node!.shortcode!;
+      const body = await ogFetch(`https://www.instagram.com/p/${code}/`, per).catch(() => null);
+      if (!body) return;
+      const eng = parsePostEngagement(body);
+      if (!eng) return;
+      e.node!.edge_liked_by = { count: eng.likes };
+      e.node!.edge_media_to_comment = { count: eng.comments };
+    }),
+  );
+}
+
+async function ogPageToRawUser(
+  username: string,
+  timeoutMs = 8_000,
+  opts: { engagement?: boolean } = {},
+): Promise<RawUser | null> {
   const body = await ogFetch(`https://www.instagram.com/${encodeURIComponent(username)}/`, timeoutMs);
   if (!body) return null;
   const desc = ogMeta(body, 'og:description');
@@ -306,7 +346,7 @@ async function ogPageToRawUser(username: string, timeoutMs = 8_000): Promise<Raw
     ? decodeEntities(title).replace(/\s*\(@[^)]+\).*$/, '').replace(/\s*[•·].*$/, '').trim()
     : '';
   const pic = ogImage(body);
-  return {
+  const user: RawUser = {
     username,
     full_name,
     is_private: false,
@@ -318,6 +358,11 @@ async function ogPageToRawUser(username: string, timeoutMs = 8_000): Promise<Raw
       edges: parseOgGrid(body).map((code) => ({ node: { shortcode: code } })),
     },
   };
+  // For DISPLAY profiles, pull a few post pages so engagement resolves to a real %
+  // instead of "—". Off for graph-expansion nodes (breadth over depth — they never
+  // need per-post data). Free: post pages are the same cookieless og path.
+  if (opts.engagement) await enrichOgEngagement(user, Math.min(6_000, timeoutMs));
+  return user;
 }
 
 // Fetch a profile from Instagram's free endpoint. `allowApify` opts THIS call
@@ -352,7 +397,7 @@ async function fetchProfile(
     // the profiles we actually display (allowApify). og runs for expansion nodes
     // too (it's free), so a throttled graph crawl still enriches instead of dying.
     if (res.status === 401 || res.status === 403 || res.status === 429) {
-      const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+      const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs), { engagement: allowApify }).catch(() => null);
       if (viaOg) return viaOg;
       if (allowApify) return await apifyProfileAsRawUser(username); // free paths blocked → paid net
     }
@@ -363,7 +408,7 @@ async function fetchProfile(
     // host, so a dead auth relay doesn't take it down. A genuine 404 / empty-200 is
     // a *returned* status (handled above), never a throw, so we still never pay to
     // disprove a hallucination.
-    const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+    const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs), { engagement: allowApify }).catch(() => null);
     if (viaOg) return viaOg;
     if (allowApify) return await apifyProfileAsRawUser(username);
     return null; // graph-expansion crawl: free-only, skip on error
@@ -425,14 +470,14 @@ async function fetchProfileWithStatus(
     // Only if og ALSO fails do we surface the original non-ok status, preserving the
     // existing pool-dead → batched-Apify behaviour as a last resort.
     if (res.status === 401 || res.status === 403 || res.status === 429) {
-      const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+      const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs), { engagement: true }).catch(() => null);
       if (viaOg) return { user: viaOg, status: 200 };
     }
     return { user: null, status: res.status };
   } catch {
     // igFetch threw (relay/tunnel unreachable or aborted). The og proxy is a
     // DIFFERENT host, so still try the free path before giving up to Apify.
-    const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+    const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs), { engagement: true }).catch(() => null);
     if (viaOg) return { user: viaOg, status: 200 };
     return { user: null, status: 0 };
   } finally {
