@@ -15,6 +15,7 @@
 // ============================================================
 
 import { igFetch } from './ig-fetch';
+import { ogFetch, ogMeta, ogImage, decodeEntities } from './og-proxy';
 import { apifyHashtag, apifyProfileOrNull, apifyProfilesBatch } from './apify';
 import type { ScrapedProfile } from './instagram-scraper';
 
@@ -241,6 +242,84 @@ async function apifyProfilesAsRawUsers(
   return out;
 }
 
+// ---- FREE og-page fallback --------------------------------------------------
+// When the authenticated cookie path is throttled (429 / breaker cooldown), its
+// cookie is dead (401/403), or the relay is down, we can STILL enrich a profile
+// for FREE by fetching its public link-preview PAGE through the home-IP og proxy —
+// the exact cookieless, un-throttled path that already powers the profile drawer.
+// The page's og: tags give the display name, follower count and profile photo; the
+// embedded media pks give recent-post shortcodes. It carries NO bio / captions /
+// related-profiles, so a seed enriched this way DISPLAYS with real data but can't
+// be crawled outward (same limitation as an Apify-enriched seed). This is what
+// keeps live discovery returning real creators while the session is expired — with
+// zero Apify spend and no dependency on the throttled web_profile_info endpoint.
+const IG_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+function pkToShortcode(pk: string): string {
+  let n: bigint;
+  try { n = BigInt(pk); } catch { return ''; }
+  if (n <= 0n) return '';
+  let s = '';
+  while (n > 0n) { s = IG_B64[Number(n % 64n)] + s; n /= 64n; }
+  return s;
+}
+
+// "104M" / "2,990" / "1.2K" → number (IG rounds big counts, so approximate large).
+function parseCountToken(t: string): number {
+  const s = t.trim().replace(/,/g, '');
+  const m = s.match(/^([\d.]+)\s*([KMB]?)$/i);
+  if (!m) return 0;
+  let n = parseFloat(m[1] ?? '0');
+  const suf = (m[2] || '').toUpperCase();
+  if (suf === 'K') n *= 1e3; else if (suf === 'M') n *= 1e6; else if (suf === 'B') n *= 1e9;
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+// Recent-media shortcodes out of the logged-out profile HTML (pk → code), capped.
+function parseOgGrid(body: string, limit = 12): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const re = /(\w*)Media","is_timeline_pinned":(?:false|true),"pk":"(\d{12,})"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) && out.length < limit) {
+    const pk = m[2] ?? '';
+    if (!pk || seen.has(pk)) continue;
+    seen.add(pk);
+    const code = pkToShortcode(pk);
+    if (code) out.push(code);
+  }
+  return out;
+}
+
+// Fetch a profile's public PAGE via the free og proxy and map it onto the RawUser
+// shape the pipeline speaks — a drop-in for the cookie/Apify enrichers, minus the
+// fields the page doesn't expose (bio, captions, related graph). Returns null when
+// the page doesn't resolve (404 / private-blank / proxy down).
+async function ogPageToRawUser(username: string, timeoutMs = 8_000): Promise<RawUser | null> {
+  const body = await ogFetch(`https://www.instagram.com/${encodeURIComponent(username)}/`, timeoutMs);
+  if (!body) return null;
+  const desc = ogMeta(body, 'og:description');
+  const fm = desc?.match(/([\d.,KMB]+)\s+Followers/i);
+  if (!fm) return null; // no follower line = the page didn't resolve for a real account
+  const title = ogMeta(body, 'og:title');
+  // og:title = "NASA (@nasa) • Instagram photos and videos" → keep just the name.
+  const full_name = title
+    ? decodeEntities(title).replace(/\s*\(@[^)]+\).*$/, '').replace(/\s*[•·].*$/, '').trim()
+    : '';
+  const pic = ogImage(body);
+  return {
+    username,
+    full_name,
+    is_private: false,
+    is_verified: false,
+    profile_pic_url: pic ?? undefined,
+    edge_followed_by: { count: parseCountToken(fm[1] ?? '') },
+    edge_related_profiles: { edges: [] },
+    edge_owner_to_timeline_media: {
+      edges: parseOgGrid(body).map((code) => ({ node: { shortcode: code } })),
+    },
+  };
+}
+
 // Fetch a profile from Instagram's free endpoint. `allowApify` opts THIS call
 // into the PAID Apify fallback when the free path is blocked (401/403/429) — set
 // only for the profiles we actually display (seed enrichment), never for the
@@ -262,18 +341,30 @@ async function fetchProfile(
     });
     if (res.ok) {
       const json = (await res.json()) as { data?: { user?: RawUser } };
-      return json?.data?.user ?? null; // 200 with no user = doesn't exist → no Apify
+      return json?.data?.user ?? null; // 200 with no user = doesn't exist → no fallback
     }
-    if (allowApify && (res.status === 401 || res.status === 403 || res.status === 429)) {
-      return await apifyProfileAsRawUser(username); // free path blocked → paid net
+    // Cookie path blocked: 401/403 = dead/checkpointed session, 429 = throttle OR
+    // the shared breaker cooldown. Try the FREE og-page proxy next — cookieless and
+    // un-throttled, so it returns real follower/name/photo data even while
+    // web_profile_info is clamped AND the auth session is expired. This is what
+    // makes live/Instagram search work again without a fresh capture-session. Only
+    // if the og page ALSO comes back empty do we fall to paid Apify, and only for
+    // the profiles we actually display (allowApify). og runs for expansion nodes
+    // too (it's free), so a throttled graph crawl still enriches instead of dying.
+    if (res.status === 401 || res.status === 403 || res.status === 429) {
+      const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+      if (viaOg) return viaOg;
+      if (allowApify) return await apifyProfileAsRawUser(username); // free paths blocked → paid net
     }
     return null; // 404 / other → skip this handle
   } catch {
     // igFetch THREW: the relay/tunnel is unreachable (laptop off) or the request
-    // aborted/timed out. That's the "free path is blocked" case the paid net was
-    // built for — the fallback would be dead weight if it only fired on a live
-    // relay's 401. A genuine 404 / empty-200 is a *returned* status (handled
-    // above), never a throw, so we still never pay to disprove a hallucination.
+    // aborted/timed out. Free-first still applies — the og proxy is a DIFFERENT
+    // host, so a dead auth relay doesn't take it down. A genuine 404 / empty-200 is
+    // a *returned* status (handled above), never a throw, so we still never pay to
+    // disprove a hallucination.
+    const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+    if (viaOg) return viaOg;
     if (allowApify) return await apifyProfileAsRawUser(username);
     return null; // graph-expansion crawl: free-only, skip on error
   } finally {
