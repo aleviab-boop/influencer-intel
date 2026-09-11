@@ -261,11 +261,23 @@ async function persistCreator(
   // Estimate engagement rate roughly: assume 2% baseline for now
   // (real ER needs post-level like/comment counts which we'll add later).
   // Engagement rate from per-post averages (when feed call succeeded)
-  const engagementRate = geoSignals?.engagement_rate != null
+  let engagementRate = geoSignals?.engagement_rate != null
     ? geoSignals.engagement_rate / 100  // store as fraction, UI formats as %
     : null;
 
   const recent_posts: RecentPost[] = extraction.recent_posts;
+
+  // Feed call didn't yield an ER (throttled / skipped)? Fall back to the per-post
+  // like/comment counts we already extracted from the grid, so we persist a real
+  // engagement_rate instead of NULL (which the UI renders as "—"). Same math as
+  // the drawer: avg(per-post likes + comments) / followers, stored as a fraction.
+  if (engagementRate == null && extraction.follower_count && extraction.follower_count > 0) {
+    const withEng = recent_posts.filter((p) => (p.like_count ?? 0) > 0 || (p.comment_count ?? 0) > 0);
+    if (withEng.length > 0) {
+      const avg = withEng.reduce((s, p) => s + (p.like_count ?? 0) + (p.comment_count ?? 0), 0) / withEng.length;
+      engagementRate = avg / extraction.follower_count;
+    }
+  }
 
   const audience_demographics: AudienceDemographics = {
     source: 'inferred_scraping',

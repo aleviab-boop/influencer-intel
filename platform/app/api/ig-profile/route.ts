@@ -828,6 +828,7 @@ const RECENT_POSTS_TTL_MS = 6 * 60 * 60 * 1000;
 function persistRecentPostsCache(
   handle: string,
   recent: Array<{ shortcode: string; thumbnail: string | null; likes: number; comments: number; is_video: boolean; taken_at: number | null; caption?: string }>,
+  followers = 0,
 ): Promise<void> {
   const usable = recent.filter((p) => p.shortcode && (p.likes > 0 || p.comments > 0 || p.thumbnail));
   if (usable.length === 0) return Promise.resolve(); // nothing worth caching
@@ -840,11 +841,23 @@ function persistRecentPostsCache(
     taken_at: p.taken_at,
     caption: p.caption ?? '',
   }));
+  // Persist a real engagement_rate alongside the posts. Many rows have posts but a
+  // NULL engagement_rate (this enrichment writes posts; the feed-derived rollup is
+  // separate), so the discovery rows fell back to a read-time SQL compute or showed
+  // "—". Store the ratio (avg per-post likes+comments / followers) here so it's
+  // durable + sortable everywhere. COALESCE means we only FILL a NULL — never
+  // downgrade an existing feed-derived value.
+  const withEng = usable.filter((p) => p.likes > 0 || p.comments > 0);
+  const erRatio =
+    followers > 0 && withEng.length > 0
+      ? withEng.reduce((s, p) => s + p.likes + p.comments, 0) / withEng.length / followers
+      : null;
   return getBolticClient()
     .query(
-      `UPDATE creators SET recent_posts = $2::json, recent_posts_cached_at = now(), updated_at = now()
+      `UPDATE creators SET recent_posts = $2::json, recent_posts_cached_at = now(),
+              engagement_rate = COALESCE(engagement_rate, $3::numeric), updated_at = now()
        WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
-      [handle, JSON.stringify(payload)],
+      [handle, JSON.stringify(payload), erRatio],
     )
     .then(() => {})
     .catch(() => {});
@@ -1067,7 +1080,7 @@ async function dbProfile(handle: string, demographics: AudienceDemographics | nu
       if (recent.length > 0 && recent.some((p) => p.shortcode)) {
         recent = await refreshPostsViaOg(recent);
         const enriched = recent;
-        after(() => persistRecentPostsCache(handle, enriched)); // write-back after response
+        after(() => persistRecentPostsCache(handle, enriched, followers)); // write-back after response
       }
     }
 
