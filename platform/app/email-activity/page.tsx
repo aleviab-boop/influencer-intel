@@ -92,7 +92,7 @@ export default function EmailActivityFeature() {
             <>
               {!enabled && (
                 <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-                  Email delivery isn’t configured yet — set <code className="font-mono">RESEND_API_KEY</code> to start sending. Past activity still shows below.
+                  Email is sent manually on this platform — outreach opens a pre-filled draft in your own mail client (Gmail compose), so it goes out from your real address. Nothing is auto-sent. Past activity still shows below.
                 </div>
               )}
 

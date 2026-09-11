@@ -1,33 +1,30 @@
 // ============================================================
-// Transactional email — turns the pull-based creator notification feed into
-// real out-of-app delivery (an invite lands → the creator gets an email).
+// Transactional email — DELIVERY IS INTENTIONALLY MANUAL (handoff-only).
 //
-// Uses Resend's REST API over plain `fetch` — no SDK dependency, nothing to
-// install. The whole module is gated behind RESEND_API_KEY: with no key set
-// (dev, preview, or before the key is added to Vercel) every send is a no-op
-// that resolves, so callers can fire-and-forget without ever breaking their
-// own write path.
+// This platform does NOT send automated transactional email. Automated
+// delivery (Resend/SMTP/etc.) is not implementable for this deployment, so
+// `emailEnabled()` is hard-wired to `false` and every notify* function below is
+// a resolved no-op. Callers can keep firing them (`void notifyInvite(...)`)
+// without ever breaking their own write path.
 //
-// Callers should invoke these as `void notifyInvite(...).catch(() => {})` —
-// a mail failure must never surface as a recruit/payment failure.
+// The ONLY real email path is manual: outreach drafts are logged with
+// status='handoff' and opened in the user's own Gmail/mail client via
+// `lib/mail-compose.ts`, so the message sends from the user's real address.
+//
+// What survives here: the HTML template helpers (`shell`) and copy builders are
+// kept so the manual handoff can still reuse the same body markup, plus the
+// email_log reader (`listEmailLog`) that powers the Email Activity page.
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';
-import { creatorWantsEmail } from './creator-email-prefs';
 
-const RESEND_ENDPOINT = 'https://api.resend.com/emails';
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Is email delivery configured? Everything below no-ops when false. */
+/**
+ * Email delivery is permanently manual (handoff-only) on this deployment, so
+ * this is hard-wired to `false`. Every notify* function no-ops through it, and
+ * the manual outreach path (status='handoff' + Gmail compose) is the real one.
+ */
 export function emailEnabled(): boolean {
-  return !!process.env.RESEND_API_KEY;
-}
-
-// Verified sender. Until you verify your own domain in Resend, their shared
-// `onboarding@resend.dev` sender works for testing (low deliverability, fine
-// for a demo). Set EMAIL_FROM to `Name <notify@yourdomain.com>` once verified.
-function fromAddress(): string {
-  return process.env.EMAIL_FROM || 'Influencer Intel <onboarding@resend.dev>';
+  return false;
 }
 
 function appBaseUrl(): string {
@@ -80,56 +77,14 @@ export interface EmailLogMeta {
   brand_id?: string | null;
 }
 
-// Best-effort audit row — never throws, never blocks the send it records.
-async function logEmail(
-  meta: EmailLogMeta,
-  recipient: string,
-  subject: string,
-  status: 'sent' | 'failed',
-  error?: string | null,
-): Promise<void> {
-  try {
-    await getBolticClient().query(
-      `INSERT INTO email_log (creator_id, program_id, brand_id, kind, recipient, subject, status, error)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        meta.creator_id ?? null, meta.program_id ?? null, meta.brand_id ?? null,
-        meta.kind, recipient, subject.slice(0, 300), status, error ? error.slice(0, 500) : null,
-      ],
-    );
-  } catch (err) {
-    console.error('[email] log write failed:', (err as Error).message);
-  }
-}
-
-/** Low-level send. Returns true on accept, false on any no-op/failure. Never throws. */
-export async function sendEmail({ to, subject, html }: SendArgs, meta?: EmailLogMeta): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return false;                 // unconfigured → silent no-op (nothing attempted)
-  if (!to || !EMAIL_RE.test(to)) return false;
-  // Respect the recipient's opt-out for this category (invite/payment/review/
-  // deadline). Unknown creator or unmapped kind always sends. This one gate
-  // covers every notify path, since they all flow through here with meta.
-  if (meta && !(await creatorWantsEmail(meta.creator_id, meta.kind))) return false;
-  try {
-    const res = await fetch(RESEND_ENDPOINT, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: fromAddress(), to, subject, html }),
-    });
-    if (!res.ok) {
-      const detail = await res.text().catch(() => '');
-      console.error('[email] send failed:', res.status, detail);
-      if (meta) await logEmail(meta, to, subject, 'failed', `HTTP ${res.status} ${detail}`);
-      return false;
-    }
-    if (meta) await logEmail(meta, to, subject, 'sent');
-    return true;
-  } catch (err) {
-    console.error('[email] send error:', (err as Error).message);
-    if (meta) await logEmail(meta, to, subject, 'failed', (err as Error).message);
-    return false;
-  }
+/**
+ * Low-level send. Automated delivery is disabled on this deployment, so this is
+ * a permanent no-op that resolves `false`. The `_args`/`_meta` params are kept
+ * so the notify* call sites (and any future manual-handoff wiring) don't need to
+ * change. Real email goes out through the manual Gmail-compose handoff instead.
+ */
+export async function sendEmail(_args: SendArgs, _meta?: EmailLogMeta): Promise<boolean> {
+  return false;
 }
 
 /**

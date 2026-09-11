@@ -4,9 +4,10 @@
 // from their real address, lands in their Sent folder, and replies come back to
 // them. No API key, no domain verification, works today.
 //
-// Used as the graceful fallback when Resend isn't configured (RESEND_API_KEY
-// unset): the outreach routes signal `needs_handoff` and the client opens one
-// of these instead of showing a dead "email not configured" error.
+// This is THE email path on this platform — delivery is manual by design (there
+// is no automated sender). The outreach routes signal `needs_handoff` and the
+// client opens one of these compose windows so the user sends the message
+// themselves.
 
 // Gmail web compose — opens in whatever Google account the browser is signed
 // into. Best when the user lives in Gmail (most of our users do).

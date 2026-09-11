@@ -7,10 +7,10 @@
 // prefs (e.g. monthly_goal) without a new column:
 //   creator_prefs = { monthly_goal: 50000, email: { invite: true, payment: false, ... } }
 //
-// Model is OPT-OUT: a missing flag means "yes, send". So a creator who never
-// touched settings still gets everything, and only an explicit `false`
-// suppresses a category. The email module gates every send through
-// `creatorWantsEmail` before hitting Resend.
+// Model is OPT-OUT: a missing flag means "yes, contact me". So a creator who
+// never touched settings still counts as reachable, and only an explicit
+// `false` suppresses a category. Email delivery itself is manual (handoff) on
+// this platform; these flags record the creator's stated contact preferences.
 // ============================================================
 
 import { getBolticClient } from '@influencer-intel/shared/db';
