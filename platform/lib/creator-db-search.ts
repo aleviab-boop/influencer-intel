@@ -203,7 +203,18 @@ export async function searchCreatorsInDb(
   const sql = `
     with base as (
       select id, handle, display_name, bio, primary_category, follower_count,
-             engagement_rate, is_verified, profile_photo_url, source, gender, is_indian,
+             -- engagement_rate is frequently NULL even when recent_posts exist (the
+             -- worker stores posts but not the rollup). Compute the ratio from those
+             -- posts IN SQL — same math the drawer uses — so rows show a real ER%
+             -- instead of "—". The WHERE erFloor filter still sees the raw column.
+             coalesce(
+               engagement_rate,
+               case when json_typeof(recent_posts) = 'array' then (
+                 select avg(coalesce((e->>'likes')::numeric, 0) + coalesce((e->>'comments')::numeric, 0))
+                   from json_array_elements(recent_posts) e
+               ) end / nullif(follower_count, 0)
+             ) as engagement_rate,
+             is_verified, profile_photo_url, source, gender, is_indian,
              (${scoreExpr}) as score,
              (${locHitExpr}) as loc_match,
              (${SOURCE_BUCKET}) as source_bucket

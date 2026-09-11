@@ -97,7 +97,18 @@ async function dbBackedAiProfiles(handles: string[]): Promise<LiveProfile[]> {
       engagement_rate: number | string | null; is_verified: boolean | null;
       profile_photo_url: string | null; gender: string | null; is_indian: boolean | null;
     }>(
-      `SELECT id, handle, display_name, bio, primary_category, follower_count, engagement_rate,
+      // engagement_rate is often NULL even when we already stored recent_posts (the
+      // worker/crawl writes posts but not the rollup). Fall back to computing the
+      // ratio from those posts IN SQL — same math the drawer does — so the row shows
+      // a real ER% instead of "—". No recent_posts payload leaves the DB.
+      `SELECT id, handle, display_name, bio, primary_category, follower_count,
+              coalesce(
+                engagement_rate,
+                CASE WHEN json_typeof(recent_posts) = 'array' THEN (
+                  SELECT avg(coalesce((e->>'likes')::numeric, 0) + coalesce((e->>'comments')::numeric, 0))
+                    FROM json_array_elements(recent_posts) e
+                ) END / nullif(follower_count, 0)
+              ) AS engagement_rate,
               is_verified, profile_photo_url, gender, is_indian
          FROM creators
         WHERE platform = 'instagram' AND is_active = true
