@@ -466,6 +466,66 @@ async function ogPageToRawUser(
   return user;
 }
 
+// Result of a single free-path engagement pull. `posts_analyzed` is how many of
+// the recent posts actually returned like/comment counts (the average is over
+// those only). All counts are absolute; `engagement_rate` is a percent (1 dp).
+export interface OgEngagement {
+  full_name: string | null;
+  followers: number;
+  avg_likes: number;
+  avg_comments: number;
+  engagement_rate: number; // percent, one decimal (e.g. 3.4)
+  posts_analyzed: number;
+  profile_pic_url: string | null;
+  biography: string | null;
+  category: string | null;
+  recent_posts: Array<{ code: string; likes: number; comments: number }>;
+}
+
+// FREE / cookieless / un-throttled engagement pull for ONE handle. Fetches the
+// public og profile page (followers + recent-post shortcodes + bio/category),
+// then a few of those post pages for likes/comments, and computes the averages
+// + engagement rate. NEVER touches web_profile_info or Apify — this is the exact
+// path that survives while the authenticated endpoint is rate-limited, so it's
+// what the background engagement fetcher uses to backfill the ~70% of DB rows
+// that have no engagement. Returns null when the profile page doesn't resolve
+// (private / gone / proxy down).
+export async function fetchOgEngagement(
+  handle: string,
+  timeoutMs = 9_000,
+): Promise<OgEngagement | null> {
+  const user = await ogPageToRawUser(handle, timeoutMs, { engagement: true });
+  if (!user) return null;
+  const followers = user.edge_followed_by?.count ?? 0;
+  const edges = user.edge_owner_to_timeline_media?.edges ?? [];
+  let likeSum = 0;
+  let commentSum = 0;
+  let counted = 0;
+  const recent_posts: Array<{ code: string; likes: number; comments: number }> = [];
+  for (const e of edges) {
+    const likes = e.node?.edge_liked_by?.count ?? 0;
+    const comments = e.node?.edge_media_to_comment?.count ?? 0;
+    if (likes > 0 || comments > 0) {
+      likeSum += likes;
+      commentSum += comments;
+      counted += 1;
+      if (e.node?.shortcode) recent_posts.push({ code: e.node.shortcode, likes, comments });
+    }
+  }
+  return {
+    full_name: user.full_name ?? null,
+    followers,
+    avg_likes: counted > 0 ? Math.round(likeSum / counted) : 0,
+    avg_comments: counted > 0 ? Math.round(commentSum / counted) : 0,
+    engagement_rate: engagementRate(user, followers),
+    posts_analyzed: counted,
+    profile_pic_url: user.profile_pic_url ?? null,
+    biography: user.biography ?? null,
+    category: user.category_name ?? null,
+    recent_posts,
+  };
+}
+
 // Fetch a profile from Instagram's free endpoint. `allowApify` opts THIS call
 // into the PAID Apify fallback when the free path is blocked (401/403/429) — set
 // only for the profiles we actually display (seed enrichment), never for the
