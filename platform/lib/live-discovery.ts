@@ -413,10 +413,27 @@ async function fetchProfileWithStatus(
   const timer = setTimeout(() => ctrl.abort(), Math.min(12_000, budgetMs));
   try {
     const res = await igFetch(PROFILE_URL(username), { headers: REQUEST_HEADERS, signal: ctrl.signal });
-    if (!res.ok) return { user: null, status: res.status };
-    const json = (await res.json()) as { data?: { user?: RawUser } };
-    return { user: json?.data?.user ?? null, status: 200 };
+    if (res.ok) {
+      const json = (await res.json()) as { data?: { user?: RawUser } };
+      return { user: json?.data?.user ?? null, status: 200 };
+    }
+    // Cookie path blocked (401/403 = dead session, 429 = throttle/breaker): try the
+    // FREE og-page proxy — cookieless, un-throttled, account-safe — so an OpenAI-
+    // named creator still resolves with real follower/name/photo data while
+    // web_profile_info is clamped. Report status 200 so the caller treats it as a
+    // confirmed, validated profile (not a stub bound for the paid Apify fallback).
+    // Only if og ALSO fails do we surface the original non-ok status, preserving the
+    // existing pool-dead → batched-Apify behaviour as a last resort.
+    if (res.status === 401 || res.status === 403 || res.status === 429) {
+      const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+      if (viaOg) return { user: viaOg, status: 200 };
+    }
+    return { user: null, status: res.status };
   } catch {
+    // igFetch threw (relay/tunnel unreachable or aborted). The og proxy is a
+    // DIFFERENT host, so still try the free path before giving up to Apify.
+    const viaOg = await ogPageToRawUser(username, Math.min(8_000, budgetMs)).catch(() => null);
+    if (viaOg) return { user: viaOg, status: 200 };
     return { user: null, status: 0 };
   } finally {
     clearTimeout(timer);
