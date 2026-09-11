@@ -328,15 +328,64 @@ function parseOgCategoryName(body: string): string | null {
   if (!m || !m[1]) return null;
   return jsonUnescape(m[1])?.trim() || null;
 }
-// Derive a category from the bio's first line — it's almost always the creator's
-// role/tagline ("Dancer • Creator • Choreographer"). Strip @mentions/links, and
-// only accept a short, letter-bearing line so we don't surface a greeting or a
-// wall of emoji as the category.
+// Niche/role words that mark a bio line as an actual CATEGORY rather than a
+// personal tagline. Kept broad but concrete — matched as whole words, case-
+// insensitive. A line carrying one of these is a real category signal.
+const NICHE_KEYWORDS = [
+  'fashion', 'style', 'stylist', 'beauty', 'makeup', 'mua', 'skincare', 'hair',
+  'model', 'modeling', 'influencer', 'creator', 'content', 'blogger', 'vlogger',
+  'youtuber', 'photographer', 'photography', 'videographer', 'filmmaker', 'editor',
+  'director', 'artist', 'painter', 'designer', 'design', 'illustrator',
+  'music', 'musician', 'singer', 'rapper', 'dj', 'producer', 'dancer', 'dance',
+  'choreographer', 'actor', 'actress', 'comedian', 'writer', 'author', 'poet',
+  'fitness', 'gym', 'trainer', 'yoga', 'nutrition', 'health', 'wellness',
+  'food', 'foodie', 'chef', 'cooking', 'baker', 'recipe', 'travel', 'traveller',
+  'blog', 'lifestyle', 'gaming', 'gamer', 'tech', 'entrepreneur', 'founder',
+  'coach', 'mentor', 'educator', 'teacher', 'motivational', 'spiritual',
+  'comedy', 'meme', 'parenting', 'mom', 'dad', 'pet', 'dog', 'cat', 'nature',
+  'automotive', 'car', 'bike', 'sports', 'athlete', 'footballer', 'cricketer',
+];
+const NICHE_RE = new RegExp(`\\b(?:${NICHE_KEYWORDS.join('|')})s?\\b`, 'i');
+
+// Clean a raw bio line: drop @mentions, links, and leading/trailing separators/
+// emoji punctuation so we can judge it on its words.
+function cleanBioLine(raw: string): string {
+  return raw
+    .replace(/@[\w.]+/g, '')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[|•·▪️●|]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Derive a category from the bio. Instead of blindly taking line 1 (which is
+// often a personal tagline — "first priority Mei ❤️"), scan the first few lines
+// and PREFER one that reads like a niche: it carries a role/niche keyword, or is
+// a short tag-separated list ("Beauty | Style | Growth"). Only if none qualify do
+// we fall back to line 1, and even then we reject sentence-like taglines (no
+// niche keyword AND more than ~4 words reads like a sentence, not a category).
 function categoryFromBio(bio: string | null): string | null {
   if (!bio) return null;
-  const first = (bio.split(/\r?\n/)[0] ?? '').replace(/@[\w.]+/g, '').replace(/https?:\/\/\S+/g, '').trim();
-  if (first.length < 3 || first.length > 60 || !/[a-z]/i.test(first)) return null;
-  return first;
+  // Keep each cleaned line paired with whether its RAW form had a tag separator,
+  // so the two stay aligned after filtering.
+  const lines = bio.split(/\r?\n/).slice(0, 4)
+    .map((raw) => ({ text: cleanBioLine(raw), hadSep: /[|•·▪️●]/.test(raw) }))
+    // Reject lines with a 4+ digit run — those are IDs / phone numbers / game
+    // codes ("BGMI ID 5458192062"), never a category.
+    .filter((l) => l.text.length >= 3 && l.text.length <= 60 && /[a-z]/i.test(l.text) && !/\d{4,}/.test(l.text));
+  if (lines.length === 0) return null;
+  // 1) A line explicitly carrying a niche keyword wins.
+  const keyworded = lines.find((l) => NICHE_RE.test(l.text));
+  if (keyworded) return keyworded.text;
+  // 2) Else a short tag-list line (had |/•/· separators → ≤5 words) reads like a
+  //    category list, not a sentence.
+  const tagList = lines.find((l) => l.hadSep && l.text.split(' ').length <= 5);
+  if (tagList) return tagList.text;
+  // 3) Fallback: line 1, but only if it's short enough to be a label (≤4 words)
+  //    rather than a sentence-like personal tagline.
+  const first = lines[0]!.text;
+  if (first.split(' ').length <= 4) return first;
+  return null;
 }
 // Fetch a creator's og profile page and pull bio + category from it. FREE +
 // cookieless + un-throttled — never hits web_profile_info. Used to fill the
