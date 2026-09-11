@@ -20,6 +20,7 @@ import {
   looksLikeBusinessAccount,
   completenessScore,
   extractContact,
+  fetchOgProfileMeta,
   STATE_CITIES,
   type LiveProfile,
 } from '@/lib/live-discovery';
@@ -145,6 +146,38 @@ async function dbBackedAiProfiles(handles: string[]): Promise<LiveProfile[]> {
   }
 }
 
+// Fill missing categories (and bios) on the AI display rows from the FREE og
+// profile page. dbBacked rows frequently have a NULL primary_category because
+// they were discovered via the counts-only og path (which never captured the
+// bio) — the throttled web_profile_info is the only other place that carries it.
+// The bio's first line is the creator's role/category, so we parse it from the
+// same un-throttled page, fill the row IN PLACE, and persist (COALESCE — fills a
+// NULL/empty only) so it's durable everywhere. Bounded + parallel (~2s) and
+// best-effort: a handle that fails just keeps "—".
+async function enrichAiCategories(profiles: LiveProfile[]): Promise<void> {
+  const need = profiles.filter((p) => p.username && (!p.category || !p.category.trim())).slice(0, 12);
+  if (need.length === 0) return;
+  await Promise.all(
+    need.map(async (p) => {
+      const meta = await fetchOgProfileMeta(p.username, 7_000).catch(() => null);
+      if (!meta) return;
+      if (meta.category) p.category = meta.category;
+      if (meta.biography && !p.biography) p.biography = meta.biography;
+      if (!meta.category && !meta.biography) return;
+      void getBolticClient()
+        .query(
+          `UPDATE creators
+              SET primary_category = COALESCE(NULLIF(primary_category, ''), $2),
+                  bio = COALESCE(NULLIF(bio, ''), $3),
+                  updated_at = now()
+            WHERE platform = 'instagram' AND lower(handle) = lower($1)`,
+          [p.username, meta.category, meta.biography],
+        )
+        .catch(() => {});
+    }),
+  );
+}
+
 export async function POST(req: NextRequest) {
   // Wall-clock start. Campaign discovery chains TWO sequential Apify phases
   // (hashtag discovery → batched profile enrichment); each is ~20-35s. We budget
@@ -178,6 +211,16 @@ export async function POST(req: NextRequest) {
   const tokens = tokenize(prompt);
   const mode = body?.mode === 'db' ? 'db' : 'live';
   const isCampaign = isCampaignPrompt(prompt);
+  // APIFY KILL-SWITCH (default OFF). The paid Apify enrichment/hashtag/direct
+  // paths below cost credits on every call, and a plain db-mode search could
+  // silently trigger the stub-enrich path. To make accidental spend impossible,
+  // all three paid sites are gated behind this flag. It is OFF unless explicitly
+  // enabled via the DISCOVERY_ALLOW_APIFY env var (set in Vercel) or a per-request
+  // allowApify:true in the body. Nothing here spends money by default.
+  const apifyAllowed =
+    process.env.DISCOVERY_ALLOW_APIFY === 'true' ||
+    process.env.DISCOVERY_ALLOW_APIFY === '1' ||
+    body?.allowApify === true;
 
   // DIRECT-HANDLE LOOKUP. Rule: a prompt that starts with '@' names an exact
   // Instagram account, not a niche. We turn it into a crawl seed so the live
@@ -383,7 +426,7 @@ export async function POST(req: NextRequest) {
       // cold search return the ChatGPT-style named-creator page. Bounded to a single
       // paid run; only fires when the free pool is down (no stubs → no Apify spend).
       const stubHandles = liveValidated.filter((p) => p.unverified).map((p) => p.username);
-      if (stubHandles.length > 0) {
+      if (apifyAllowed && stubHandles.length > 0) {
         try {
           const enriched = await enrichHandlesViaApifyBatch(stubHandles, tokens, 22_000);
           if (enriched.length > 0) {
@@ -425,6 +468,8 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error('[discover-live] AI relevance verify failed:', err);
       }
+      // Fill any missing categories/bios on the display rows from the free og page.
+      await enrichAiCategories(cand).catch(() => {});
       aiProfiles = cand;
     } catch (err) {
       console.error('[discover-live] AI suggest failed:', err);
@@ -482,7 +527,7 @@ export async function POST(req: NextRequest) {
       // posting under the topic. Only fires when the AI/free seeds came back few,
       // so campaigns lead with AI-named creators rather than hashtag noise. No-op
       // without APIFY_TOKEN.
-      if (seeds.length < 8) {
+      if (apifyAllowed && seeds.length < 8) {
         try {
           const hopts = campaign ? { limit: 20, tags: 2, postsPerTag: 25 } : {};
           for (const m of await resolveHashtagToSeeds(prompt, hopts)) {
@@ -519,7 +564,7 @@ export async function POST(req: NextRequest) {
         // came from the old HASHTAG seed source (#denim → global thrift shops), NOT
         // from Apify — so we keep Apify as the enrichment engine, just pointed at
         // the right, OpenAI-found accounts.
-        apifyDirect: isCampaign,
+        apifyDirect: isCampaign && apifyAllowed,
       });
       liveProfiles = run.results.map((r) => ({ ...r, from: 'live' as const }));
     } catch (err) {

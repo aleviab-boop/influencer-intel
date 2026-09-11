@@ -306,6 +306,54 @@ function parsePostEngagement(body: string): { likes: number; comments: number } 
   return { likes: l ? parseCountToken(l[1] ?? '') : 0, comments: c ? parseCountToken(c[1] ?? '') : 0 };
 }
 
+// The og PROFILE page HTML embeds the creator's biography (and sometimes an IG
+// category_name) in its inline JSON — the SAME free/cookieless/un-throttled page
+// we already fetch for followers + avatar. The throttled web_profile_info is the
+// only OTHER place that carries bio/category, so parsing it here fills the bio
+// (which feeds relevance/fit + contact extraction) and a real category for
+// creators reached via the free path. The value is JSON-escaped (\u2022, \n,
+// surrogate pairs), so decode via JSON.parse of the raw group.
+function jsonUnescape(raw: string): string | null {
+  try { return JSON.parse(`"${raw}"`); } catch { return null; }
+}
+function parseOgBiography(body: string): string | null {
+  const m = body.match(/"biography":"((?:[^"\\]|\\.)*)"/);
+  if (!m || !m[1]) return null;
+  return jsonUnescape(m[1])?.trim() || null;
+}
+// IG's own category label (e.g. "Musician/band") when the account is a
+// creator/business. Personal accounts leave it null — we fall back to the bio.
+function parseOgCategoryName(body: string): string | null {
+  const m = body.match(/"category_name":"((?:[^"\\]|\\.)*)"/);
+  if (!m || !m[1]) return null;
+  return jsonUnescape(m[1])?.trim() || null;
+}
+// Derive a category from the bio's first line — it's almost always the creator's
+// role/tagline ("Dancer • Creator • Choreographer"). Strip @mentions/links, and
+// only accept a short, letter-bearing line so we don't surface a greeting or a
+// wall of emoji as the category.
+function categoryFromBio(bio: string | null): string | null {
+  if (!bio) return null;
+  const first = (bio.split(/\r?\n/)[0] ?? '').replace(/@[\w.]+/g, '').replace(/https?:\/\/\S+/g, '').trim();
+  if (first.length < 3 || first.length > 60 || !/[a-z]/i.test(first)) return null;
+  return first;
+}
+// Fetch a creator's og profile page and pull bio + category from it. FREE +
+// cookieless + un-throttled — never hits web_profile_info. Used to fill the
+// bio/category gap for DB-backed rows that were discovered via the counts-only
+// og path (which never captured them). Returns null when nothing usable resolves.
+export async function fetchOgProfileMeta(
+  handle: string,
+  timeoutMs = 8_000,
+): Promise<{ biography: string | null; category: string | null } | null> {
+  const body = await ogFetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, timeoutMs);
+  if (!body) return null;
+  const biography = parseOgBiography(body);
+  const category = parseOgCategoryName(body) ?? categoryFromBio(biography);
+  if (!biography && !category) return null;
+  return { biography, category };
+}
+
 // The profile og-page gives recent-post SHORTCODES but no likes/comments, so a
 // creator reached via the free og path shows engagement "—". Fill it by fetching a
 // few of those post pages (also free/cookieless/un-throttled) IN PARALLEL and
@@ -346,9 +394,15 @@ async function ogPageToRawUser(
     ? decodeEntities(title).replace(/\s*\(@[^)]+\).*$/, '').replace(/\s*[•·].*$/, '').trim()
     : '';
   const pic = ogImage(body);
+  // Bio + category live in the same page HTML — capture them so the free path is
+  // no longer counts-only (fills relevance/fit text, contact email, and category).
+  const biography = parseOgBiography(body) ?? undefined;
+  const category_name = parseOgCategoryName(body) ?? categoryFromBio(biography ?? null) ?? undefined;
   const user: RawUser = {
     username,
     full_name,
+    biography,
+    category_name,
     is_private: false,
     is_verified: false,
     profile_pic_url: pic ?? undefined,
