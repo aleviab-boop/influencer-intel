@@ -510,14 +510,15 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
 Rules:
 - INDIA ONLY: the trend must be popular with Indian consumers nationwide, and the source must be an INDIAN outlet or clearly about the Indian market (e.g. Vogue India, Femina, NDTV, LBB, Hindustan Times, Economic Times). NEVER use non-India sources (UK/US fashion mags etc.) or trends that are only Western.
 - CREATOR / CONSUMER trends a brand can ride: a motif/print, product, flavour, aesthetic, styling trend, ingredient, beauty look, dish, workout, travel style or seasonal-shopping occasion (e.g. "polka dot", "matcha", "quiet luxury", "millet snacking", "old money aesthetic", "glass-skin makeup", "cargo pants"). These are things people BUY, WEAR, EAT, WATCH or POST about.
+- WEIGHT TOWARD FASHION: this is a fashion-forward audience, so make AT LEAST HALF the items FASHION — specific prints/motifs, silhouettes, colours of the season, ethnic & festive wear, footwear, bags & accessories, and named styling aesthetics (e.g. "polka dots", "cargo pants", "quiet luxury", "Banarasi revival", "chunky loafers", "butter yellow"). Then fill the rest across Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor and consumer Tech.
 - STRICTLY EXCLUDE: local events / festivals-at-a-venue / restaurant pop-ups / marathons / expos / summits / city listings AND macro or business news — no economy, GDP, sales figures, stock market, auto/retail sales numbers, policy, weather, rainfall, elections or corporate headlines. If it reads like a business or news story rather than something a lifestyle creator would post, LEAVE IT OUT.
-- Favour these consumer categories: Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment, Festivals, Tech (consumer gadgets only). "category" is ONE such short bucket.
+- Favour these consumer categories, Fashion first: Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment, Festivals, Tech (consumer gadgets only). "category" is ONE such short bucket.
 - GENUINELY RECENT: backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad with evergreen "always true" trends.
 - "note" is a SHORT reason (<= 8 words) it is spiking NOW. "source" is the Indian publication/site; "url" is a link when you have one.
 - ONLY include an item if you found a recent Indian source for it. Prefer fewer, well-evidenced consumer trends over filler, events or macro news. Spread across DIFFERENT categories; no duplicates.
 Respond with ONLY a JSON object, no prose and no markdown fences:
 {"trends":[{"item":"<specific consumer trend>","category":"<category>","note":"<why now>","source":"<indian publication>","url":"<link>"}]} with up to ${max} items.`,
-        `What consumer & lifestyle trends are Indians into right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs — pan-India fashion, beauty, food, fitness, wellness, travel, home, entertainment and consumer-gadget trends a creator would post about and a brand could ride. NOT local events, and NOT macro/business/economy/weather news. Use Indian sources only.`,
+        `What consumer & lifestyle trends are Indians into right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs, WEIGHTED TOWARD FASHION (at least half should be fashion — prints, silhouettes, seasonal colours, ethnic/festive wear, footwear, accessories, styling aesthetics), then beauty, food, fitness, wellness, travel, home and consumer gadgets. NOT local events, and NOT macro/business/economy/weather news. Use Indian sources only.`,
         'gpt-4o',
       );
       return this.parseTrendRadar(content, max);
@@ -598,7 +599,15 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
         out.push(entry);
         if (out.length >= max) break;
       }
-      return out;
+      // Lead with fashion, then style-adjacent (beauty/accessories), then the
+      // rest — a stable sort keeps the model's within-group ordering intact.
+      const rank = (c: string): number => {
+        const s = c.toLowerCase();
+        if (s.includes('fashion') || s.includes('apparel') || s.includes('style') || s.includes('wear') || s.includes('footwear') || s.includes('accessor')) return 0;
+        if (s.includes('beauty') || s.includes('grooming') || s.includes('jewel')) return 1;
+        return 2;
+      };
+      return out.sort((a, b) => rank(a.category) - rank(b.category));
     };
     // 1. JSON object with "trends"
     const objMatch = content.match(/\{[\s\S]*"trends"[\s\S]*\}/);
