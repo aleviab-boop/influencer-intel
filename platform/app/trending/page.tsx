@@ -10,7 +10,7 @@ interface NewsItem { title: string; link: string; source: string; date: string; 
 interface TrendItem { title: string; traffic: string; link: string }
 // AI "trend radar" — a specific trend mapped to the marketing category it's
 // breaking in (e.g. "polka dot → Fashion"). Served cache-first from /api/trends/radar.
-interface RadarItem { item: string; category: string; note?: string }
+interface RadarItem { item: string; category: string; note?: string; source?: string; url?: string }
 // First-party Instagram trends, derived from our own crawl (trend_signals).
 interface IgTrend {
   trend_type: 'format' | 'hashtag' | 'topic' | 'visual';
@@ -241,6 +241,18 @@ export default function TrendingPage() {
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: ACCENT_SOFT, color: ACCENT }}>{t.category}</span>
                   </div>
                   {t.note && <p className="text-[12px] text-[#888] leading-snug">{t.note}</p>}
+                  {t.source && (
+                    <div className="mt-2 text-[11px] text-[#aaa] truncate">
+                      {t.url ? (
+                        <a href={t.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline" style={{ color: ACCENT }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" /></svg>
+                          {t.source}
+                        </a>
+                      ) : (
+                        <span>Source: {t.source}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

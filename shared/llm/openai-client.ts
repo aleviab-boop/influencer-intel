@@ -151,6 +151,8 @@ export interface TrendRadarItem {
   item: string;       // the concrete trend (motif / flavour / aesthetic / occasion)
   category: string;   // marketing bucket: Fashion, Beauty, Food & Beverage, Festivals…
   note?: string;      // optional short reason it's trending
+  source?: string;    // publication / domain that evidences it's current (e.g. "Vogue India")
+  url?: string;       // link to that source, when available
 }
 
 export class OpenAIClient {
@@ -493,24 +495,29 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
    * Trend radar — specific, CURRENT consumer trends each paired with the ONE
    * marketing category they're breaking in, for the public "what's trending"
    * board (e.g. "polka dot → Fashion", "matcha → Food & Beverage", "modak →
-   * Festivals"). Uses the web-search model so the picks are REAL and current
-   * rather than guessed from stale training memory. India-focused. Best-effort:
-   * returns [] on any failure so the board just stays empty instead of erroring.
+   * Festivals"). Uses the FULL gpt-4o model + live web search so the picks are
+   * REAL, current AND SOURCED (each item is dropped unless the model ties it to a
+   * recent citation) — not evergreen guesses from training memory. India-focused.
+   * Best-effort: returns [] on any failure so the board just stays empty.
    */
   async suggestTrendRadar(max = 12): Promise<TrendRadarItem[]> {
     try {
+      // Give the model today's date so "recent" is anchored, and demand a source
+      // per item so we can drop anything it can't evidence as genuinely current.
+      const today = new Date().toISOString().slice(0, 10);
       const content = await this.webSearch(
-        `You are a trend analyst for an INDIAN influencer-marketing platform. Search the web for what is ACTUALLY trending in India RIGHT NOW across consumer categories, and pair each specific trend with the ONE marketing category it belongs to.
+        `You are a trend analyst for an INDIAN influencer-marketing platform. Today is ${today}. Search the web for what is ACTUALLY trending in India RIGHT NOW and pair each specific trend with the ONE marketing category it belongs to.
 Rules:
-- INDIA-focused and CURRENT (this month / this season). Use live search — never guess from memory.
-- Each "item" is a SPECIFIC, concrete trend a brand could ride: a motif, product, flavour, aesthetic, format or occasion (e.g. a print, a flavour, a styling trend, a festive dish, a workout). NOT a broad category name.
+- INDIA-focused and GENUINELY RECENT: every item must be backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad the list with evergreen/perennial trends that are "always true".
+- Each "item" is a SPECIFIC, concrete trend a brand could ride: a motif, product, flavour, aesthetic, format or occasion (a print, a flavour, a styling trend, a festive dish, a workout). NOT a broad category name.
 - "category" is ONE short marketing bucket: Fashion, Beauty, Food & Beverage, Festivals, Fitness, Travel, Tech, Home & Decor, Entertainment, Wellness, etc.
-- "note" is an OPTIONAL reason (<= 8 words) it's trending.
-- Return the FULL ${max} items, SPREAD across at least 6 DIFFERENT categories — do not stack them all in Fashion or Food. No duplicate items.
-- Find your OWN current picks from live search; do not simply reuse example words.
+- "note" is a SHORT reason (<= 8 words) it is spiking NOW.
+- "source" is the publication/site that evidences it (e.g. "Vogue India", "Economic Times"); "url" is a link to that article when you have one.
+- ONLY include an item if you found a recent source for it. Prefer fewer, well-evidenced items over filler. Spread across DIFFERENT categories; no duplicates.
 Respond with ONLY a JSON object, no prose and no markdown fences:
-{"trends":[{"item":"<specific trend>","category":"<category>","note":"<why now>"}]} with exactly ${max} items.`,
-        `What is trending in India right now? Give ${max} specific "item → category" pairs spread across many categories (fashion, beauty, food & beverage, festivals, fitness, travel, tech, home, entertainment, wellness).`,
+{"trends":[{"item":"<specific trend>","category":"<category>","note":"<why now>","source":"<publication>","url":"<link>"}]} with up to ${max} items.`,
+        `What is trending in India right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs, each backed by coverage from the last few weeks, spread across many categories (fashion, beauty, food & beverage, festivals, fitness, travel, tech, home, entertainment, wellness).`,
+        'gpt-4o',
       );
       return this.parseTrendRadar(content, max);
     } catch {
@@ -521,6 +528,10 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
   private parseTrendRadar(content: string, max: number): TrendRadarItem[] {
     const norm = (s: unknown): string =>
       typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '';
+    const cleanUrl = (s: unknown): string | undefined => {
+      const u = norm(s);
+      return /^https?:\/\/\S+$/i.test(u) && u.length <= 300 ? u : undefined;
+    };
     const take = (arr: unknown[]): TrendRadarItem[] => {
       const seen = new Set<string>();
       const out: TrendRadarItem[] = [];
@@ -530,11 +541,17 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
         const item = norm(o.item);
         const category = norm(o.category);
         const note = norm(o.note);
+        const source = norm(o.source).slice(0, 60);
+        const url = cleanUrl(o.url);
         if (!item || !category || item.length > 60 || category.length > 40) continue;
         const key = item.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push(note ? { item, category, note } : { item, category });
+        const entry: TrendRadarItem = { item, category };
+        if (note) entry.note = note;
+        if (source) entry.source = source;
+        if (url) entry.url = url;
+        out.push(entry);
         if (out.length >= max) break;
       }
       return out;
