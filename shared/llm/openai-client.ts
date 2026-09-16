@@ -514,17 +514,91 @@ Rules:
 - STRICTLY EXCLUDE: local events / festivals-at-a-venue / restaurant pop-ups / marathons / expos / summits / city listings AND macro or business news — no economy, GDP, sales figures, stock market, auto/retail sales numbers, policy, weather, rainfall, elections or corporate headlines. If it reads like a business or news story rather than something a lifestyle creator would post, LEAVE IT OUT.
 - Draw from these consumer categories, evenly: Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment, Festivals, Tech (consumer gadgets only). "category" is ONE such short bucket.
 - GENUINELY RECENT: backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad with evergreen "always true" trends.
-- "note" is a SHORT reason (<= 8 words) it is spiking NOW. "source" is the Indian publication/site; "url" is a link when you have one.
-- ONLY include an item if you found a recent Indian source for it. Prefer fewer, well-evidenced consumer trends over filler, events or macro news. Spread across DIFFERENT categories; no duplicates.
+- "note" is a SHORT reason (<= 8 words) it is spiking NOW. "source" is the Indian publication/site; "url" MUST be the exact, REAL, WORKING article URL you actually opened in web search — a live page, not a guessed or constructed link, and NOT a homepage. Prefer well-known Indian outlets (Vogue India, Femina, Elle India, Cosmopolitan India, NDTV, Hindustan Times, Times of India, Indian Express, Economic Times, Moneycontrol, LBB, The Better India, Pinkvilla, MensXP, Grazia India) over obscure blogs or e-commerce pages.
+- ONLY include an item if you found a recent Indian source for it AND you have its real live URL. Prefer fewer, well-evidenced consumer trends over filler, events or macro news. Spread across DIFFERENT categories; no duplicates.
 Respond with ONLY a JSON object, no prose and no markdown fences:
 {"trends":[{"item":"<specific consumer trend>","category":"<category>","note":"<why now>","source":"<indian publication>","url":"<link>"}]} with up to ${max} items.`,
         `What consumer & lifestyle trends are Indians into right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs across a VARIED MIX of categories — spread them evenly over Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment and consumer gadgets, with NO MORE THAN 2 items in any single category. ALWAYS include 2 fashion trends (fashion must never be absent), but don't let fashion dominate and don't stack it with tech. NOT local events, and NOT macro/business/economy/weather news. Use Indian sources only.`,
         'gpt-4o',
       );
-      return this.parseTrendRadar(content, max);
+      const parsed = this.parseTrendRadar(content, max);
+      // The model sometimes cites fabricated or dead source pages (e.g. an
+      // NXDOMAIN blog). Every card links its source, so a broken link is a
+      // visible bug — verify each URL is actually reachable and drop the ones
+      // that aren't, keeping only items backed by a live, real source.
+      return this.verifyRadarSources(parsed);
     } catch {
       return [];
     }
+  }
+
+  // Well-known, credible Indian outlets — an item from one of these is trusted
+  // even if a transient network check on its URL fails.
+  private static readonly REPUTABLE_INDIA_SOURCES = [
+    'vogue.in', 'elle.in', 'femina', 'cosmopolitan', 'grazia', 'verve',
+    'ndtv', 'hindustantimes', 'timesofindia', 'indiatimes', 'indianexpress',
+    'economictimes', 'moneycontrol', 'livemint', 'thehindu', 'news18',
+    'lbb.in', 'thebetterindia', 'pinkvilla', 'mensxp', 'filmfare',
+    'thevoiceoffashion', 'peppermint', 'nykaa', 'myntra', 'vogue india',
+    'elle india', 'cosmopolitan india', 'grazia india', 'times of india',
+    'hindustan times', 'indian express', 'economic times', 'the better india',
+  ];
+
+  private isReputableSource(source: string, url?: string): boolean {
+    let host = '';
+    try {
+      if (url) host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    } catch {
+      /* ignore */
+    }
+    const hay = `${host} ${source}`.toLowerCase();
+    return OpenAIClient.REPUTABLE_INDIA_SOURCES.some((d) => hay.includes(d));
+  }
+
+  // HEAD/GET a URL with a short timeout; true only if it resolves to a live page
+  // (any non-5xx/4xx response, following redirects). Network/DNS errors => false.
+  private async isUrlLive(url: string): Promise<boolean> {
+    const attempt = async (method: 'HEAD' | 'GET'): Promise<boolean> => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      try {
+        const res = await fetch(url, {
+          method,
+          redirect: 'follow',
+          signal: ctrl.signal,
+          headers: { 'user-agent': 'Mozilla/5.0 (compatible; TrendRadar/1.0)' },
+        });
+        return res.status < 400;
+      } catch {
+        return false;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    // Some sites reject HEAD (405) — fall back to a GET before giving up.
+    return (await attempt('HEAD')) || (await attempt('GET'));
+  }
+
+  // Keep only items whose source we can trust: either the URL is genuinely
+  // reachable, or it's a well-known Indian outlet (a live-check hiccup shouldn't
+  // drop Vogue India). A dead URL from an unknown source => the item is dropped
+  // outright; a dead URL from a reputable source => keep the item, strip the link.
+  private async verifyRadarSources(items: TrendRadarItem[]): Promise<TrendRadarItem[]> {
+    const checked = await Promise.all(
+      items.map(async (item) => {
+        const reputable = this.isReputableSource(item.source ?? '', item.url);
+        if (!item.url) return reputable ? item : null;
+        const live = await this.isUrlLive(item.url);
+        if (live) return item;
+        // Dead link: keep reputable sources without the broken URL, else drop.
+        if (reputable) {
+          const { url: _drop, ...rest } = item;
+          return rest as TrendRadarItem;
+        }
+        return null;
+      }),
+    );
+    return checked.filter((x): x is TrendRadarItem => x !== null);
   }
 
   // Known Western lifestyle/fashion outlets the model tends to drift to. An item
