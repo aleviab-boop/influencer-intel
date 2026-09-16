@@ -124,7 +124,7 @@ export default function TrendingPage() {
           <div className="max-w-6xl mx-auto px-6">
             <span className="text-[13px] font-semibold" style={{ color: ACCENT }}>What&apos;s trending</span>
             <h1 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">Influencer & campaign pulse</h1>
-            <p className="mt-2 text-[15px] text-[#555]">Live marketing news and what India is searching right now — refreshes through the day.</p>
+            <p className="mt-2 text-[15px] text-[#555]">Everything trending for creators and campaigns right now — specific trends, viral formats and the patterns behind them, refreshed through the day.</p>
             <div className="mt-3 flex items-center gap-3">
               {updatedAt && (
                 <span className="inline-flex items-center gap-1.5 text-[12px] text-[#999]">
@@ -147,12 +147,63 @@ export default function TrendingPage() {
           </div>
         </section>
 
-        {/* First-party Instagram trends — our differentiator vs. the Google feed */}
+        {/* ── Trending now — our specific first-party + AI signals, unified ── */}
         <section className="max-w-6xl mx-auto px-6 pt-10">
-          <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[18px]">📈</span>
+            <h2 className="text-[20px] font-bold tracking-tight">Trending now</h2>
+          </div>
+          <p className="text-[13px] text-[#888] mb-7">
+            The specific trends, formats and patterns gaining momentum right now — grounded in what&apos;s breaking across India and the creators we track.
+          </p>
+
+          {/* Lead: AI trend radar — the most specific, sourced item → category picks */}
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-6 h-6 rounded-lg grid place-items-center text-[12px]" style={{ background: ACCENT_SOFT }}>🧭</span>
+            <h3 className="text-[15px] font-bold">What&apos;s breaking, by category</h3>
+          </div>
+          <p className="text-[12px] text-[#999] mb-4">Specific trends mapped to the category a brand can ride them in — each backed by a recent source, refreshed daily.</p>
+          {radarLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-[76px] rounded-2xl bg-[#f5f4fb] animate-pulse" />
+              ))}
+            </div>
+          ) : radar.length === 0 ? (
+            <div className="text-[14px] text-[#888] border border-dashed border-[#e3def9] rounded-2xl p-6 bg-[#faf9ff]">
+              The trend radar refreshes daily — check back shortly as it fills in.
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {radar.map((t, i) => (
+                <div key={i} className="rounded-2xl border border-[#eee] bg-white p-4 hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.07)] transition-all">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[15px] font-bold text-[#111] capitalize truncate">{t.item}</span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: ACCENT_SOFT, color: ACCENT }}>{t.category}</span>
+                  </div>
+                  {t.note && <p className="text-[12px] text-[#888] leading-snug">{t.note}</p>}
+                  {t.source && (
+                    <div className="mt-2 text-[11px] text-[#aaa] truncate">
+                      {t.url ? (
+                        <a href={t.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline" style={{ color: ACCENT }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" /></svg>
+                          {t.source}
+                        </a>
+                      ) : (
+                        <span>Source: {t.source}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Companion: first-party Instagram signals from the creators we crawl */}
+          <div className="flex items-center justify-between gap-3 mt-9 mb-1">
             <div className="flex items-center gap-2">
-              <span className="text-[18px]">📸</span>
-              <h2 className="text-[18px] font-bold">Trending on Instagram</h2>
+              <span className="w-6 h-6 rounded-lg grid place-items-center text-[12px]" style={{ background: ACCENT_SOFT }}>📸</span>
+              <h3 className="text-[15px] font-bold">From the creators we track</h3>
             </div>
             <Link
               href="/trending/topics"
@@ -162,9 +213,7 @@ export default function TrendingPage() {
               What&apos;s viral right now →
             </Link>
           </div>
-          <p className="text-[13px] text-[#888] mb-5">
-            Straight from the creators we track — which formats, hashtags and aesthetics are gaining momentum right now.
-          </p>
+          <p className="text-[12px] text-[#999] mb-4">Which formats, hashtags and aesthetics are gaining momentum across the accounts we crawl.</p>
           {igLoading ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -213,58 +262,20 @@ export default function TrendingPage() {
           )}
         </section>
 
-        {/* AI trend radar — specific item → category insights (OpenAI, web-grounded) */}
-        <section className="max-w-6xl mx-auto px-6 pt-10">
+        {/* ── Around the web — secondary: news + search, compacted ── */}
+        <section className="max-w-6xl mx-auto px-6 pt-12">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[18px]">🧭</span>
-            <h2 className="text-[18px] font-bold">Trend radar — what&apos;s breaking, by category</h2>
+            <span className="text-[18px]">🌐</span>
+            <h2 className="text-[20px] font-bold tracking-tight">Around the web</h2>
           </div>
-          <p className="text-[13px] text-[#888] mb-5">
-            Specific trends bubbling up across India right now, each mapped to the category a brand can ride it in — refreshed daily.
-          </p>
-          {radarLoading ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-[76px] rounded-2xl bg-[#f5f4fb] animate-pulse" />
-              ))}
-            </div>
-          ) : radar.length === 0 ? (
-            <div className="text-[14px] text-[#888] border border-dashed border-[#e3def9] rounded-2xl p-6 bg-[#faf9ff]">
-              The trend radar refreshes daily — check back shortly as it fills in.
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {radar.map((t, i) => (
-                <div key={i} className="rounded-2xl border border-[#eee] bg-white p-4 hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.07)] transition-all">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[15px] font-bold text-[#111] capitalize truncate">{t.item}</span>
-                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: ACCENT_SOFT, color: ACCENT }}>{t.category}</span>
-                  </div>
-                  {t.note && <p className="text-[12px] text-[#888] leading-snug">{t.note}</p>}
-                  {t.source && (
-                    <div className="mt-2 text-[11px] text-[#aaa] truncate">
-                      {t.url ? (
-                        <a href={t.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline" style={{ color: ACCENT }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" /></svg>
-                          {t.source}
-                        </a>
-                      ) : (
-                        <span>Source: {t.source}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="text-[13px] text-[#888] mb-6">Marketing headlines and what India is searching, for wider context.</p>
         </section>
-
-        <section className="max-w-6xl mx-auto px-6 py-10 grid lg:grid-cols-[1.7fr_1fr] gap-8">
+        <section className="max-w-6xl mx-auto px-6 pb-12 grid lg:grid-cols-[1.7fr_1fr] gap-8">
           {/* News */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[18px]">📰</span>
-              <h2 className="text-[18px] font-bold">Campaign & marketing news</h2>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[15px]">📰</span>
+              <h3 className="text-[15px] font-bold">Campaign & marketing news</h3>
             </div>
             {loading ? (
               <div className="space-y-3">
@@ -278,7 +289,7 @@ export default function TrendingPage() {
               <div className="text-[14px] text-[#888] border border-[#eee] rounded-xl p-6">No news to show right now.</div>
             ) : (
               <div className="space-y-3">
-                {news.map((n, i) => (
+                {news.slice(0, 6).map((n, i) => (
                   <a
                     key={i}
                     href={n.link}
@@ -308,9 +319,9 @@ export default function TrendingPage() {
 
           {/* Trends */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[18px]">🔥</span>
-              <h2 className="text-[18px] font-bold">Trending in India</h2>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[15px]">🔥</span>
+              <h3 className="text-[15px] font-bold">Trending in India</h3>
             </div>
             {loading ? (
               <div className="space-y-2">
