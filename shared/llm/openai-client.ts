@@ -142,6 +142,17 @@ async function fetchInlineImageDataUrl(url: string): Promise<string | null> {
   }
 }
 
+// ── Trend radar ───────────────────────────────────────────────────────────
+// A specific consumer trend paired with the ONE marketing category it's breaking
+// in (e.g. { item: "polka dot", category: "Fashion" }). Powers the public
+// "what's trending, by category" board — grounded via live web search so the
+// picks are real + current, not guessed from stale training memory.
+export interface TrendRadarItem {
+  item: string;       // the concrete trend (motif / flavour / aesthetic / occasion)
+  category: string;   // marketing bucket: Fashion, Beauty, Food & Beverage, Festivals…
+  note?: string;      // optional short reason it's trending
+}
+
 export class OpenAIClient {
   private readonly client: OpenAI;
   private readonly embeddingModel: string;
@@ -476,6 +487,82 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
       userContent,
     );
     return this.parseHandles(content, max);
+  }
+
+  /**
+   * Trend radar — specific, CURRENT consumer trends each paired with the ONE
+   * marketing category they're breaking in, for the public "what's trending"
+   * board (e.g. "polka dot → Fashion", "matcha → Food & Beverage", "modak →
+   * Festivals"). Uses the web-search model so the picks are REAL and current
+   * rather than guessed from stale training memory. India-focused. Best-effort:
+   * returns [] on any failure so the board just stays empty instead of erroring.
+   */
+  async suggestTrendRadar(max = 12): Promise<TrendRadarItem[]> {
+    try {
+      const content = await this.webSearch(
+        `You are a trend analyst for an INDIAN influencer-marketing platform. Search the web for what is ACTUALLY trending in India RIGHT NOW across consumer categories, and pair each specific trend with the ONE marketing category it belongs to.
+Rules:
+- INDIA-focused and CURRENT (this month / this season). Use live search — never guess from memory.
+- Each "item" is a SPECIFIC, concrete trend a brand could ride: a motif, product, flavour, aesthetic, format or occasion (e.g. a print, a flavour, a styling trend, a festive dish, a workout). NOT a broad category name.
+- "category" is ONE short marketing bucket: Fashion, Beauty, Food & Beverage, Festivals, Fitness, Travel, Tech, Home & Decor, Entertainment, Wellness, etc.
+- "note" is an OPTIONAL reason (<= 8 words) it's trending.
+- Return the FULL ${max} items, SPREAD across at least 6 DIFFERENT categories — do not stack them all in Fashion or Food. No duplicate items.
+- Find your OWN current picks from live search; do not simply reuse example words.
+Respond with ONLY a JSON object, no prose and no markdown fences:
+{"trends":[{"item":"<specific trend>","category":"<category>","note":"<why now>"}]} with exactly ${max} items.`,
+        `What is trending in India right now? Give ${max} specific "item → category" pairs spread across many categories (fashion, beauty, food & beverage, festivals, fitness, travel, tech, home, entertainment, wellness).`,
+      );
+      return this.parseTrendRadar(content, max);
+    } catch {
+      return [];
+    }
+  }
+
+  private parseTrendRadar(content: string, max: number): TrendRadarItem[] {
+    const norm = (s: unknown): string =>
+      typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '';
+    const take = (arr: unknown[]): TrendRadarItem[] => {
+      const seen = new Set<string>();
+      const out: TrendRadarItem[] = [];
+      for (const raw of arr) {
+        if (!raw || typeof raw !== 'object') continue;
+        const o = raw as Record<string, unknown>;
+        const item = norm(o.item);
+        const category = norm(o.category);
+        const note = norm(o.note);
+        if (!item || !category || item.length > 60 || category.length > 40) continue;
+        const key = item.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(note ? { item, category, note } : { item, category });
+        if (out.length >= max) break;
+      }
+      return out;
+    };
+    // 1. JSON object with "trends"
+    const objMatch = content.match(/\{[\s\S]*"trends"[\s\S]*\}/);
+    if (objMatch) {
+      try {
+        const parsed = JSON.parse(objMatch[0]) as { trends?: unknown };
+        if (Array.isArray(parsed.trends)) {
+          const out = take(parsed.trends);
+          if (out.length) return out;
+        }
+      } catch {
+        /* fall through to bare-array parse */
+      }
+    }
+    // 2. Fallback — a bare JSON array of {item, category}
+    const arrMatch = content.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      try {
+        const parsed = JSON.parse(arrMatch[0]) as unknown;
+        if (Array.isArray(parsed)) return take(parsed);
+      } catch {
+        /* ignore */
+      }
+    }
+    return [];
   }
 
   /**

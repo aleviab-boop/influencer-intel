@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ingestTrendSignals } from '@/lib/trend-ingest';
+import { refreshTrendRadar } from '@/lib/trend-radar';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120; // scanning post history across creators is slow
@@ -31,7 +32,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       withTopics: true,
       topicBudget: 400,
     });
-    return NextResponse.json({ ok: true, ...report });
+    // Warm the public AI "trend radar" (one web-search OpenAI call) while we're
+    // here, so the /trending board serves a fresh cache without ever spending on
+    // a per-visit basis. Best-effort — a radar hiccup must not fail the cron.
+    const radar = await refreshTrendRadar().catch(() => null);
+    return NextResponse.json({ ok: true, ...report, radar_items: radar?.items.length ?? 0 });
   } catch (err) {
     console.error('[cron] trends-refresh failed:', err);
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });

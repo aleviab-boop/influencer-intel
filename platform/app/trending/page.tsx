@@ -8,6 +8,9 @@ import { InlineError } from '@/components/skeleton';
 
 interface NewsItem { title: string; link: string; source: string; date: string; image: string; logo: string }
 interface TrendItem { title: string; traffic: string; link: string }
+// AI "trend radar" — a specific trend mapped to the marketing category it's
+// breaking in (e.g. "polka dot → Fashion"). Served cache-first from /api/trends/radar.
+interface RadarItem { item: string; category: string; note?: string }
 // First-party Instagram trends, derived from our own crawl (trend_signals).
 interface IgTrend {
   trend_type: 'format' | 'hashtag' | 'topic' | 'visual';
@@ -50,6 +53,8 @@ export default function TrendingPage() {
   const [trends, setTrends] = useState<TrendItem[]>([]);
   const [igTrends, setIgTrends] = useState<IgTrend[]>([]);
   const [igLoading, setIgLoading] = useState(true);
+  const [radar, setRadar] = useState<RadarItem[]>([]);
+  const [radarLoading, setRadarLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -82,9 +87,24 @@ export default function TrendingPage() {
     }
   }
 
+  // AI trend radar — specific item→category insights. Best-effort: the board
+  // just stays empty (or shows a "refreshing" note) if the cache hasn't filled.
+  async function loadRadar() {
+    setRadarLoading(true);
+    try {
+      const d = await fetch('/api/trends/radar', { cache: 'no-store' }).then((r) => r.json());
+      setRadar(Array.isArray(d.items) ? d.items : []);
+    } catch {
+      setRadar([]);
+    } finally {
+      setRadarLoading(false);
+    }
+  }
+
   useEffect(() => {
     load().finally(() => setLoading(false));
     void loadIgTrends();
+    void loadRadar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -190,6 +210,40 @@ export default function TrendingPage() {
                 ))}
               </div>
             </>
+          )}
+        </section>
+
+        {/* AI trend radar — specific item → category insights (OpenAI, web-grounded) */}
+        <section className="max-w-6xl mx-auto px-6 pt-10">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[18px]">🧭</span>
+            <h2 className="text-[18px] font-bold">Trend radar — what&apos;s breaking, by category</h2>
+          </div>
+          <p className="text-[13px] text-[#888] mb-5">
+            Specific trends bubbling up across India right now, each mapped to the category a brand can ride it in — refreshed daily.
+          </p>
+          {radarLoading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-[76px] rounded-2xl bg-[#f5f4fb] animate-pulse" />
+              ))}
+            </div>
+          ) : radar.length === 0 ? (
+            <div className="text-[14px] text-[#888] border border-dashed border-[#e3def9] rounded-2xl p-6 bg-[#faf9ff]">
+              The trend radar refreshes daily — check back shortly as it fills in.
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {radar.map((t, i) => (
+                <div key={i} className="rounded-2xl border border-[#eee] bg-white p-4 hover:border-[#d9d2f7] hover:shadow-[0_8px_30px_rgba(108,77,246,0.07)] transition-all">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[15px] font-bold text-[#111] capitalize truncate">{t.item}</span>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: ACCENT_SOFT, color: ACCENT }}>{t.category}</span>
+                  </div>
+                  {t.note && <p className="text-[12px] text-[#888] leading-snug">{t.note}</p>}
+                </div>
+              ))}
+            </div>
           )}
         </section>
 
