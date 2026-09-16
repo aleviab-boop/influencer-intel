@@ -96,8 +96,8 @@ export async function refreshTrendRadar(max = 12): Promise<TrendRadar> {
 // junk; we then match the first survivor to a known consumer bucket (so "beauty"
 // → "Beauty", "food" → "Food & Beverage"), Title-casing anything unmatched.
 const CATEGORY_BUCKETS: Array<[RegExp, string]> = [
-  [/fashion|apparel|style|outfit|ootd|wear|footwear|accessor|co-?ord|dress|saree|sari|kurta|lehenga|ethnic|denim|streetwear|cottagecore|aesthetic|y2k|old ?money|quiet ?luxury|shirt|jeans|jacket|blazer|trouser|cargo|oversized|jumpsuit/, 'Fashion'],
-  [/beauty|makeup|skincare|grooming|hair|nails?|sunscreen|spf|fragrance|perfume|lipstick|lip ?liner|lip ?gloss|mascara|kajal/, 'Beauty'],
+  [/fashion|apparel|style|outfit|ootd|wear|footwear|accessor|co-?ord|dress|saree|sari|kurta|lehenga|ethnic|denim|streetwear|cottagecore|aesthetic|y2k|old ?money|quiet ?luxury|shirt|jeans|jacket|blazer|trouser|cargo|oversized|jumpsuit|sneaker|boots|heels|loafer|sandal|handbag|tote|sunglass/, 'Fashion'],
+  [/beauty|makeup|skincare|grooming|hair|nails?|sunscreen|spf|fragrance|perfume|lipstick|\blip\b|mascara|kajal|serum|moisturi|foundation|blush|eyeliner/, 'Beauty'],
   [/food|beverage|drink|recipe|cook|snack|coffee|cafe|vegan|gluten|keto|matcha|dessert|baking|makhana/, 'Food & Beverage'],
   [/fitness|gym|workout|yoga|running|hyrox|pilates|crossfit|marathon/, 'Fitness'],
   [/wellness|health|mindful|selfcare|self-care|meditation|ayurved/, 'Wellness'],
