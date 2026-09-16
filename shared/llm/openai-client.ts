@@ -510,7 +510,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
 Rules:
 - INDIA ONLY: the trend must be popular with Indian consumers nationwide, and the source must be an INDIAN outlet or clearly about the Indian market (e.g. Vogue India, Femina, NDTV, LBB, Hindustan Times, Economic Times). NEVER use non-India sources (UK/US fashion mags etc.) or trends that are only Western.
 - CREATOR / CONSUMER trends a brand can ride: a motif/print, product, flavour, aesthetic, styling trend, ingredient, beauty look, dish, workout, travel style or seasonal-shopping occasion (e.g. "polka dot", "matcha", "quiet luxury", "millet snacking", "old money aesthetic", "glass-skin makeup", "cargo pants"). These are things people BUY, WEAR, EAT, WATCH or POST about.
-- BALANCE ACROSS CATEGORIES: cover a VARIED MIX — aim for at least 6 DIFFERENT categories and NO MORE THAN 2 items in any single category. Do not stack the list with fashion, and do not stack it with tech; give roughly even weight to Fashion, Beauty, Food & Beverage, Fitness/Wellness, Travel, Home & Decor, Entertainment and consumer gadgets.
+- BALANCE ACROSS CATEGORIES: cover a VARIED MIX — aim for at least 6 DIFFERENT categories and NO MORE THAN 2 items in any single category. ALWAYS include 2 FASHION trends (this is a fashion-forward influencer platform, so fashion must never be missing) alongside a spread of the others; but do NOT let fashion dominate, and do NOT stack the list with tech. Give roughly even weight to Fashion, Beauty, Food & Beverage, Fitness/Wellness, Travel, Home & Decor, Entertainment and consumer gadgets.
 - STRICTLY EXCLUDE: local events / festivals-at-a-venue / restaurant pop-ups / marathons / expos / summits / city listings AND macro or business news — no economy, GDP, sales figures, stock market, auto/retail sales numbers, policy, weather, rainfall, elections or corporate headlines. If it reads like a business or news story rather than something a lifestyle creator would post, LEAVE IT OUT.
 - Draw from these consumer categories, evenly: Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment, Festivals, Tech (consumer gadgets only). "category" is ONE such short bucket.
 - GENUINELY RECENT: backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad with evergreen "always true" trends.
@@ -518,7 +518,7 @@ Rules:
 - ONLY include an item if you found a recent Indian source for it. Prefer fewer, well-evidenced consumer trends over filler, events or macro news. Spread across DIFFERENT categories; no duplicates.
 Respond with ONLY a JSON object, no prose and no markdown fences:
 {"trends":[{"item":"<specific consumer trend>","category":"<category>","note":"<why now>","source":"<indian publication>","url":"<link>"}]} with up to ${max} items.`,
-        `What consumer & lifestyle trends are Indians into right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs across a VARIED MIX of categories — spread them evenly over Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment and consumer gadgets, with NO MORE THAN 2 items in any single category. Don't stack the list with fashion, and don't stack it with tech. NOT local events, and NOT macro/business/economy/weather news. Use Indian sources only.`,
+        `What consumer & lifestyle trends are Indians into right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs across a VARIED MIX of categories — spread them evenly over Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment and consumer gadgets, with NO MORE THAN 2 items in any single category. ALWAYS include 2 fashion trends (fashion must never be absent), but don't let fashion dominate and don't stack it with tech. NOT local events, and NOT macro/business/economy/weather news. Use Indian sources only.`,
         'gpt-4o',
       );
       return this.parseTrendRadar(content, max);
@@ -615,7 +615,14 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
           buckets.set(key, bucket);
         }
       }
-      const queues = [...buckets.values()];
+      // Order the round-robin so fashion-ish buckets go first — fashion is core
+      // to the platform, so it leads the board (and never gets cut) when present;
+      // everything else keeps first-seen order behind it.
+      const isFashion = (c: string): boolean =>
+        /fashion|apparel|style|wear|footwear|accessor|jewel/.test(c);
+      const queues = [...buckets.entries()]
+        .sort(([a], [b]) => Number(isFashion(b)) - Number(isFashion(a)))
+        .map(([, v]) => v);
       const diversified: TrendRadarItem[] = [];
       let anyLeft = true;
       while (anyLeft && diversified.length < max) {
