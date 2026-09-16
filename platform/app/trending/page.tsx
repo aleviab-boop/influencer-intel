@@ -10,7 +10,7 @@ interface NewsItem { title: string; link: string; source: string; date: string; 
 interface TrendItem { title: string; traffic: string; link: string }
 // AI "trend radar" — a specific trend mapped to the marketing category it's
 // breaking in (e.g. "polka dot → Fashion"). Served cache-first from /api/trends/radar.
-interface RadarItem { item: string; category: string; note?: string; source?: string; url?: string }
+interface RadarItem { item: string; category: string; note?: string; source?: string; url?: string; origin?: 'ai' | 'creators' }
 // First-party Instagram trends, derived from our own crawl (trend_signals).
 interface IgTrend {
   trend_type: 'format' | 'hashtag' | 'topic' | 'visual';
@@ -192,7 +192,15 @@ export default function TrendingPage() {
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0" style={{ background: ACCENT_SOFT, color: ACCENT }}>{t.category}</span>
                   </div>
                   {t.note && <p className="text-[12px] text-[#888] leading-snug">{t.note}</p>}
-                  {t.source && (
+                  {t.origin === 'creators' ? (
+                    // First-party crawl signal — not a sourced news trend, so it's
+                    // badged distinctly and links to the full IG trend board.
+                    <div className="mt-2 text-[11px] truncate">
+                      <Link href="/trending/topics" className="inline-flex items-center gap-1 hover:underline" style={{ color: ACCENT }}>
+                        <span className="text-[10px]">📸</span> From creators we track
+                      </Link>
+                    </div>
+                  ) : t.source ? (
                     <div className="mt-2 text-[11px] text-[#aaa] truncate">
                       {t.url ? (
                         <a href={t.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline" style={{ color: ACCENT }}>
@@ -203,7 +211,7 @@ export default function TrendingPage() {
                         <span>Source: {t.source}</span>
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               ))}
             </div>

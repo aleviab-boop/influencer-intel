@@ -153,6 +153,7 @@ export interface TrendRadarItem {
   note?: string;      // optional short reason it's trending
   source?: string;    // publication / domain that evidences it's current (e.g. "Vogue India")
   url?: string;       // link to that source, when available
+  origin?: 'ai' | 'creators'; // 'ai' = sourced web trend; 'creators' = our first-party crawl signal
 }
 
 export class OpenAIClient {
