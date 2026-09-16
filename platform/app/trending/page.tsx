@@ -73,13 +73,23 @@ export default function TrendingPage() {
     }
   }
 
-  // First-party Instagram trends — independent of the news feed. Best-effort:
-  // the board just stays empty if the crawl hasn't produced signals yet.
+  // First-party Instagram trends — independent of the news feed. Fetched PER
+  // TYPE (formats, hashtags, aesthetics, topics) so every column fills: a single
+  // volume-ranked feed is ~all hashtags and starves the other three, so we ask
+  // for each type's own top items and merge. Best-effort per type.
   async function loadIgTrends() {
     setIgLoading(true);
     try {
-      const d = await fetch('/api/trends?limit=40', { cache: 'no-store' }).then((r) => r.json());
-      setIgTrends(Array.isArray(d.trends) ? d.trends : []);
+      const types: IgTrend['trend_type'][] = ['format', 'hashtag', 'visual', 'topic'];
+      const groups = await Promise.all(
+        types.map((ty) =>
+          fetch(`/api/trends?type=${ty}&limit=8`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => (Array.isArray(d.trends) ? (d.trends as IgTrend[]) : []))
+            .catch(() => [] as IgTrend[]),
+        ),
+      );
+      setIgTrends(groups.flat());
     } catch {
       setIgTrends([]);
     } finally {
