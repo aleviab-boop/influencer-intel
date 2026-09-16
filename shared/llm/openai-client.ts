@@ -506,18 +506,18 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
       // per item so we can drop anything it can't evidence as genuinely current.
       const today = new Date().toISOString().slice(0, 10);
       const content = await this.webSearch(
-        `You are a trend analyst for an INDIAN influencer-marketing platform. Today is ${today}. Search the web for consumer trends that are ACTUALLY trending ACROSS INDIA RIGHT NOW and pair each with the ONE marketing category it belongs to.
+        `You are a trend analyst for an INDIAN influencer-marketing platform. Today is ${today}. Search the web for CONSUMER / LIFESTYLE trends that are ACTUALLY trending ACROSS INDIA RIGHT NOW — the kind of thing an Instagram creator makes content about and a brand runs a campaign around — and pair each with the ONE marketing category it belongs to.
 Rules:
-- INDIA ONLY: the trend must be popular with Indian consumers nationwide, and the source must be an INDIAN outlet or clearly about the Indian market (e.g. Vogue India, Economic Times, NDTV, Femina, LBB). NEVER use non-India sources (UK/US fashion mags etc.) or trends that are only Western.
-- NATIONAL CONSUMER TRENDS, not local events: each "item" is a broad, brand-rideable consumer trend — a motif/print, product, flavour, aesthetic, styling trend, ingredient, format or seasonal occasion (e.g. "polka dot", "matcha", "quiet luxury", "millet snacking", "old money aesthetic"). Do NOT return specific EVENTS, festivals-at-a-venue, restaurant pop-ups, marathons, expos, summits, city listings or one-off happenings.
+- INDIA ONLY: the trend must be popular with Indian consumers nationwide, and the source must be an INDIAN outlet or clearly about the Indian market (e.g. Vogue India, Femina, NDTV, LBB, Hindustan Times, Economic Times). NEVER use non-India sources (UK/US fashion mags etc.) or trends that are only Western.
+- CREATOR / CONSUMER trends a brand can ride: a motif/print, product, flavour, aesthetic, styling trend, ingredient, beauty look, dish, workout, travel style or seasonal-shopping occasion (e.g. "polka dot", "matcha", "quiet luxury", "millet snacking", "old money aesthetic", "glass-skin makeup", "cargo pants"). These are things people BUY, WEAR, EAT, WATCH or POST about.
+- STRICTLY EXCLUDE: local events / festivals-at-a-venue / restaurant pop-ups / marathons / expos / summits / city listings AND macro or business news — no economy, GDP, sales figures, stock market, auto/retail sales numbers, policy, weather, rainfall, elections or corporate headlines. If it reads like a business or news story rather than something a lifestyle creator would post, LEAVE IT OUT.
+- Favour these consumer categories: Fashion, Beauty, Food & Beverage, Fitness, Wellness, Travel, Home & Decor, Entertainment, Festivals, Tech (consumer gadgets only). "category" is ONE such short bucket.
 - GENUINELY RECENT: backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad with evergreen "always true" trends.
-- "category" is ONE short marketing bucket: Fashion, Beauty, Food & Beverage, Festivals, Fitness, Travel, Tech, Home & Decor, Entertainment, Wellness, etc.
-- "note" is a SHORT reason (<= 8 words) it is spiking NOW.
-- "source" is the Indian publication/site that evidences it; "url" is a link to that article when you have one.
-- ONLY include an item if you found a recent Indian source for it. Prefer fewer, well-evidenced NATIONAL trends over filler or local listings. Spread across DIFFERENT categories; no duplicates.
+- "note" is a SHORT reason (<= 8 words) it is spiking NOW. "source" is the Indian publication/site; "url" is a link when you have one.
+- ONLY include an item if you found a recent Indian source for it. Prefer fewer, well-evidenced consumer trends over filler, events or macro news. Spread across DIFFERENT categories; no duplicates.
 Respond with ONLY a JSON object, no prose and no markdown fences:
-{"trends":[{"item":"<specific national trend>","category":"<category>","note":"<why now>","source":"<indian publication>","url":"<link>"}]} with up to ${max} items.`,
-        `What consumer trends are popular across India right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs — pan-India consumer/style/product/food trends a brand could ride, NOT local events, festivals-at-a-venue or city listings. Use Indian sources only, spread across many categories (fashion, beauty, food & beverage, festivals, fitness, travel, tech, home, entertainment, wellness).`,
+{"trends":[{"item":"<specific consumer trend>","category":"<category>","note":"<why now>","source":"<indian publication>","url":"<link>"}]} with up to ${max} items.`,
+        `What consumer & lifestyle trends are Indians into right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs — pan-India fashion, beauty, food, fitness, wellness, travel, home, entertainment and consumer-gadget trends a creator would post about and a brand could ride. NOT local events, and NOT macro/business/economy/weather news. Use Indian sources only.`,
         'gpt-4o',
       );
       return this.parseTrendRadar(content, max);
@@ -554,9 +554,22 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
     return true;
   }
 
+  // Categories that aren't creator/consumer-facing — a lifestyle influencer
+  // wouldn't post about them, so drop items the model files under these even
+  // after the prompt asks it not to (macro/business/news drift).
+  private static readonly NON_CONSUMER_CATEGORIES = [
+    'economy', 'economics', 'business', 'finance', 'markets', 'stock',
+    'politics', 'policy', 'weather', 'environment', 'climate', 'agriculture',
+    'automotive', 'real estate', 'healthcare', 'education', 'sports',
+  ];
+
   private parseTrendRadar(content: string, max: number): TrendRadarItem[] {
     const norm = (s: unknown): string =>
       typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '';
+    const isConsumerCategory = (category: string): boolean => {
+      const c = category.toLowerCase();
+      return !OpenAIClient.NON_CONSUMER_CATEGORIES.some((bad) => c.includes(bad));
+    };
     const cleanUrl = (s: unknown): string | undefined => {
       const u = norm(s);
       return /^https?:\/\/\S+$/i.test(u) && u.length <= 300 ? u : undefined;
@@ -573,6 +586,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
         const source = norm(o.source).slice(0, 60);
         const url = cleanUrl(o.url);
         if (!item || !category || item.length > 60 || category.length > 40) continue;
+        if (!isConsumerCategory(category)) continue; // drop macro / business / news
         if (!this.isIndiaSource(source, url)) continue; // drop non-India sources
         const key = item.toLowerCase();
         if (seen.has(key)) continue;
