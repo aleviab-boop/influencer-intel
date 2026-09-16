@@ -506,23 +506,52 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
       // per item so we can drop anything it can't evidence as genuinely current.
       const today = new Date().toISOString().slice(0, 10);
       const content = await this.webSearch(
-        `You are a trend analyst for an INDIAN influencer-marketing platform. Today is ${today}. Search the web for what is ACTUALLY trending in India RIGHT NOW and pair each specific trend with the ONE marketing category it belongs to.
+        `You are a trend analyst for an INDIAN influencer-marketing platform. Today is ${today}. Search the web for consumer trends that are ACTUALLY trending ACROSS INDIA RIGHT NOW and pair each with the ONE marketing category it belongs to.
 Rules:
-- INDIA-focused and GENUINELY RECENT: every item must be backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad the list with evergreen/perennial trends that are "always true".
-- Each "item" is a SPECIFIC, concrete trend a brand could ride: a motif, product, flavour, aesthetic, format or occasion (a print, a flavour, a styling trend, a festive dish, a workout). NOT a broad category name.
+- INDIA ONLY: the trend must be popular with Indian consumers nationwide, and the source must be an INDIAN outlet or clearly about the Indian market (e.g. Vogue India, Economic Times, NDTV, Femina, LBB). NEVER use non-India sources (UK/US fashion mags etc.) or trends that are only Western.
+- NATIONAL CONSUMER TRENDS, not local events: each "item" is a broad, brand-rideable consumer trend — a motif/print, product, flavour, aesthetic, styling trend, ingredient, format or seasonal occasion (e.g. "polka dot", "matcha", "quiet luxury", "millet snacking", "old money aesthetic"). Do NOT return specific EVENTS, festivals-at-a-venue, restaurant pop-ups, marathons, expos, summits, city listings or one-off happenings.
+- GENUINELY RECENT: backed by coverage from the LAST ~6 WEEKS. Use live web search — never rely on memory, and never pad with evergreen "always true" trends.
 - "category" is ONE short marketing bucket: Fashion, Beauty, Food & Beverage, Festivals, Fitness, Travel, Tech, Home & Decor, Entertainment, Wellness, etc.
 - "note" is a SHORT reason (<= 8 words) it is spiking NOW.
-- "source" is the publication/site that evidences it (e.g. "Vogue India", "Economic Times"); "url" is a link to that article when you have one.
-- ONLY include an item if you found a recent source for it. Prefer fewer, well-evidenced items over filler. Spread across DIFFERENT categories; no duplicates.
+- "source" is the Indian publication/site that evidences it; "url" is a link to that article when you have one.
+- ONLY include an item if you found a recent Indian source for it. Prefer fewer, well-evidenced NATIONAL trends over filler or local listings. Spread across DIFFERENT categories; no duplicates.
 Respond with ONLY a JSON object, no prose and no markdown fences:
-{"trends":[{"item":"<specific trend>","category":"<category>","note":"<why now>","source":"<publication>","url":"<link>"}]} with up to ${max} items.`,
-        `What is trending in India right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs, each backed by coverage from the last few weeks, spread across many categories (fashion, beauty, food & beverage, festivals, fitness, travel, tech, home, entertainment, wellness).`,
+{"trends":[{"item":"<specific national trend>","category":"<category>","note":"<why now>","source":"<indian publication>","url":"<link>"}]} with up to ${max} items.`,
+        `What consumer trends are popular across India right now (as of ${today})? Give up to ${max} specific, SOURCED "item → category" pairs — pan-India consumer/style/product/food trends a brand could ride, NOT local events, festivals-at-a-venue or city listings. Use Indian sources only, spread across many categories (fashion, beauty, food & beverage, festivals, fitness, travel, tech, home, entertainment, wellness).`,
         'gpt-4o',
       );
       return this.parseTrendRadar(content, max);
     } catch {
       return [];
     }
+  }
+
+  // Known Western lifestyle/fashion outlets the model tends to drift to. An item
+  // sourced from one of these is NOT India-specific and is dropped — UNLESS the
+  // link is clearly the India edition (a .in domain or "india" in the domain/label).
+  private static readonly NON_INDIA_MEDIA = [
+    'whowhatwear', 'marieclaire', 'elle.com', 'vogue.com', 'harpersbazaar.com',
+    'refinery29', 'instyle', 'glamour.com', 'cosmopolitan', 'byrdie', 'popsugar',
+    'allure.com', 'wwd.com', 'thezoereport', 'thecut.com', 'womanandhome',
+    'esquire.com', 'gq.com', 'buzzfeed', 'bustle.com', 'nylon.com',
+  ];
+
+  // Keep only India-relevant sources. Allow anything on a .in domain or with
+  // "india" in the domain/source label; drop the known Western outlets above;
+  // give unknown sources the benefit of the doubt (many India-market sites sit on
+  // plain .com domains). A missing source is allowed (the prompt already asks for
+  // India), so we don't wipe otherwise-good items on a formatting miss.
+  private isIndiaSource(source: string, url?: string): boolean {
+    let host = '';
+    try {
+      if (url) host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    } catch {
+      /* ignore malformed url */
+    }
+    const hay = `${host} ${source}`.toLowerCase();
+    if (host.endsWith('.in') || hay.includes('india')) return true;
+    if (OpenAIClient.NON_INDIA_MEDIA.some((d) => host.includes(d) || hay.includes(d))) return false;
+    return true;
   }
 
   private parseTrendRadar(content: string, max: number): TrendRadarItem[] {
@@ -544,6 +573,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences:
         const source = norm(o.source).slice(0, 60);
         const url = cleanUrl(o.url);
         if (!item || !category || item.length > 60 || category.length > 40) continue;
+        if (!this.isIndiaSource(source, url)) continue; // drop non-India sources
         const key = item.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
