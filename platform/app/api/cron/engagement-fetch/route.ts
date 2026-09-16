@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { backfillEngagement, engagementCandidateCount } from '@/lib/engagement-fetcher';
+import { runOgProxyCanary, readOgProxyHealth } from '@/lib/og-proxy-health';
+
+// Only shout about a proxy outage after it's been failing for this long — a
+// momentary tunnel churn self-heals within minutes, so we don't want to cry wolf
+// on a single blip. Past this, the failure is real and worth a log line.
+const STALE_ALERT_MINUTES = 180;
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -29,12 +35,29 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 25;
 
   try {
+    // Smoke-detector: one free canary fetch confirms the home-IP og proxy is
+    // actually serving IG data before (and even when there's nothing to) backfill.
+    const canary = await runOgProxyCanary();
+    if (!canary.ok) {
+      // Proxy looks down for THIS run. Only escalate to an error log once it's
+      // been dark for a while (transient churns self-heal), so the signal is real.
+      const health = await readOgProxyHealth();
+      if (health.minutes_stale == null || health.minutes_stale >= STALE_ALERT_MINUTES) {
+        console.error(
+          `[engagement-fetch] og proxy DOWN — last OK ${health.last_ok_at ?? 'never'} (${health.minutes_stale ?? '∞'} min stale). Backfill skipped; check the home-IP relay/tunnel.`,
+        );
+      }
+      // Skip the backfill entirely: with a dead proxy every fetch would fail and
+      // just churn last_scraped_at on real rows for nothing.
+      return NextResponse.json({ skipped: 'og_proxy_down', canary, health });
+    }
+
     const remaining = await engagementCandidateCount();
     if (remaining === 0) {
-      return NextResponse.json({ remaining: 0, ...emptyReport() });
+      return NextResponse.json({ remaining: 0, canary, ...emptyReport() });
     }
     const report = await backfillEngagement({ limit });
-    return NextResponse.json({ remaining, ...report });
+    return NextResponse.json({ remaining, canary, ...report });
   } catch (err) {
     console.error('[engagement-fetch] failed:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
