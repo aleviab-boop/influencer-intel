@@ -8,8 +8,8 @@ import { PageDoodles } from '@/components/page-doodles';
 interface PlanInfo { name: string; price: number; credits: string }
 const PLANS: Record<string, PlanInfo> = {
   free: { name: 'Free', price: 0, credits: '100 credits (one-time)' },
-  startup: { name: 'Startup', price: 6999, credits: '6,999 credits / mo' },
-  growth: { name: 'Growth', price: 19999, credits: '21,999 credits / mo' },
+  startup: { name: 'Startup', price: 4999, credits: '6,999 credits / mo' },
+  growth: { name: 'Growth', price: 14999, credits: '21,999 credits / mo' },
 };
 const inr = (n: number) => '₹' + n.toLocaleString('en-IN');
 
