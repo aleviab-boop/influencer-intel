@@ -31,7 +31,7 @@ const PLANS: Plan[] = [
   {
     name: 'Startup',
     tagline: 'For small teams running their first campaigns.',
-    credits: '6,999 credits / mo',
+    credits: '4,999 credits / mo',
     price: 4999,
     cta: 'Get started',
     ctaHref: '/login?plan=startup',
@@ -40,7 +40,7 @@ const PLANS: Plan[] = [
   {
     name: 'Growth',
     tagline: 'For brands scaling always-on influencer programs.',
-    credits: '21,999 credits / mo',
+    credits: '14,999 credits / mo',
     price: 14999,
     cta: 'Get started',
     ctaHref: '/login?plan=growth',
@@ -138,7 +138,7 @@ const COMPARE: { group: string; icon: string; rows: { label: string; values: [Ce
   {
     group: 'Credit system', icon: 'coin',
     rows: [
-      { label: 'Included credits', values: ['100 / mo', '6,999 / mo', '21,999 / mo', 'Custom'] },
+      { label: 'Included credits', values: ['100 / mo', '4,999 / mo', '14,999 / mo', 'Custom'] },
       { label: 'Extra credit purchase', values: [false, true, true, true] },
       { label: 'Contact unlock cost', values: [false, '90 credits', '40 credits', 'Custom'] },
     ],
