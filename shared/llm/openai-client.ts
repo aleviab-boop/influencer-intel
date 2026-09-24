@@ -493,6 +493,99 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
   }
 
   /**
+   * Like suggestHandlesFromPrompt, but ALSO returns web-researched ESTIMATES of
+   * each creator's follower count and engagement rate. Used to fill the stat
+   * columns immediately from OpenAI when the live Instagram fetch is unavailable
+   * (throttled / walled). The numbers are approximate and possibly dated — the UI
+   * tags them "~ (est.)" — and are overridden the moment a live scrape returns
+   * real data. Falls back to a handle-only list (null estimates) if parsing the
+   * richer shape fails, so callers always get at least the names.
+   */
+  async suggestCreatorsFromPrompt(
+    prompt: string,
+    max = 15,
+  ): Promise<Array<{ username: string; est_followers: number | null; est_engagement: number | null }>> {
+    const isFestival =
+      /\b(durga\s*puja|durgapujo?|pujo|navratri|navaratri|garba|dandiya|diwali|deepavali|onam|ganesh\s*chaturthi|pongal|holi|raksha\s*bandhan|rakhi|karwa\s*chauth|eid|christmas|festive|festival)\b/i.test(
+        prompt,
+      );
+    const userContent = isFestival
+      ? `${prompt}\n\nThis is a FESTIVE / occasion campaign brief. Suggest Indian FASHION, ethnic-wear, styling, beauty and lifestyle creators who post festive OUTFIT / look / celebration content for this occasion. Do NOT suggest accounts that merely contain the festival's name, event / pandal / temple pages, brands or shops, or people named after a deity. Real, currently-active Indian creators only.`
+      : prompt;
+
+    const content = await this.webSearch(
+      `You are an Instagram creator-research assistant for an INDIAN influencer-marketing platform. Search the web to find REAL Instagram creators that match BOTH the niche and the location in the query, and estimate each one's audience size.
+Rules:
+- INDIA ONLY. Only creators based in India, who are Indian and post for an Indian audience. NEVER suggest foreign / non-Indian creators. If unsure, exclude.
+- If the query names an Indian city, prioritise creators actually from that city; if no location is given, assume India-wide.
+- Prefer genuine local / mid-tier Indian creators (nano to ~1M followers) over big celebrities.
+- Exclude brands, news outlets, agencies, marketplaces, meme/fan pages.
+- Only real, existing handles you can find via search — never invent or guess.
+- For each creator, ESTIMATE from what the web shows: "est_followers" = their approximate Instagram follower count as a plain integer (no commas/units), or null if you genuinely cannot find it; "est_engagement" = approximate average engagement rate as a percentage number like 3.2, or null.
+Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"name","est_followers":210000,"est_engagement":3.2}]} with at most ${max} creators, no @ prefix.`,
+      userContent,
+    );
+    return this.parseCreators(content, max);
+  }
+
+  private parseCreators(
+    content: string,
+    max: number,
+  ): Array<{ username: string; est_followers: number | null; est_engagement: number | null }> {
+    const normNum = (v: unknown): number | null => {
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+      if (typeof v === 'string') {
+        const m = v.replace(/,/g, '').match(/([\d.]+)\s*([kmb])?/i);
+        if (m) {
+          let n = parseFloat(m[1]!);
+          const u = (m[2] ?? '').toLowerCase();
+          if (u === 'k') n *= 1_000;
+          else if (u === 'm') n *= 1_000_000;
+          else if (u === 'b') n *= 1_000_000_000;
+          if (Number.isFinite(n) && n > 0) return Math.round(n);
+        }
+      }
+      return null;
+    };
+    const seen = new Set<string>();
+    const out: Array<{ username: string; est_followers: number | null; est_engagement: number | null }> = [];
+    const jsonMatch = content.match(/\{[\s\S]*"creators"[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]) as { creators?: unknown };
+        if (Array.isArray(parsed.creators)) {
+          for (const c of parsed.creators) {
+            if (!c || typeof c !== 'object') continue;
+            const rec = c as Record<string, unknown>;
+            const username = typeof rec.username === 'string'
+              ? rec.username.replace(/^@/, '').toLowerCase().trim()
+              : '';
+            if (!/^[a-z0-9._]{2,30}$/.test(username) || seen.has(username)) continue;
+            seen.add(username);
+            const eng = normNum(rec.est_engagement);
+            out.push({
+              username,
+              est_followers: normNum(rec.est_followers),
+              // A plausible ER is 0.1–30%; drop anything outside as a bad parse.
+              est_engagement: eng != null && eng > 0 && eng <= 30 ? eng : null,
+            });
+            if (out.length >= max) break;
+          }
+          if (out.length) return out;
+        }
+      } catch {
+        /* fall through to handle-only parse */
+      }
+    }
+    // Fallback: at least return the names with null estimates.
+    return this.parseHandles(content, max).map((username) => ({
+      username,
+      est_followers: null,
+      est_engagement: null,
+    }));
+  }
+
+  /**
    * Trend radar — specific, CURRENT consumer trends each paired with the ONE
    * marketing category they're breaking in, for the public "what's trending"
    * board (e.g. "polka dot → Fashion", "matcha → Food & Beverage", "modak →

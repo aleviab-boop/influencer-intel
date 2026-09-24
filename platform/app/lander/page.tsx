@@ -95,9 +95,14 @@ function LanderContent() {
   // Which source tab to open on, persisted in the URL so a refresh restores it
   // (?bucket=trends) instead of snapping back to Instagram and re-crawling.
   const initialBucket = params.get('bucket') === 'trends' ? 'trends' : 'instagram';
-  // The agency lander searches the DATABASE — the admin Scraper page is what
-  // crawls Instagram live and fills that database. So the lander is instant and
-  // never hits Instagram itself.
+  // The agency lander runs in 'db' mode — which is NOT "DB only". In db mode
+  // /api/discover-live also runs the AI pipeline: OpenAI names real handles for
+  // the niche+location and validates each LIVE against Instagram (free: cookie
+  // relay when up, else the cookieless og-page proxy — never Apify). Validated
+  // handles show as "Live from Instagram"; ones the free fetch can't stat land in
+  // "also found — no stats yet". So live results depend on the free-fetch hit
+  // rate (relay + fresh IG cookie), not on this flag. 'live' mode would DISABLE
+  // the AI pipeline (see discover-live route), so keep 'db'.
   const mode = 'db' as const;
   const showResults = query !== null || seed.trim().length >= 2;
   const runSearch = (q: string) => {

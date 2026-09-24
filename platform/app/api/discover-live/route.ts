@@ -384,12 +384,17 @@ export async function POST(req: NextRequest) {
     try {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
-      const handles = await withTimeout(
-        getOpenAIClient().suggestHandlesFromPrompt(prompt, 45).catch(() => [] as string[]),
+      type AiCreator = { username: string; est_followers: number | null; est_engagement: number | null };
+      const creators = await withTimeout(
+        getOpenAIClient().suggestCreatorsFromPrompt(prompt, 45).catch(() => [] as AiCreator[]),
         18_000,
-        [] as string[],
+        [] as AiCreator[],
       );
-      if (handles.length === 0) return;
+      if (creators.length === 0) return;
+      const handles = creators.map((c) => c.username);
+      // OpenAI's web-researched follower/ER estimates, keyed by handle — used to
+      // fill the stat columns when the live IG fetch is blocked (throttled/walled).
+      const estMap = new Map(creators.map((c) => [c.username.toLowerCase(), c] as const));
 
       // DB-FIRST: handles we already have (with real data) resolve instantly and
       // deterministically. Only the handles NOT in the DB need a live IG fetch —
@@ -417,7 +422,53 @@ export async function POST(req: NextRequest) {
       let liveValidated = (
         await profilesFromHandles(missing, tokens, { max: 32, budgetMs: 15_000, delayMs: 200 })
       ).map((p) => ({ ...p, from: 'live' as const }));
-      commitAi(liveValidated); // real live finds now included; stubs still 0-follower
+      // Fill stubs the live fetch couldn't stat (0 followers — IG walled) with
+      // OpenAI's ESTIMATES so the AI creators show numbers immediately. Real
+      // scraped data (followers>0) always wins; estimates are tagged estimated=true
+      // and are NEVER written to the DB as real (see the persist step below).
+      const validatedKeys = new Set(liveValidated.map((p) => p.username.toLowerCase()));
+      liveValidated = liveValidated.map((p) => {
+        if (p.followers > 0) return p; // a real scrape beats any estimate
+        const est = estMap.get(p.username.toLowerCase());
+        if (est?.est_followers && est.est_followers > 0) {
+          return {
+            ...p,
+            followers: est.est_followers,
+            engagement: est.est_engagement ?? p.engagement,
+            estimated: true,
+            unverified: false, // it now has (estimated) numbers → display it
+          };
+        }
+        return p;
+      });
+      // Any OpenAI creator neither in the DB nor returned by the fetch: add it as
+      // an estimate-only row so no AI find is silently dropped for lack of a live
+      // fetch. (Estimate-only rows without a usable number are left out.)
+      const dbKeys = new Set(dbBacked.map((p) => p.username.toLowerCase()));
+      const estOnly: LiveProfile[] = creators
+        .filter(
+          (c) =>
+            !!c.est_followers &&
+            c.est_followers > 0 &&
+            !dbKeys.has(c.username.toLowerCase()) &&
+            !validatedKeys.has(c.username.toLowerCase()),
+        )
+        .map((c) => ({
+          username: c.username,
+          full_name: '',
+          biography: '',
+          category: '',
+          followers: c.est_followers as number,
+          is_private: false,
+          is_verified: false,
+          profile_pic_url: null,
+          score: 0,
+          engagement: c.est_engagement ?? 0,
+          from: 'live' as const,
+          from_ai: true,
+          estimated: true,
+        }));
+      commitAi([...liveValidated, ...estOnly]); // real finds + estimate-filled AI creators
 
       // Free path throttled? Any AI handle that came back as a 0-follower STUB is a
       // real creator GPT found that we just couldn't confirm live. Batch-enrich the
@@ -684,10 +735,16 @@ export async function POST(req: NextRequest) {
     // background; they just don't clutter the results until they have real
     // numbers, then they show up on a later search.
     .filter((p) => {
-      if (p.unverified) return false;
       // Direct @handle lookup: always keep the exact account, even if it has a
       // small/zero follower count (e.g. a brand-new or niche personal account).
       if (handleLookup && p.username.toLowerCase() === lookupHandle) return true;
+      // OpenAI web-search finds ALWAYS lead the list, even before their live
+      // stats are fetched — numbers fill in later once a fetch path works. IG is
+      // currently walling the free stat-fetch, so gating AI finds on followers>0
+      // hid them entirely in the "no stats yet" strip; surfacing them here (their
+      // natural top spot via srcRank) restores "OpenAI search on top" like before.
+      if (p.from_ai) return true;
+      if (p.unverified) return false;
       return p.followers > 0;
     })
     .sort((a, b) => {
@@ -744,8 +801,15 @@ export async function POST(req: NextRequest) {
   // unverified ones (IG was throttled/timed out, so we couldn't confirm them
   // this run) are stored fill-only inside persist(), so their empty fields can
   // never clobber a real existing row; a later search / worker crawl enriches them.
+  // Never let OpenAI's ESTIMATES enter the DB as if they were scraped facts: the
+  // DB must only ever hold real, live numbers. Store estimated rows as fill-only
+  // stubs (numbers cleared, unverified) — the estimate stays on the display copy
+  // only, and a later real scrape fills the DB properly.
+  const forPersist = [...aiProfiles, ...liveProfiles].map((p) =>
+    p.estimated ? { ...p, followers: 0, engagement: 0, unverified: true } : p,
+  );
   const persisted = await persist(
-    [...aiProfiles, ...liveProfiles],
+    forPersist,
     { region: cls.region, niche, tags, placeTokens, nicheKeywords: nicheGate },
   );
 

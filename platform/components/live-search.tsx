@@ -28,6 +28,7 @@ interface LiveProfile {
   creator_id?: string;
   from?: 'db' | 'live';
   from_ai?: boolean;
+  estimated?: boolean; // followers/ER are OpenAI web-search estimates ("~", tagged est.)
   loc_match?: boolean;
   curated?: boolean;
   gender?: 'female' | 'male' | 'unknown' | null;
@@ -2420,15 +2421,32 @@ export function LiveSearch({
                       </td>
                       <td className="px-3 py-3 text-[13px] text-[#666]"><span className="block max-w-[130px] truncate" title={p.category || undefined}>{p.category || '—'}</span></td>
                       <td className="px-3 py-3 text-[14px] text-[#111] text-right tabular-nums">
-                        {fmt(p.followers)}
+                        {(() => {
+                          // Prefer a live-enriched count; fall back to the search-time
+                          // value. An AI find with no stats yet shows "—" (blank), not
+                          // a misleading "0", until a fetch path fills its numbers.
+                          const live = liveStats[p.username]?.followers;
+                          const f = live ?? p.followers;
+                          if (!(f > 0)) return '—';
+                          // Estimated only until a real live scrape overrides it.
+                          const est = p.estimated && live == null;
+                          return est ? (
+                            <span title="Estimated from OpenAI web search — not a live scrape">
+                              ~{fmt(f)} <span className="text-[10px] text-[#a99cf0] font-medium">est.</span>
+                            </span>
+                          ) : fmt(f);
+                        })()}
                       </td>
                       <td className="px-3 py-3 text-[13px] text-right tabular-nums whitespace-nowrap">
                         {(() => {
-                          const flag = authenticityFlag(p.followers, p.engagement);
+                          // Don't run the fake-follower check on ESTIMATED numbers — the
+                          // warning is only meaningful against real scraped stats.
+                          const isEst = p.estimated && liveStats[p.username]?.engagement == null;
+                          const flag = isEst ? 'ok' : authenticityFlag(p.followers, p.engagement);
                           return (
                             <span className="inline-flex items-center gap-1 justify-end" style={{ color: flag === 'low' ? '#f59e0b' : (p.engagement ?? 0) > 0 ? '#10b981' : '#bbb' }}>
                               {flag === 'low' && <span title="Low engagement for follower count — possible fake followers">⚠</span>}
-                              {(p.engagement ?? 0) > 0 ? `${p.engagement}%` : '—'}
+                              {(p.engagement ?? 0) > 0 ? `${isEst ? '~' : ''}${p.engagement}%` : '—'}
                             </span>
                           );
                         })()}
