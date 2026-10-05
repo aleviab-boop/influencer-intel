@@ -500,9 +500,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Merge, DB-backed first (data-backed + stable), then live finds. Dedupe.
+      // Merge, DB-backed first (data-backed + stable), then live finds, then the
+      // estimate/tier-only creators live-validation couldn't return (so they're not
+      // silently dropped here — this is what keeps the AI list from collapsing to a
+      // handful when the live fetch is throttled). Dedupe.
       const merged = new Map<string, LiveProfile>();
-      for (const p of [...dbBacked, ...liveValidated]) {
+      for (const p of [...dbBacked, ...liveValidated, ...estOnly]) {
         const k = p.username.toLowerCase();
         if (!merged.has(k)) merged.set(k, p);
       }

@@ -267,10 +267,10 @@ Output ONLY JSON: { "results": [ { "handle": "...", "gender": "female"|"male"|"u
           {
             role: 'system',
             content: `You verify whether each Instagram creator genuinely MATCHES a search brief for an INDIAN influencer-marketing platform. Given the brief and a list of creators (handle, name, bio, category), decide for EACH whether they are a real fit.
-Mark relevant = true ONLY if BOTH hold:
-1. NICHE — their bio / name / category clearly shows they create content in the brief's niche or topic. A merely ADJACENT or different field is NOT a match (e.g. a MAKEUP artist is NOT relevant to an "aquascaping" brief; a generic "fishing/angler" page is NOT "aquascaping").
+Mark relevant = true UNLESS the creator is CLEARLY wrong on one of these:
+1. NICHE — keep anyone in the brief's niche OR its BROADER domain/category. Be GENEROUS with sub-niches: for a "vegan creator" brief a general FOOD creator counts; for "streetwear" a general FASHION creator counts; for "aquascaping" a general aquarium / fishkeeping page counts. Mark false ONLY for a CLEARLY UNRELATED field (e.g. a MAKEUP artist for an "aquascaping" brief, a FINANCE page for a "food" brief).
 2. LOCATION — they are based in India, and (if the brief names a city/region) plausibly in or near it. An empty / unknown location is acceptable. A clearly FOREIGN creator (bio in another language, or based in e.g. France, Spain, the US) is NOT relevant.
-When the bio is empty or too thin to judge, default relevant = true — never discard an unenriched account we simply can't assess yet.
+When the bio is empty or too thin to judge, default relevant = true — never discard an unenriched account we simply can't assess yet. Lean toward KEEPING borderline creators; only drop obvious mismatches, so the brief returns a rich list rather than a handful.
 Output ONLY JSON: { "results": [ { "handle": "...", "relevant": true|false, "reason": "<=6 words" } ] } — one entry per input handle.`,
           },
           { role: 'user', content: JSON.stringify({ brief: prompt, creators: payload }) },
@@ -519,12 +519,14 @@ Rules:
 - INDIA ONLY. Only creators based in India, who are Indian and post for an Indian audience. NEVER suggest foreign / non-Indian creators. If unsure, exclude.
 - If the query names an Indian city, prioritise creators actually from that city; if no location is given, assume India-wide.
 - Prefer genuine local / mid-tier Indian creators (nano to ~1M followers) over big celebrities.
+- BREADTH — this matters most: return AS MANY real, fitting creators as you can, aiming for the full ${max}. Cast a WIDE net across sizes (nano, micro AND mid-tier) and, if a city is named, also include creators from the wider state and nearby hubs. Run several web searches with different phrasings/synonyms so you don't stop at the first 4-5 obvious names. A long, varied list is the goal — NEVER return just a handful when more real creators clearly exist.
 - Exclude brands, news outlets, agencies, marketplaces, meme/fan pages.
 - Only real, existing handles you can find via search — never invent or guess.
 - For each creator, ESTIMATE from what the web shows: "est_followers" = their approximate Instagram follower count as a plain integer (no commas/units), or null if you genuinely cannot find it; "est_engagement" = approximate average engagement rate as a percentage number like 3.2, or null.
 - "est_tier" = a ROUGH size bucket for when you can't find an exact count but can still gauge their reach, chosen from EXACTLY one of: "<1K", "1-10K", "10-50K", "50-100K", "100K-500K", "500K-1M", "1M+". Always try to give a tier even when est_followers is null; use null only if you have no sense of their size at all.
-Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"name","est_followers":210000,"est_engagement":3.2,"est_tier":"100K-500K"}]} with at most ${max} creators, no @ prefix.`,
+Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"name","est_followers":210000,"est_engagement":3.2,"est_tier":"100K-500K"}]} with up to ${max} creators (aim for at least 20 when the niche is broad enough), no @ prefix.`,
       userContent,
+      'gpt-4o',
     );
     return this.parseCreators(content, max);
   }
