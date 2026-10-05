@@ -29,6 +29,7 @@ interface LiveProfile {
   from?: 'db' | 'live';
   from_ai?: boolean;
   estimated?: boolean; // followers/ER are OpenAI web-search estimates ("~", tagged est.)
+  est_tier?: string | null; // coarse size bucket (e.g. "10-50K") when no exact number
   loc_match?: boolean;
   curated?: boolean;
   gender?: 'female' | 'male' | 'unknown' | null;
@@ -2423,18 +2424,28 @@ export function LiveSearch({
                       <td className="px-3 py-3 text-[14px] text-[#111] text-right tabular-nums">
                         {(() => {
                           // Prefer a live-enriched count; fall back to the search-time
-                          // value. An AI find with no stats yet shows "—" (blank), not
-                          // a misleading "0", until a fetch path fills its numbers.
+                          // value. Order: real/estimated exact number → rough size tier
+                          // → "—". Estimates are tagged "est." and overridden by a real
+                          // scrape the moment one lands.
                           const live = liveStats[p.username]?.followers;
                           const f = live ?? p.followers;
-                          if (!(f > 0)) return '—';
-                          // Estimated only until a real live scrape overrides it.
-                          const est = p.estimated && live == null;
-                          return est ? (
-                            <span title="Estimated from OpenAI web search — not a live scrape">
-                              ~{fmt(f)} <span className="text-[10px] text-[#a99cf0] font-medium">est.</span>
-                            </span>
-                          ) : fmt(f);
+                          if (f > 0) {
+                            const est = p.estimated && live == null;
+                            return est ? (
+                              <span title="Estimated from OpenAI web search — not a live scrape">
+                                ~{fmt(f)} <span className="text-[10px] text-[#a99cf0] font-medium">est.</span>
+                              </span>
+                            ) : fmt(f);
+                          }
+                          // No exact number anywhere — show the rough size bucket if we have one.
+                          if (p.est_tier && live == null) {
+                            return (
+                              <span title="Rough size range estimated by OpenAI — not a live scrape">
+                                ~{p.est_tier.replace('-', '–')} <span className="text-[10px] text-[#a99cf0] font-medium">est.</span>
+                              </span>
+                            );
+                          }
+                          return '—';
                         })()}
                       </td>
                       <td className="px-3 py-3 text-[13px] text-right tabular-nums whitespace-nowrap">

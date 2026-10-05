@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
     try {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
-      type AiCreator = { username: string; est_followers: number | null; est_engagement: number | null };
+      type AiCreator = { username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null };
       const creators = await withTimeout(
         getOpenAIClient().suggestCreatorsFromPrompt(prompt, 45).catch(() => [] as AiCreator[]),
         18_000,
@@ -439,6 +439,11 @@ export async function POST(req: NextRequest) {
             unverified: false, // it now has (estimated) numbers → display it
           };
         }
+        if (est?.est_tier) {
+          // No exact number from any source — show the rough size bucket
+          // (e.g. "10-50K") instead of a blank. Still tagged estimated.
+          return { ...p, est_tier: est.est_tier, estimated: true, unverified: false };
+        }
         return p;
       });
       // Any OpenAI creator neither in the DB nor returned by the fetch: add it as
@@ -448,26 +453,29 @@ export async function POST(req: NextRequest) {
       const estOnly: LiveProfile[] = creators
         .filter(
           (c) =>
-            !!c.est_followers &&
-            c.est_followers > 0 &&
+            ((!!c.est_followers && c.est_followers > 0) || !!c.est_tier) &&
             !dbKeys.has(c.username.toLowerCase()) &&
             !validatedKeys.has(c.username.toLowerCase()),
         )
-        .map((c) => ({
-          username: c.username,
-          full_name: '',
-          biography: '',
-          category: '',
-          followers: c.est_followers as number,
-          is_private: false,
-          is_verified: false,
-          profile_pic_url: null,
-          score: 0,
-          engagement: c.est_engagement ?? 0,
-          from: 'live' as const,
-          from_ai: true,
-          estimated: true,
-        }));
+        .map((c) => {
+          const hasExact = !!c.est_followers && c.est_followers > 0;
+          return {
+            username: c.username,
+            full_name: '',
+            biography: '',
+            category: '',
+            followers: hasExact ? (c.est_followers as number) : 0,
+            is_private: false,
+            is_verified: false,
+            profile_pic_url: null,
+            score: 0,
+            engagement: c.est_engagement ?? 0,
+            from: 'live' as const,
+            from_ai: true,
+            estimated: true,
+            est_tier: hasExact ? null : c.est_tier,
+          };
+        });
       commitAi([...liveValidated, ...estOnly]); // real finds + estimate-filled AI creators
 
       // Free path throttled? Any AI handle that came back as a 0-follower STUB is a

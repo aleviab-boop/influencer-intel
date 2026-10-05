@@ -504,7 +504,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
   async suggestCreatorsFromPrompt(
     prompt: string,
     max = 15,
-  ): Promise<Array<{ username: string; est_followers: number | null; est_engagement: number | null }>> {
+  ): Promise<Array<{ username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null }>> {
     const isFestival =
       /\b(durga\s*puja|durgapujo?|pujo|navratri|navaratri|garba|dandiya|diwali|deepavali|onam|ganesh\s*chaturthi|pongal|holi|raksha\s*bandhan|rakhi|karwa\s*chauth|eid|christmas|festive|festival)\b/i.test(
         prompt,
@@ -522,7 +522,8 @@ Rules:
 - Exclude brands, news outlets, agencies, marketplaces, meme/fan pages.
 - Only real, existing handles you can find via search — never invent or guess.
 - For each creator, ESTIMATE from what the web shows: "est_followers" = their approximate Instagram follower count as a plain integer (no commas/units), or null if you genuinely cannot find it; "est_engagement" = approximate average engagement rate as a percentage number like 3.2, or null.
-Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"name","est_followers":210000,"est_engagement":3.2}]} with at most ${max} creators, no @ prefix.`,
+- "est_tier" = a ROUGH size bucket for when you can't find an exact count but can still gauge their reach, chosen from EXACTLY one of: "<1K", "1-10K", "10-50K", "50-100K", "100K-500K", "500K-1M", "1M+". Always try to give a tier even when est_followers is null; use null only if you have no sense of their size at all.
+Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"name","est_followers":210000,"est_engagement":3.2,"est_tier":"100K-500K"}]} with at most ${max} creators, no @ prefix.`,
       userContent,
     );
     return this.parseCreators(content, max);
@@ -531,7 +532,14 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
   private parseCreators(
     content: string,
     max: number,
-  ): Array<{ username: string; est_followers: number | null; est_engagement: number | null }> {
+  ): Array<{ username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> {
+    // Canonical size buckets the UI knows how to render. Anything else → null.
+    const TIERS = new Set(['<1K', '1-10K', '10-50K', '50-100K', '100K-500K', '500K-1M', '1M+']);
+    const normTier = (v: unknown): string | null => {
+      if (typeof v !== 'string') return null;
+      const t = v.trim().replace(/\s+/g, '').replace(/–|—/g, '-');
+      return TIERS.has(t) ? t : null;
+    };
     const normNum = (v: unknown): number | null => {
       if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
       if (typeof v === 'string') {
@@ -548,7 +556,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
       return null;
     };
     const seen = new Set<string>();
-    const out: Array<{ username: string; est_followers: number | null; est_engagement: number | null }> = [];
+    const out: Array<{ username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> = [];
     const jsonMatch = content.match(/\{[\s\S]*"creators"[\s\S]*\}/);
     if (jsonMatch) {
       try {
@@ -568,6 +576,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
               est_followers: normNum(rec.est_followers),
               // A plausible ER is 0.1–30%; drop anything outside as a bad parse.
               est_engagement: eng != null && eng > 0 && eng <= 30 ? eng : null,
+              est_tier: normTier(rec.est_tier),
             });
             if (out.length >= max) break;
           }
@@ -582,6 +591,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
       username,
       est_followers: null,
       est_engagement: null,
+      est_tier: null,
     }));
   }
 

@@ -71,6 +71,8 @@ export interface LiveProfile {
   from_ai?: boolean; // surfaced by the OpenAI web-search suggester
   estimated?: boolean; // followers/engagement are OpenAI web-search ESTIMATES, not
   // live-scraped — shown tagged "~ (est.)" until a real scrape overrides them
+  est_tier?: string | null; // coarse size bucket (e.g. "10-50K") when no exact
+  // follower number exists at all — shown as "~10–50K est." instead of a blank
   completeness?: number; // 0–10 data-completeness score (how many fields we hold)
   is_indian?: boolean; // false = known-foreign (sinks in ranking); India-only platform
 }
