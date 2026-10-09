@@ -385,9 +385,14 @@ export async function POST(req: NextRequest) {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
       type AiCreator = { username: string; full_name: string | null; category: string | null; est_followers: number | null; est_engagement: number | null; est_tier: string | null };
+      // 30s (not 18s): gpt-4o now looks up each creator's stats on web aggregators,
+      // which runs longer; at 18s it sometimes timed out and the fallback discarded
+      // EVERY creator (0 AI results). The outer Promise.all cap (46s) is the real
+      // ceiling, so giving the suggest more of that window just trades some live-
+      // validation time (walled anyway) for reliably getting the AI list.
       const creators = await withTimeout(
         getOpenAIClient().suggestCreatorsFromPrompt(prompt, 45).catch(() => [] as AiCreator[]),
-        18_000,
+        30_000,
         [] as AiCreator[],
       );
       if (creators.length === 0) return;
