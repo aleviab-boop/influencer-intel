@@ -578,11 +578,15 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
       const eng = normNum(rec.est_engagement);
       const nm = typeof rec.name === 'string' ? rec.name.trim().slice(0, 80) : '';
       const cat = typeof rec.category === 'string' ? rec.category.trim().slice(0, 40) : '';
+      const foll = normNum(rec.est_followers);
       out.push({
         username,
         full_name: nm || null,
         category: cat || null,
-        est_followers: normNum(rec.est_followers),
+        // A creator surfaced by a niche search essentially always has >=1K
+        // followers; a sub-1K figure is almost always the model dropping the "K"
+        // (e.g. 14 for 14K), so discard it and let the size tier fill in instead.
+        est_followers: foll != null && foll >= 1000 ? foll : null,
         // A plausible ER is 0.1–30%; drop anything outside as a bad parse.
         est_engagement: eng != null && eng > 0 && eng <= 30 ? eng : null,
         est_tier: normTier(rec.est_tier),
