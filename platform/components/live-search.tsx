@@ -262,6 +262,28 @@ function expectedErFloor(followers: number): number {
   if (followers >= 10_000) return 1.5;
   return 2.0;
 }
+// TYPICAL (not floor) engagement rate for a creator's size — used to show a rough
+// "~X% est." when we have NO real/OpenAI ER at all, so the ENG column isn't blank.
+// Generic by design (every creator of this size gets the same number), so it's
+// always tagged est., never flagged for authenticity, and never persisted.
+// Accepts a follower count, or a size tier string when no exact number exists.
+function benchmarkEr(followers: number, tier?: string | null): number | null {
+  let f = followers;
+  if (!(f > 0) && tier) {
+    const mid: Record<string, number> = {
+      '<1K': 500, '1-10K': 5000, '10-50K': 30000, '50-100K': 75000,
+      '100K-500K': 300000, '500K-1M': 750000, '1M+': 2000000,
+    };
+    f = mid[tier] ?? 0;
+  }
+  if (!(f > 0)) return null;
+  if (f < 10_000) return 4;
+  if (f < 50_000) return 2.5;
+  if (f < 100_000) return 1.8;
+  if (f < 500_000) return 1.3;
+  if (f < 1_000_000) return 1.1;
+  return 0.9;
+}
 function authenticityFlag(followers: number, engagement?: number): 'healthy' | 'low' | null {
   if (!engagement || engagement <= 0) return null;
   return engagement >= expectedErFloor(followers) ? 'healthy' : 'low';
@@ -2450,16 +2472,31 @@ export function LiveSearch({
                       </td>
                       <td className="px-3 py-3 text-[13px] text-right tabular-nums whitespace-nowrap">
                         {(() => {
-                          // Don't run the fake-follower check on ESTIMATED numbers — the
-                          // warning is only meaningful against real scraped stats.
-                          const isEst = p.estimated && liveStats[p.username]?.engagement == null;
-                          const flag = isEst ? 'ok' : authenticityFlag(p.followers, p.engagement);
-                          return (
-                            <span className="inline-flex items-center gap-1 justify-end" style={{ color: flag === 'low' ? '#f59e0b' : (p.engagement ?? 0) > 0 ? '#10b981' : '#bbb' }}>
-                              {flag === 'low' && <span title="Low engagement for follower count — possible fake followers">⚠</span>}
-                              {(p.engagement ?? 0) > 0 ? `${isEst ? '~' : ''}${p.engagement}%` : '—'}
-                            </span>
-                          );
+                          const liveEr = liveStats[p.username]?.engagement;
+                          const er = Number(liveEr ?? p.engagement ?? 0);
+                          // 1) Real or OpenAI-estimated ER → show it. Authenticity check
+                          // runs only on REAL numbers, never on estimates.
+                          if (er > 0) {
+                            const isEst = p.estimated && liveEr == null;
+                            const flag = isEst ? 'ok' : authenticityFlag(p.followers, er);
+                            return (
+                              <span className="inline-flex items-center gap-1 justify-end" style={{ color: flag === 'low' ? '#f59e0b' : '#10b981' }}>
+                                {flag === 'low' && <span title="Low engagement for follower count — possible fake followers">⚠</span>}
+                                {`${isEst ? '~' : ''}${er}%`}
+                              </span>
+                            );
+                          }
+                          // 2) No ER anywhere → typical-for-size benchmark so it's not blank.
+                          const foll = Number(liveStats[p.username]?.followers ?? p.followers ?? 0);
+                          const bench = benchmarkEr(foll, p.est_tier);
+                          if (bench != null) {
+                            return (
+                              <span className="inline-flex items-center gap-1 justify-end" style={{ color: '#a99cf0' }} title="Typical engagement for this creator size — a rough estimate, not measured">
+                                ~{bench}% <span className="text-[10px] font-medium">est.</span>
+                              </span>
+                            );
+                          }
+                          return <span style={{ color: '#bbb' }}>—</span>;
                         })()}
                       </td>
                       <td className="px-3 py-3 text-center">
