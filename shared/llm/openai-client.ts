@@ -441,6 +441,9 @@ Generate 30-50 candidate Instagram handles.`,
     const res = await this.client.responses.create({
       model,
       tools: [{ type: 'web_search_preview' }],
+      // Headroom so a long creator list (many fields each) isn't truncated into
+      // invalid JSON — truncation was dropping whole result sets to 0.
+      max_output_tokens: 6000,
       input: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -561,40 +564,53 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
     };
     const seen = new Set<string>();
     const out: Array<{ username: string; full_name: string | null; category: string | null; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> = [];
+    const pushRec = (rec: Record<string, unknown>): void => {
+      if (out.length >= max) return;
+      const username = typeof rec.username === 'string'
+        ? rec.username.replace(/^@/, '').toLowerCase().trim()
+        : '';
+      if (!/^[a-z0-9._]{2,30}$/.test(username) || seen.has(username)) return;
+      seen.add(username);
+      const eng = normNum(rec.est_engagement);
+      const nm = typeof rec.name === 'string' ? rec.name.trim().slice(0, 80) : '';
+      const cat = typeof rec.category === 'string' ? rec.category.trim().slice(0, 40) : '';
+      out.push({
+        username,
+        full_name: nm || null,
+        category: cat || null,
+        est_followers: normNum(rec.est_followers),
+        // A plausible ER is 0.1–30%; drop anything outside as a bad parse.
+        est_engagement: eng != null && eng > 0 && eng <= 30 ? eng : null,
+        est_tier: normTier(rec.est_tier),
+      });
+    };
+
+    // 1) Clean parse of the full {"creators":[...]} object.
     const jsonMatch = content.match(/\{[\s\S]*"creators"[\s\S]*\}/);
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0]) as { creators?: unknown };
         if (Array.isArray(parsed.creators)) {
           for (const c of parsed.creators) {
-            if (!c || typeof c !== 'object') continue;
-            const rec = c as Record<string, unknown>;
-            const username = typeof rec.username === 'string'
-              ? rec.username.replace(/^@/, '').toLowerCase().trim()
-              : '';
-            if (!/^[a-z0-9._]{2,30}$/.test(username) || seen.has(username)) continue;
-            seen.add(username);
-            const eng = normNum(rec.est_engagement);
-            const nm = typeof rec.name === 'string' ? rec.name.trim().slice(0, 80) : '';
-            const cat = typeof rec.category === 'string' ? rec.category.trim().slice(0, 40) : '';
-            out.push({
-              username,
-              full_name: nm || null,
-              category: cat || null,
-              est_followers: normNum(rec.est_followers),
-              // A plausible ER is 0.1–30%; drop anything outside as a bad parse.
-              est_engagement: eng != null && eng > 0 && eng <= 30 ? eng : null,
-              est_tier: normTier(rec.est_tier),
-            });
-            if (out.length >= max) break;
+            if (c && typeof c === 'object') pushRec(c as Record<string, unknown>);
           }
-          if (out.length) return out;
         }
       } catch {
-        /* fall through to handle-only parse */
+        /* fall through to salvage */
       }
     }
-    // Fallback: at least return the names with null estimates.
+    // 2) Salvage: web-search models often wrap JSON in prose, or the array gets
+    // TRUNCATED at the output-token limit (long lists with many fields) — either
+    // way the single JSON.parse above fails and we'd lose every creator. Pull out
+    // each flat creator object by regex and parse them one at a time, so a
+    // truncated/prose response still yields all its complete objects.
+    if (out.length === 0) {
+      for (const m of content.matchAll(/\{[^{}]*"username"\s*:[^{}]*\}/g)) {
+        try { pushRec(JSON.parse(m[0]) as Record<string, unknown>); } catch { /* skip one bad object */ }
+      }
+    }
+    if (out.length > 0) return out;
+    // 3) Last resort: bare @handles from prose.
     return this.parseHandles(content, max).map((username) => ({
       username,
       full_name: null,

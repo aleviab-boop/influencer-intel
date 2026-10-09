@@ -391,7 +391,7 @@ export async function POST(req: NextRequest) {
       // ceiling, so giving the suggest more of that window just trades some live-
       // validation time (walled anyway) for reliably getting the AI list.
       const creators = await withTimeout(
-        getOpenAIClient().suggestCreatorsFromPrompt(prompt, 45).catch(() => [] as AiCreator[]),
+        getOpenAIClient().suggestCreatorsFromPrompt(prompt, 30).catch(() => [] as AiCreator[]),
         30_000,
         [] as AiCreator[],
       );
