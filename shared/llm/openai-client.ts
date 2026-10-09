@@ -504,7 +504,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"handles":["u
   async suggestCreatorsFromPrompt(
     prompt: string,
     max = 15,
-  ): Promise<Array<{ username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null }>> {
+  ): Promise<Array<{ username: string; full_name: string | null; category: string | null; est_followers: number | null; est_engagement: number | null; est_tier: string | null }>> {
     const isFestival =
       /\b(durga\s*puja|durgapujo?|pujo|navratri|navaratri|garba|dandiya|diwali|deepavali|onam|ganesh\s*chaturthi|pongal|holi|raksha\s*bandhan|rakhi|karwa\s*chauth|eid|christmas|festive|festival)\b/i.test(
         prompt,
@@ -524,7 +524,9 @@ Rules:
 - Only real, existing handles you can find via search — never invent or guess.
 - For each creator, ESTIMATE from what the web shows: "est_followers" = their approximate Instagram follower count as a plain integer (no commas/units), or null if you genuinely cannot find it; "est_engagement" = approximate average engagement rate as a percentage number like 3.2, or null.
 - "est_tier" = a ROUGH size bucket for when you can't find an exact count but can still gauge their reach, chosen from EXACTLY one of: "<1K", "1-10K", "10-50K", "50-100K", "100K-500K", "500K-1M", "1M+". Always try to give a tier even when est_followers is null; use null only if you have no sense of their size at all.
-Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"name","est_followers":210000,"est_engagement":3.2,"est_tier":"100K-500K"}]} with up to ${max} creators (aim for at least 20 when the niche is broad enough), no @ prefix.`,
+- "name" = the creator's DISPLAY NAME / real name as shown on their profile (e.g. "Utsav Soni"), or null if you don't know it.
+- "category" = a SHORT niche label for what they post, 1-4 words (e.g. "Food Vlogger", "Interior Designer", "Street Food", "Fashion & Styling"), or null if unsure.
+Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{"username":"utsavsoni","name":"Utsav Soni","category":"Food Vlogger","est_followers":210000,"est_engagement":3.2,"est_tier":"100K-500K"}]} with up to ${max} creators (aim for at least 20 when the niche is broad enough), no @ prefix.`,
       userContent,
       'gpt-4o',
     );
@@ -534,7 +536,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
   private parseCreators(
     content: string,
     max: number,
-  ): Array<{ username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> {
+  ): Array<{ username: string; full_name: string | null; category: string | null; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> {
     // Canonical size buckets the UI knows how to render. Anything else → null.
     const TIERS = new Set(['<1K', '1-10K', '10-50K', '50-100K', '100K-500K', '500K-1M', '1M+']);
     const normTier = (v: unknown): string | null => {
@@ -558,7 +560,7 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
       return null;
     };
     const seen = new Set<string>();
-    const out: Array<{ username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> = [];
+    const out: Array<{ username: string; full_name: string | null; category: string | null; est_followers: number | null; est_engagement: number | null; est_tier: string | null }> = [];
     const jsonMatch = content.match(/\{[\s\S]*"creators"[\s\S]*\}/);
     if (jsonMatch) {
       try {
@@ -573,8 +575,12 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
             if (!/^[a-z0-9._]{2,30}$/.test(username) || seen.has(username)) continue;
             seen.add(username);
             const eng = normNum(rec.est_engagement);
+            const nm = typeof rec.name === 'string' ? rec.name.trim().slice(0, 80) : '';
+            const cat = typeof rec.category === 'string' ? rec.category.trim().slice(0, 40) : '';
             out.push({
               username,
+              full_name: nm || null,
+              category: cat || null,
               est_followers: normNum(rec.est_followers),
               // A plausible ER is 0.1–30%; drop anything outside as a bad parse.
               est_engagement: eng != null && eng > 0 && eng <= 30 ? eng : null,
@@ -591,6 +597,8 @@ Respond with ONLY a JSON object, no prose and no markdown fences: {"creators":[{
     // Fallback: at least return the names with null estimates.
     return this.parseHandles(content, max).map((username) => ({
       username,
+      full_name: null,
+      category: null,
       est_followers: null,
       est_engagement: null,
       est_tier: null,

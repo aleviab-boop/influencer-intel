@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
     try {
       // Ask for MORE than 10 so that after relevance-filtering we still have
       // enough to fill the section (OpenAI over-suggests; some don't fit).
-      type AiCreator = { username: string; est_followers: number | null; est_engagement: number | null; est_tier: string | null };
+      type AiCreator = { username: string; full_name: string | null; category: string | null; est_followers: number | null; est_engagement: number | null; est_tier: string | null };
       const creators = await withTimeout(
         getOpenAIClient().suggestCreatorsFromPrompt(prompt, 45).catch(() => [] as AiCreator[]),
         18_000,
@@ -428,13 +428,18 @@ export async function POST(req: NextRequest) {
       // and are NEVER written to the DB as real (see the persist step below).
       const validatedKeys = new Set(liveValidated.map((p) => p.username.toLowerCase()));
       liveValidated = liveValidated.map((p) => {
-        if (p.followers > 0) return p; // a real scrape beats any estimate
         const est = estMap.get(p.username.toLowerCase());
+        // Fill display name / category from OpenAI when we don't already hold them
+        // (keeps the AI rows from being bare handles). Real data we already have wins.
+        const named = est
+          ? { ...p, full_name: p.full_name || est.full_name || '', category: p.category || est.category || '' }
+          : p;
+        if (named.followers > 0) return named; // a real scrape beats any estimate
         if (est?.est_followers && est.est_followers > 0) {
           return {
-            ...p,
+            ...named,
             followers: est.est_followers,
-            engagement: est.est_engagement ?? p.engagement,
+            engagement: est.est_engagement ?? named.engagement,
             estimated: true,
             unverified: false, // it now has (estimated) numbers → display it
           };
@@ -442,9 +447,9 @@ export async function POST(req: NextRequest) {
         if (est?.est_tier) {
           // No exact number from any source — show the rough size bucket
           // (e.g. "10-50K") instead of a blank. Still tagged estimated.
-          return { ...p, est_tier: est.est_tier, estimated: true, unverified: false };
+          return { ...named, est_tier: est.est_tier, estimated: true, unverified: false };
         }
-        return p;
+        return named;
       });
       // Any OpenAI creator neither in the DB nor returned by the fetch: add it as
       // an estimate-only row so no AI find is silently dropped for lack of a live
@@ -461,9 +466,9 @@ export async function POST(req: NextRequest) {
           const hasExact = !!c.est_followers && c.est_followers > 0;
           return {
             username: c.username,
-            full_name: '',
+            full_name: c.full_name ?? '',
             biography: '',
-            category: '',
+            category: c.category ?? '',
             followers: hasExact ? (c.est_followers as number) : 0,
             is_private: false,
             is_verified: false,
