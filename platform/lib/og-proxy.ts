@@ -40,6 +40,25 @@ export const ogImage = (body: string): string | null => {
   return u ? decodeEntities(u) : null;
 };
 
+// Profile photo from a profile PAGE, most-reliable source first:
+//   1) the og:image meta tag (present on a normal profile page), then
+//   2) the profile_pic_url(_hd) embedded in the page's JSON.
+// IG sometimes serves an account a page with the og:image meta STRIPPED but the
+// pic still present in the JSON — reading only og:image dropped those to initials
+// for no reason. JSON string values escape `/` as `\/` (and `&` as `&`), so
+// unescape via JSON.parse (with a manual fallback) before returning the URL.
+const unescapeJsonString = (s: string): string => {
+  try { return JSON.parse(`"${s}"`); } catch { return s.replace(/\\\//g, '/').replace(/\\u0026/gi, '&'); }
+};
+export const pageProfilePic = (body: string): string | null => {
+  const og = ogImage(body);
+  if (og) return og;
+  const raw =
+    body.match(/"profile_pic_url_hd":"([^"]+)"/)?.[1] ??
+    body.match(/"profile_pic_url":"([^"]+)"/)?.[1];
+  return raw ? unescapeJsonString(raw) : null;
+};
+
 // Cached ~60s so this adds at most ~1 DB read/min. Env IG_OG_RELAY is a static
 // fallback for when the DB value isn't set.
 let ogProxyCache: { at: number; url: string | undefined } | null = null;
@@ -98,5 +117,5 @@ export async function ogFetch(igUrl: string, timeoutMs = 10_000): Promise<string
 export async function fetchProfileOgImage(handle: string): Promise<string | null> {
   const body = await ogFetch(`https://www.instagram.com/${encodeURIComponent(handle)}/`, 10_000);
   if (!body) return null;
-  return ogImage(body);
+  return pageProfilePic(body);
 }
