@@ -396,12 +396,13 @@ export async function POST(req: NextRequest) {
       // / emerging creators + nearby cities) the first (biased to obvious big names)
       // misses. Running them in parallel keeps it within the same ~10s window.
       const oai = getOpenAIClient();
-      // Two parallel searches, merged. Call B widens the net (smaller/emerging
-      // creators + nearby cities) WITHOUT forbidding the well-documented names:
-      // tested directly, a hard "avoid the big names" instruction starved call B
-      // (it returned ~8 vs ~39) because the long tail is under-documented, so the
-      // merged union SHRANK. Overlap is fine — breadth + reliable yield wins.
-      const [mainC, moreC] = await withTimeout(
+      // THREE parallel searches, merged by handle. Each is BROAD (adding a call can
+      // only grow the union — a restrictive "avoid big names" angle backfired, it
+      // starved the call since the long tail is under-documented). The three angles:
+      // (A) the exact query, (B) smaller/emerging + nearby cities, (C) a differently-
+      // phrased "list as many as you can". Tested: 3 calls reliably >= 2 (e.g.
+      // 15 -> 54), raising the floor on thin runs. All parallel, ~8-10s.
+      const [cA, cB, cC] = await withTimeout(
         Promise.all([
           oai.suggestCreatorsFromPrompt(prompt, 40).catch(() => [] as AiCreator[]),
           oai
@@ -410,13 +411,19 @@ export async function POST(req: NextRequest) {
               40,
             )
             .catch(() => [] as AiCreator[]),
+          oai
+            .suggestCreatorsFromPrompt(
+              `Popular and up-and-coming Instagram creators for "${prompt}" — list as many real, currently-active, genuinely-relevant ones as you can.`,
+              40,
+            )
+            .catch(() => [] as AiCreator[]),
         ]),
         30_000,
-        [[], []] as [AiCreator[], AiCreator[]],
+        [[], [], []] as [AiCreator[], AiCreator[], AiCreator[]],
       );
       const seenHandles = new Set<string>();
       const creators: AiCreator[] = [];
-      for (const cr of [...mainC, ...moreC]) {
+      for (const cr of [...cA, ...cB, ...cC]) {
         const k = cr.username.toLowerCase();
         if (!seenHandles.has(k)) { seenHandles.add(k); creators.push(cr); }
       }
