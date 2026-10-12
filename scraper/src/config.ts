@@ -33,6 +33,21 @@ export const config = {
   proxyUrl: process.env.SCRAPER_PROXY_URL || undefined,
   pollIntervalMs: Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000),
   maxActionsPerHour: Number(process.env.MAX_ACTIONS_PER_HOUR ?? 90),
+  // Per-account DAILY cap. All accounts egress from ONE fixed office IP, so the
+  // IP — not any single account — is what IG throttles. Keeping each account's
+  // daily volume low (and the whole pool's combined volume modest) is the only
+  // lever left to survive that per-IP throttle. Rolls over 24h after first use.
+  maxActionsPerDay: Number(process.env.MAX_ACTIONS_PER_DAY ?? 50),
+  // Human-like pause BETWEEN jobs. On a single shared IP a steady machine-gun
+  // cadence is exactly what trips the egress throttle; a randomised 30–90s gap
+  // spreads requests out so the IP looks like ordinary browsing, not a crawler.
+  // Set both to 0 to disable (e.g. when crawling from a clean per-account IP).
+  interJobDelayMinMs: Number(process.env.INTER_JOB_DELAY_MIN_MS ?? 30_000),
+  interJobDelayMaxMs: Number(process.env.INTER_JOB_DELAY_MAX_MS ?? 90_000),
+  // Off-hours guard. The office IP looks most bot-like hammering IG at 3am with
+  // no human on the network. When set (e.g. "9-21"), the worker only crawls
+  // within these local hours and idles outside them. Empty = crawl any hour.
+  crawlHoursLocal: process.env.CRAWL_HOURS_LOCAL ?? '',
   // Proactive rotation: hand off to the least-used ready account after this many
   // jobs, WELL before an account hits its hourly cap — so no single account
   // builds up a burst big enough for IG to flag/kill it. Spreading load thin is

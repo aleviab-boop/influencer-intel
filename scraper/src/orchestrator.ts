@@ -149,6 +149,14 @@ export async function run(): Promise<void> {
       }
     }
 
+    // Off-hours guard: outside the configured local crawl window, don't touch
+    // IG at all — a shared office IP hammering IG overnight with no human on the
+    // network is the most bot-like thing it can do. Idle until the window opens.
+    if (!withinCrawlHours()) {
+      await sleep(Math.min(config.poolRefreshMs, 5 * 60 * 1000));
+      continue;
+    }
+
     const job = (await queue.claimNext()) ?? (await queue.pickIdleWork());
     if (!job) {
       await sleep(config.pollIntervalMs);
@@ -214,6 +222,15 @@ export async function run(): Promise<void> {
       jobsSinceRotate = 0;
       await rotateTo(pool.pickNext(), 'proactive rotate');
     }
+
+    // Human-like pause before the next job. This is the core of surviving the
+    // per-IP egress throttle: with every account leaving from one office IP, a
+    // randomised 30–90s gap is what keeps the IP's request rate under the wire.
+    const gap = interJobDelayMs();
+    if (gap > 0) {
+      console.log(`[orchestrator] pacing — waiting ${Math.round(gap / 1000)}s before next job`);
+      await sleep(gap);
+    }
   }
 }
 
@@ -251,6 +268,29 @@ async function dispatch(job: ScrapeJob, driver: DriverHandle, queue: JobQueue): 
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// Randomised human-like pause between jobs. On a single shared office IP a
+// constant machine cadence is what trips the egress throttle; jittering the gap
+// makes the traffic read like ordinary browsing. Returns 0 when disabled.
+function interJobDelayMs(): number {
+  const lo = Math.max(0, config.interJobDelayMinMs);
+  const hi = Math.max(lo, config.interJobDelayMaxMs);
+  if (hi === 0) return 0;
+  return Math.round(lo + Math.random() * (hi - lo));
+}
+
+// Off-hours guard. CRAWL_HOURS_LOCAL="9-21" → only crawl 09:00–20:59 local time.
+// Empty/unset → always allowed. Supports a window that wraps midnight ("22-6").
+function withinCrawlHours(): boolean {
+  const spec = config.crawlHoursLocal.trim();
+  if (!spec) return true;
+  const m = /^(\d{1,2})\s*-\s*(\d{1,2})$/.exec(spec);
+  if (!m) return true; // malformed → don't accidentally freeze the worker
+  const start = Number(m[1]) % 24;
+  const end = Number(m[2]) % 24;
+  const h = new Date().getHours();
+  return start <= end ? h >= start && h < end : h >= start || h < end;
 }
 
 // Reject if `p` doesn't settle within `ms` — the caller's try/catch then fails

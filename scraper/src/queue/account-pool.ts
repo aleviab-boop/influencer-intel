@@ -24,11 +24,16 @@ const DEFAULT_COOLDOWN_MS = 90 * 60 * 1000; // rest a 429'd account for 90 min
 // account gets a chance to recover on its own.
 const DEAD_STRIKES_TO_PARK = 3;
 
+const DAY_MS = 24 * HOUR_MS;
+
 interface AcctState {
   account: ServiceAccount;
   actionsThisHour: number;
   hourResetAt: number;
+  actionsThisDay: number;
+  dayResetAt: number;
   cooldownUntil: number; // epoch ms; 0 = not cooling
+  throttleStreak: number; // consecutive throttle hits → escalating backoff
   totalActions: number;
   deadStrikes: number; // consecutive 401/403 signals; reset on any success
 }
@@ -62,7 +67,10 @@ export class AccountPool {
       account: a,
       actionsThisHour: 0,
       hourResetAt: now + HOUR_MS,
+      actionsThisDay: 0,
+      dayResetAt: now + DAY_MS,
       cooldownUntil: cooldownMs(a),
+      throttleStreak: 0,
       totalActions: 0,
       deadStrikes: 0,
     }));
@@ -99,7 +107,10 @@ export class AccountPool {
         account: a,
         actionsThisHour: 0,
         hourResetAt: now + HOUR_MS,
+        actionsThisDay: 0,
+        dayResetAt: now + DAY_MS,
         cooldownUntil: cooldownMs(a),
+        throttleStreak: 0,
         totalActions: 0,
         deadStrikes: 0,
       };
@@ -126,9 +137,14 @@ export class AccountPool {
   }
 
   private maybeReset(s: AcctState): void {
-    if (Date.now() > s.hourResetAt) {
+    const now = Date.now();
+    if (now > s.hourResetAt) {
       s.actionsThisHour = 0;
-      s.hourResetAt = Date.now() + HOUR_MS;
+      s.hourResetAt = now + HOUR_MS;
+    }
+    if (now > s.dayResetAt) {
+      s.actionsThisDay = 0;
+      s.dayResetAt = now + DAY_MS;
     }
   }
 
@@ -137,21 +153,34 @@ export class AccountPool {
     const s = this.states[this.idx]!;
     this.maybeReset(s);
     s.actionsThisHour += n;
+    s.actionsThisDay += n;
     s.totalActions += n;
   }
 
-  /** The active account is over its hourly cap or cooling down → time to swap. */
+  /** The active account is over its hourly OR daily cap, or cooling down → swap.
+   * The daily cap is the load-bearing one on a shared office IP: it holds each
+   * account (and so the whole pool) to a low, IP-throttle-survivable volume. */
   dueForRotation(): boolean {
     const s = this.states[this.idx]!;
     this.maybeReset(s);
-    return s.actionsThisHour >= config.maxActionsPerHour || Date.now() < s.cooldownUntil;
+    return (
+      s.actionsThisHour >= config.maxActionsPerHour ||
+      s.actionsThisDay >= config.maxActionsPerDay ||
+      Date.now() < s.cooldownUntil
+    );
   }
 
-  /** Cool down the active account (after a 429) so it's skipped until it recovers. */
-  penalizeCurrent(ms = DEFAULT_COOLDOWN_MS): void {
+  /** Cool down the active account (after a 429) so it's skipped until it recovers.
+   * The cooldown ESCALATES with consecutive throttles: a shared office IP that's
+   * still being hit after a short rest needs a longer one, so we back off
+   * 15min → 30 → 60 → 120 → capped at 4h. Any healthy probe (reportAlive) resets
+   * the streak, so an isolated 429 doesn't push the account into a long rest. */
+  penalizeCurrent(ms?: number): void {
     const s = this.states[this.idx]!;
-    s.cooldownUntil = Date.now() + ms;
-    console.warn(`[pool] @${s.account.handle} rate-limited → cooling down ${Math.round(ms / 60000)}min`);
+    s.throttleStreak += 1;
+    const backoff = ms ?? Math.min(15 * 60 * 1000 * 2 ** (s.throttleStreak - 1), 4 * HOUR_MS);
+    s.cooldownUntil = Date.now() + backoff;
+    console.warn(`[pool] @${s.account.handle} rate-limited (streak ${s.throttleStreak}) → cooling down ${Math.round(backoff / 60000)}min`);
     void this.persist(s);
   }
 
@@ -164,6 +193,7 @@ export class AccountPool {
       console.log(`[pool] @${s.account.handle} responded OK → clearing ${s.deadStrikes} dead-strike(s)`);
       s.deadStrikes = 0;
     }
+    s.throttleStreak = 0; // a clean probe means the escalating backoff can reset
   }
 
   /** A dead-signal (401/403) on the active account. A SINGLE one is usually a
@@ -221,6 +251,7 @@ export class AccountPool {
       this.maybeReset(s);
       if (now < s.cooldownUntil) continue;
       if (s.actionsThisHour >= config.maxActionsPerHour) continue;
+      if (s.actionsThisDay >= config.maxActionsPerDay) continue;
       // Least-loaded first: fewest actions this hour, then fewest lifetime
       // actions. The lifetime tie-break matters because actionsThisHour resets
       // every hour — without it, the picker would keep favouring the same
@@ -245,14 +276,15 @@ export class AccountPool {
     for (const s of this.states) {
       const cooldownWait = Math.max(0, s.cooldownUntil - now);
       const capWait = s.actionsThisHour >= config.maxActionsPerHour ? Math.max(0, s.hourResetAt - now) : 0;
-      soonest = Math.min(soonest, Math.max(cooldownWait, capWait));
+      const dayWait = s.actionsThisDay >= config.maxActionsPerDay ? Math.max(0, s.dayResetAt - now) : 0;
+      soonest = Math.min(soonest, Math.max(cooldownWait, capWait, dayWait));
     }
     return Number.isFinite(soonest) ? soonest : HOUR_MS;
   }
 
   status(): string {
     return this.states
-      .map((s, i) => `${i === this.idx ? '*' : ' '}@${s.account.handle}:${s.actionsThisHour}/${config.maxActionsPerHour}${Date.now() < s.cooldownUntil ? ' (cool)' : ''}`)
+      .map((s, i) => `${i === this.idx ? '*' : ' '}@${s.account.handle}:${s.actionsThisHour}/${config.maxActionsPerHour}h ${s.actionsThisDay}/${config.maxActionsPerDay}d${Date.now() < s.cooldownUntil ? ' (cool)' : ''}`)
       .join('  ');
   }
 
