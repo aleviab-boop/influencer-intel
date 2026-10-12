@@ -2459,11 +2459,15 @@ export function LiveSearch({
                               </span>
                             ) : fmt(f);
                           }
-                          // No exact number anywhere — show the rough size bucket if we have one.
-                          if (p.est_tier && live == null) {
+                          // No exact number — show the size bucket. For an AI-surfaced
+                          // creator with no size at all, fall back to a conservative
+                          // default tier so the cell is never fully blank (OpenAI
+                          // couldn't size them, which usually means a smaller account).
+                          const tier = p.est_tier || ((p.from_ai || p.estimated) ? '1-10K' : null);
+                          if (tier && live == null) {
                             return (
                               <span title="Rough size range estimated by OpenAI — not a live scrape">
-                                ~{p.est_tier.replace('-', '–')} <span className="text-[10px] text-[#a99cf0] font-medium">est.</span>
+                                ~{tier.replace('-', '–')} <span className="text-[10px] text-[#a99cf0] font-medium">est.</span>
                               </span>
                             );
                           }
@@ -2487,8 +2491,10 @@ export function LiveSearch({
                             );
                           }
                           // 2) No ER anywhere → typical-for-size benchmark so it's not blank.
+                          // Same default-tier fallback as the followers cell for AI rows.
                           const foll = Number(liveStats[p.username]?.followers ?? p.followers ?? 0);
-                          const bench = benchmarkEr(foll, p.est_tier);
+                          const erTier = p.est_tier || ((p.from_ai || p.estimated) ? '1-10K' : null);
+                          const bench = benchmarkEr(foll, erTier);
                           if (bench != null) {
                             return (
                               <span className="inline-flex items-center gap-1 justify-end" style={{ color: '#a99cf0' }} title="Typical engagement for this creator size — a rough estimate, not measured">
