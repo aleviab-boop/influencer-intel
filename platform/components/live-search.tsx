@@ -4350,7 +4350,11 @@ function Avatar({
 
   let src: string | null = null;
   if (stage === 0 && cleanHandle) src = `/api/ig-avatar?handle=${encodeURIComponent(cleanHandle)}`;
-  else if (stage <= 1 && url) src = `/api/ig-image?u=${encodeURIComponent(url)}`;
+  // Stage 1: the first try may have reused a STALE cached 404 from when Instagram
+  // was walled (the photo is reachable now). Retry the same proxy once with a
+  // cache-buster so the browser refetches instead of serving the cached miss.
+  else if (stage === 1 && cleanHandle) src = `/api/ig-avatar?handle=${encodeURIComponent(cleanHandle)}&cb=1`;
+  else if (stage <= 2 && url) src = `/api/ig-image?u=${encodeURIComponent(url)}`;
 
   if (src) {
     // IG CDN blocks hotlinking — route through our server-side proxy.

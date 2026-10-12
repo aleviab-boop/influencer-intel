@@ -17,6 +17,12 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// Failure responses must NOT be cached. A miss while Instagram is walled would
+// otherwise stick in the browser/edge cache and keep showing initials even after
+// the photo becomes reachable again. (Only the successful image gets long cache.)
+const fail = (body: string, status: number) =>
+  new NextResponse(body, { status, headers: { 'Cache-Control': 'no-store' } });
+
 // Fetch a CDN image URL and return a streaming image response, or null if the
 // URL is invalid / blocked / expired.
 async function streamImage(picUrl: string): Promise<NextResponse | null> {
@@ -55,14 +61,14 @@ async function streamImage(picUrl: string): Promise<NextResponse | null> {
 export async function GET(req: NextRequest) {
   const handle = (req.nextUrl.searchParams.get('handle') ?? '').trim().replace(/^@/, '');
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
-    return new NextResponse('bad handle', { status: 400 });
+    return fail('bad handle', 400);
   }
   // Hard overall cap: the per-stage fetches (cached → og → live) can stack, so a
   // fully-failing avatar (expired cache + walled og/live) could still run ~25s.
   // Bound the whole resolution and 404 fast (client shows initials) if it runs long.
   return Promise.race([
     resolveAvatar(handle),
-    new Promise<NextResponse>((r) => setTimeout(() => r(new NextResponse('timeout', { status: 404 })), 9_000)),
+    new Promise<NextResponse>((r) => setTimeout(() => r(fail('timeout', 404)), 9_000)),
   ]);
 }
 
@@ -126,10 +132,10 @@ async function resolveAvatar(handle: string): Promise<NextResponse> {
         signal: AbortSignal.timeout(6_000),
       },
     );
-    if (!infoRes.ok) return new NextResponse('not found', { status: 404 });
+    if (!infoRes.ok) return fail('not found', 404);
     const json = (await infoRes.json()) as { data?: { user?: { profile_pic_url?: string } } };
     const picUrl = json?.data?.user?.profile_pic_url;
-    if (!picUrl) return new NextResponse('no photo', { status: 404 });
+    if (!picUrl) return fail('no photo', 404);
 
     // Cache the fresh URL for next time (best-effort).
     void getBolticClient()
@@ -137,8 +143,8 @@ async function resolveAvatar(handle: string): Promise<NextResponse> {
       .catch(() => {});
 
     const streamed = await streamImage(picUrl);
-    return streamed ?? new NextResponse('image error', { status: 502 });
+    return streamed ?? fail('image error', 502);
   } catch {
-    return new NextResponse('fetch failed', { status: 502 });
+    return fail('fetch failed', 502);
   }
 }
