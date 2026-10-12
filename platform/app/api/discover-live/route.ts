@@ -396,12 +396,17 @@ export async function POST(req: NextRequest) {
       // / emerging creators + nearby cities) the first (biased to obvious big names)
       // misses. Running them in parallel keeps it within the same ~10s window.
       const oai = getOpenAIClient();
+      // Two searches in DIFFERENT lanes so they don't return the same names (overlap
+      // wastes the second call). Call A: the exact query. Call B: a deliberately
+      // different pool — smaller/emerging creators, the wider region & nearby towns,
+      // and adjacent sub-niches, explicitly AVOIDING the big names A already covers.
+      // Low overlap => a larger merged union => a higher floor on thin runs.
       const [mainC, moreC] = await withTimeout(
         Promise.all([
           oai.suggestCreatorsFromPrompt(prompt, 40).catch(() => [] as AiCreator[]),
           oai
             .suggestCreatorsFromPrompt(
-              `${prompt} — focus on SMALLER, emerging and nano/micro creators, and genuinely-relevant creators in nearby cities and towns, BEYOND the obvious big names.`,
+              `${prompt} — find DIFFERENT creators from the obvious famous ones: focus on SMALLER / emerging / nano & micro creators, the WIDER region and nearby cities & towns, and closely-adjacent sub-niches. Deliberately AVOID the big, well-known names (a separate search already covers those) — return a fresh set.`,
               40,
             )
             .catch(() => [] as AiCreator[]),
