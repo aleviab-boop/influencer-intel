@@ -2679,7 +2679,7 @@ export function LiveSearch({
                               visible width so it stays fully on screen even when
                               the table scrolls horizontally. */}
                           <div className="sticky left-0 px-4 pb-4 pt-0" style={drawerW ? { width: drawerW } : undefined}>
-                            <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} refreshing={profileRefreshing} initialBrief={run?.prompt ?? ''} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
+                            <ProfileSnapshot loading={profileLoading} error={profileError} profile={profile} fallback={p} refreshing={profileRefreshing} initialBrief={run?.prompt ?? ''} onRefresh={() => void refreshProfile()} onDraft={() => void openDraft(p)} onClose={() => setProfileFor(null)} onPivot={(h) => { setProfileFor(null); void search({ promptOverride: h, seedOverride: h, mode: 'live' }); }} />
                           </div>
                         </td>
                       </tr>
@@ -3183,7 +3183,7 @@ function FilterDropdown({ value, active, onClear, onChange, options, title }: {
   );
 }
 
-function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDraft, onClose, onPivot, initialBrief = '' }: { loading: boolean; error?: string | null; profile: ProfileData | null; refreshing?: boolean; onRefresh?: () => void; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void; initialBrief?: string }) {
+function ProfileSnapshot({ loading, error, profile, fallback, refreshing, onRefresh, onDraft, onClose, onPivot, initialBrief = '' }: { loading: boolean; error?: string | null; profile: ProfileData | null; fallback?: LiveProfile | null; refreshing?: boolean; onRefresh?: () => void; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void; initialBrief?: string }) {
   const [copied, setCopied] = useState(false);
   const [rivals, setRivals] = useState('');
   const [growth, setGrowth] = useState<{ pct: number; days: number } | null>(null);
@@ -3220,6 +3220,50 @@ function ProfileSnapshot({ loading, error, profile, refreshing, onRefresh, onDra
     );
   }
   if (error || !profile) {
+    // The full live profile couldn't load (not scraped yet / live fetch blocked).
+    // Rather than a dead-end error, fall back to the details we already have from
+    // the search row so the drawer still shows something useful.
+    if (fallback) {
+      const f = fallback.followers > 0 ? fallback.followers : 0;
+      const follLabel = f >= 1000 ? fmt(f) : (fallback.est_tier ? `~${fallback.est_tier.replace('-', '–')}` : '~1–5K');
+      const follEst = f < 1000;
+      const erReal = fallback.engagement ?? 0;
+      const erBench = erReal > 0 ? null : benchmarkEr(f, fallback.est_tier ?? '1-5K');
+      return (
+        <div className="relative rounded-xl border border-[#e3def9] bg-white p-5" style={{ animation: 'ii-fadeup .3s both' }}>
+          <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
+          <div className="flex items-start gap-3">
+            {fallback.profile_pic_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={fallback.profile_pic_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
+            ) : (
+              <span className="w-12 h-12 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-lg font-semibold grid place-items-center shrink-0">{fallback.username.charAt(0).toUpperCase()}</span>
+            )}
+            <div className="min-w-0">
+              <a href={`https://instagram.com/${fallback.username}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-[#111] hover:underline">@{fallback.username}</a>
+              {fallback.full_name ? <div className="text-[13px] text-[#666] truncate">{fallback.full_name}</div> : null}
+              {fallback.category ? <div className="text-[12px] text-[#999] truncate">{fallback.category}</div> : null}
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-[11px] text-[#999] uppercase tracking-wide">Followers</div>
+              <div className="text-[15px] font-semibold text-[#111]">{follLabel}{follEst ? <span className="text-[10px] text-[#a99cf0] font-medium ml-1">est.</span> : null}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-[#999] uppercase tracking-wide">Engagement</div>
+              <div className="text-[15px] font-semibold text-[#111]">{erReal > 0 ? `${Math.round(erReal * 100) / 100}%` : (erBench != null ? <span>~{erBench}%<span className="text-[10px] text-[#a99cf0] font-medium ml-1">est.</span></span> : '—')}</div>
+            </div>
+          </div>
+          {fallback.biography ? <p className="mt-3 text-[12.5px] text-[#555] leading-relaxed line-clamp-3">{fallback.biography}</p> : null}
+          <div className="mt-4 flex items-center gap-2">
+            <a href={`https://instagram.com/${fallback.username}`} target="_blank" rel="noreferrer" className="text-[12px] px-3 py-1.5 rounded-lg bg-[#111] text-white hover:bg-[#333]">View on Instagram ↗</a>
+            {onRefresh ? <button onClick={onRefresh} className="text-[12px] px-3 py-1.5 rounded-lg border border-[#e3def9] text-[#555] hover:bg-[#faf9ff]">{refreshing ? 'Fetching…' : 'Load full profile'}</button> : null}
+          </div>
+          <p className="mt-3 text-[11px] text-[#aaa] leading-relaxed">Showing details from search — the full live profile (recent posts) isn&apos;t available right now.</p>
+        </div>
+      );
+    }
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 text-center" style={{ animation: 'ii-fadeup .3s both' }}>
         <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
