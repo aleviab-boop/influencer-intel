@@ -793,9 +793,9 @@ export function LiveSearch({
   const [healthyOnly, setHealthyOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'relevance' | 'followers_desc' | 'followers_asc' | 'engagement' | 'fit'>('relevance');
   // How many profiles to pull per search. The server caps at 150 (discover-live
-  // clampInt 5..150); 60 is the default page. The "Show" control re-runs the
-  // search with a bigger ceiling so more creators surface.
-  const [resultLimit, setResultLimit] = useState(60);
+  // clampInt 5..150); default is 100 so a search surfaces more creators (incl. the
+  // full AI set) without trimming. The "Show" control re-runs with a bigger ceiling.
+  const [resultLimit, setResultLimit] = useState(100);
   // Follower / engagement band parsed out of a typed brief ("…5k-20k followers
   // and 4%+ engagement") and applied to the results as a real filter, shown as a
   // removable chip. Null when the prompt carries no numeric constraints.
