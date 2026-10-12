@@ -271,7 +271,7 @@ function benchmarkEr(followers: number, tier?: string | null): number | null {
   let f = followers;
   if (!(f > 0) && tier) {
     const mid: Record<string, number> = {
-      '<1K': 500, '1-10K': 5000, '10-50K': 30000, '50-100K': 75000,
+      '<1K': 500, '1-5K': 3000, '1-10K': 5000, '10-50K': 30000, '50-100K': 75000,
       '100K-500K': 300000, '500K-1M': 750000, '1M+': 2000000,
     };
     f = mid[tier] ?? 0;
@@ -2463,7 +2463,7 @@ export function LiveSearch({
                           // creator with no size at all, fall back to a conservative
                           // default tier so the cell is never fully blank (OpenAI
                           // couldn't size them, which usually means a smaller account).
-                          const tier = p.est_tier || ((p.from_ai || p.estimated) ? '1-10K' : null);
+                          const tier = p.est_tier || ((p.from_ai || p.estimated) ? '1-5K' : null);
                           if (tier && live == null) {
                             return (
                               <span title="Rough size range estimated by OpenAI — not a live scrape">
@@ -2493,7 +2493,7 @@ export function LiveSearch({
                           // 2) No ER anywhere → typical-for-size benchmark so it's not blank.
                           // Same default-tier fallback as the followers cell for AI rows.
                           const foll = Number(liveStats[p.username]?.followers ?? p.followers ?? 0);
-                          const erTier = p.est_tier || ((p.from_ai || p.estimated) ? '1-10K' : null);
+                          const erTier = p.est_tier || ((p.from_ai || p.estimated) ? '1-5K' : null);
                           const bench = benchmarkEr(foll, erTier);
                           if (bench != null) {
                             return (
