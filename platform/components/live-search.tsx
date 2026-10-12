@@ -3219,13 +3219,10 @@ function ProfileSnapshot({ loading, error, profile, fallback, refreshing, onRefr
       </div>
     );
   }
-  // Show the clean search-data card when the full live profile can't load OR has
-  // no scraped posts (the AI-search creators, while live scraping is walled) — so
-  // EVERY creator opens a real drawer, not just the DB ones with a rich profile.
-  const noLiveProfile = error || !profile || ((profile.recent?.length ?? 0) === 0);
-  if (noLiveProfile) {
-    // Rather than a dead-end error / empty rich view, fall back to the details we
-    // already have from the search row so the drawer still shows something useful.
+  // Full rich drawer (posts grid, forecast, etc.) renders whenever we have a
+  // profile — the live fetch populates posts when it succeeds. The search-data
+  // card is only a LAST RESORT when the profile genuinely can't load at all.
+  if (error || !profile) {
     if (fallback) {
       const f = fallback.followers > 0 ? fallback.followers : 0;
       const follLabel = f >= 1000 ? fmt(f) : (fallback.est_tier ? `~${fallback.est_tier.replace('-', '–')}` : '~1–5K');
