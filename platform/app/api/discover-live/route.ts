@@ -1122,9 +1122,14 @@ async function persist(
               primary_category: p.category || null,
               profile_photo_url: p.profile_pic_url,
               is_verified: p.is_verified,
-              follower_count: p.followers || null,
-              // store the freshly computed engagement (as a ratio) when we have it
-              ...(p.engagement > 0 ? { engagement_rate: p.engagement / 100 } : {}),
+              // Guard against garbage low counts from a misparsed live/og fetch (e.g.
+              // 911 for a creator who really has ~131K): only persist a plausible
+              // count (>=1000). Below that, store null so a proper crawl fills it
+              // later — this is what keeps sub-1K junk from being re-written to the DB.
+              follower_count: p.followers >= 1000 ? p.followers : null,
+              // Only store ER alongside a plausible follower count — ER computed from
+              // a garbage follower number is itself garbage.
+              ...(p.engagement > 0 && p.followers >= 1000 ? { engagement_rate: p.engagement / 100 } : {}),
               data_completeness: cscore,
               // This is an India-first platform: the AI suggester is India-only
               // (+ India relevance filter) and the crawl is seeded from Indian
