@@ -29,14 +29,14 @@ async function streamImage(picUrl: string): Promise<NextResponse | null> {
   // (and stays up even when the residential relay is down); relay is the fallback.
   let imgRes: Response | null = null;
   try {
-    const direct = await fetch(url.toString(), { headers });
+    const direct = await fetch(url.toString(), { headers, signal: AbortSignal.timeout(6_000) });
     if (direct.ok && direct.body) imgRes = direct;
   } catch {
     /* fall through to the relay */
   }
   if (!imgRes) {
     try {
-      const relayed = await igFetch(url.toString(), { headers });
+      const relayed = await igFetch(url.toString(), { headers, signal: AbortSignal.timeout(6_000) });
       if (relayed.ok && relayed.body) imgRes = relayed;
     } catch {
       /* both hops failed */
@@ -107,6 +107,9 @@ export async function GET(req: NextRequest) {
           'Sec-Fetch-Mode': 'cors',
           'Sec-Fetch-Dest': 'empty',
         },
+        // Bound the live lookup so a slow/walled relay can't stall the avatar
+        // request to the function timeout (was hanging ~27s then 404-ing).
+        signal: AbortSignal.timeout(6_000),
       },
     );
     if (!infoRes.ok) return new NextResponse('not found', { status: 404 });
