@@ -443,7 +443,7 @@ Generate 30-50 candidate Instagram handles.`,
       tools: [{ type: 'web_search_preview' }],
       // Headroom so a long creator list (many fields each) isn't truncated into
       // invalid JSON — truncation was dropping whole result sets to 0.
-      max_output_tokens: 6000,
+      max_output_tokens: 8000,
       input: [
         { role: 'system', content: system },
         { role: 'user', content: user },

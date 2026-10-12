@@ -390,11 +390,31 @@ export async function POST(req: NextRequest) {
       // EVERY creator (0 AI results). The outer Promise.all cap (46s) is the real
       // ceiling, so giving the suggest more of that window just trades some live-
       // validation time (walled anyway) for reliably getting the AI list.
-      const creators = await withTimeout(
-        getOpenAIClient().suggestCreatorsFromPrompt(prompt, 30).catch(() => [] as AiCreator[]),
+      // TWO complementary searches in PARALLEL, then merge — OpenAI self-limits to
+      // ~20 real names for a single query no matter the ask, so one call alone
+      // can't go higher. The second call explicitly targets the long tail (smaller
+      // / emerging creators + nearby cities) the first (biased to obvious big names)
+      // misses. Running them in parallel keeps it within the same ~10s window.
+      const oai = getOpenAIClient();
+      const [mainC, moreC] = await withTimeout(
+        Promise.all([
+          oai.suggestCreatorsFromPrompt(prompt, 40).catch(() => [] as AiCreator[]),
+          oai
+            .suggestCreatorsFromPrompt(
+              `${prompt} — focus on SMALLER, emerging and nano/micro creators, and genuinely-relevant creators in nearby cities and towns, BEYOND the obvious big names.`,
+              40,
+            )
+            .catch(() => [] as AiCreator[]),
+        ]),
         30_000,
-        [] as AiCreator[],
+        [[], []] as [AiCreator[], AiCreator[]],
       );
+      const seenHandles = new Set<string>();
+      const creators: AiCreator[] = [];
+      for (const cr of [...mainC, ...moreC]) {
+        const k = cr.username.toLowerCase();
+        if (!seenHandles.has(k)) { seenHandles.add(k); creators.push(cr); }
+      }
       if (creators.length === 0) return;
       const handles = creators.map((c) => c.username);
       // OpenAI's web-researched follower/ER estimates, keyed by handle — used to
