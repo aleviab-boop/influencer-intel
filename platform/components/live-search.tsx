@@ -3183,6 +3183,56 @@ function FilterDropdown({ value, active, onClear, onChange, options, title }: {
   );
 }
 
+// Instant card built from the search-row data. Rendered immediately while the
+// live profile loads (so the drawer never sits on a blank spinner) and as the
+// fallback when the full profile can't load. `loadingPosts` shows a "loading live
+// posts…" hint; the rich posts view replaces this as soon as the fetch returns.
+function SearchDataCard({ fallback, onClose, onRefresh, refreshing, loadingPosts }: { fallback: LiveProfile; onClose: () => void; onRefresh?: () => void; refreshing?: boolean; loadingPosts: boolean }) {
+  const f = fallback.followers > 0 ? fallback.followers : 0;
+  const follLabel = f >= 1000 ? fmt(f) : (fallback.est_tier ? `~${fallback.est_tier.replace('-', '–')}` : '~1–5K');
+  const follEst = f < 1000;
+  const erReal = fallback.engagement ?? 0;
+  const erBench = erReal > 0 ? null : benchmarkEr(f, fallback.est_tier ?? '1-5K');
+  return (
+    <div className="relative rounded-xl border border-[#e3def9] bg-white p-5" style={{ animation: 'ii-fadeup .3s both' }}>
+      <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
+      <div className="flex items-start gap-3">
+        {fallback.profile_pic_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={fallback.profile_pic_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
+        ) : (
+          <span className="w-12 h-12 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-lg font-semibold grid place-items-center shrink-0">{fallback.username.charAt(0).toUpperCase()}</span>
+        )}
+        <div className="min-w-0">
+          <a href={`https://instagram.com/${fallback.username}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-[#111] hover:underline">@{fallback.username}</a>
+          {fallback.full_name ? <div className="text-[13px] text-[#666] truncate">{fallback.full_name}</div> : null}
+          {fallback.category ? <div className="text-[12px] text-[#999] truncate">{fallback.category}</div> : null}
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div>
+          <div className="text-[11px] text-[#999] uppercase tracking-wide">Followers</div>
+          <div className="text-[15px] font-semibold text-[#111]">{follLabel}{follEst ? <span className="text-[10px] text-[#a99cf0] font-medium ml-1">est.</span> : null}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-[#999] uppercase tracking-wide">Engagement</div>
+          <div className="text-[15px] font-semibold text-[#111]">{erReal > 0 ? `${Math.round(erReal * 100) / 100}%` : (erBench != null ? <span>~{erBench}%<span className="text-[10px] text-[#a99cf0] font-medium ml-1">est.</span></span> : '—')}</div>
+        </div>
+      </div>
+      {fallback.biography ? <p className="mt-3 text-[12.5px] text-[#555] leading-relaxed line-clamp-3">{fallback.biography}</p> : null}
+      <div className="mt-4 flex items-center gap-2">
+        <a href={`https://instagram.com/${fallback.username}`} target="_blank" rel="noreferrer" className="text-[12px] px-3 py-1.5 rounded-lg bg-[#111] text-white hover:bg-[#333]">View on Instagram ↗</a>
+        {!loadingPosts && onRefresh ? <button onClick={onRefresh} className="text-[12px] px-3 py-1.5 rounded-lg border border-[#e3def9] text-[#555] hover:bg-[#faf9ff]">{refreshing ? 'Fetching…' : 'Load full profile'}</button> : null}
+      </div>
+      <p className="mt-3 text-[11px] text-[#aaa] leading-relaxed">
+        {loadingPosts
+          ? <span className="inline-flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full border-2 border-[#ece9fb] border-t-[#6C4DF6] animate-spin" /> Loading live posts…</span>
+          : 'Showing details from search — the full live profile (recent posts) isn’t available right now.'}
+      </p>
+    </div>
+  );
+}
+
 function ProfileSnapshot({ loading, error, profile, fallback, refreshing, onRefresh, onDraft, onClose, onPivot, initialBrief = '' }: { loading: boolean; error?: string | null; profile: ProfileData | null; fallback?: LiveProfile | null; refreshing?: boolean; onRefresh?: () => void; onDraft: () => void; onClose: () => void; onPivot: (handle: string) => void; initialBrief?: string }) {
   const [copied, setCopied] = useState(false);
   const [rivals, setRivals] = useState('');
@@ -3212,6 +3262,10 @@ function ProfileSnapshot({ loading, error, profile, fallback, refreshing, onRefr
     return () => { alive = false; };
   }, [profile?.handle]);
   if (loading) {
+    // Open INSTANTLY with the search-row card (profile + stats) while the live
+    // fetch runs in the background; the rich posts view replaces it the moment the
+    // fetch returns. Only a bare spinner when we have no fallback data at all.
+    if (fallback) return <SearchDataCard fallback={fallback} onClose={onClose} onRefresh={onRefresh} refreshing={refreshing} loadingPosts />;
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 grid place-items-center" style={{ animation: 'ii-fadeup .3s both' }}>
         <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
@@ -3223,47 +3277,7 @@ function ProfileSnapshot({ loading, error, profile, fallback, refreshing, onRefr
   // profile — the live fetch populates posts when it succeeds. The search-data
   // card is only a LAST RESORT when the profile genuinely can't load at all.
   if (error || !profile) {
-    if (fallback) {
-      const f = fallback.followers > 0 ? fallback.followers : 0;
-      const follLabel = f >= 1000 ? fmt(f) : (fallback.est_tier ? `~${fallback.est_tier.replace('-', '–')}` : '~1–5K');
-      const follEst = f < 1000;
-      const erReal = fallback.engagement ?? 0;
-      const erBench = erReal > 0 ? null : benchmarkEr(f, fallback.est_tier ?? '1-5K');
-      return (
-        <div className="relative rounded-xl border border-[#e3def9] bg-white p-5" style={{ animation: 'ii-fadeup .3s both' }}>
-          <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
-          <div className="flex items-start gap-3">
-            {fallback.profile_pic_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fallback.profile_pic_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
-            ) : (
-              <span className="w-12 h-12 rounded-full bg-[#f0ecff] text-[#6C4DF6] text-lg font-semibold grid place-items-center shrink-0">{fallback.username.charAt(0).toUpperCase()}</span>
-            )}
-            <div className="min-w-0">
-              <a href={`https://instagram.com/${fallback.username}`} target="_blank" rel="noreferrer" className="text-[15px] font-semibold text-[#111] hover:underline">@{fallback.username}</a>
-              {fallback.full_name ? <div className="text-[13px] text-[#666] truncate">{fallback.full_name}</div> : null}
-              {fallback.category ? <div className="text-[12px] text-[#999] truncate">{fallback.category}</div> : null}
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-[11px] text-[#999] uppercase tracking-wide">Followers</div>
-              <div className="text-[15px] font-semibold text-[#111]">{follLabel}{follEst ? <span className="text-[10px] text-[#a99cf0] font-medium ml-1">est.</span> : null}</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-[#999] uppercase tracking-wide">Engagement</div>
-              <div className="text-[15px] font-semibold text-[#111]">{erReal > 0 ? `${Math.round(erReal * 100) / 100}%` : (erBench != null ? <span>~{erBench}%<span className="text-[10px] text-[#a99cf0] font-medium ml-1">est.</span></span> : '—')}</div>
-            </div>
-          </div>
-          {fallback.biography ? <p className="mt-3 text-[12.5px] text-[#555] leading-relaxed line-clamp-3">{fallback.biography}</p> : null}
-          <div className="mt-4 flex items-center gap-2">
-            <a href={`https://instagram.com/${fallback.username}`} target="_blank" rel="noreferrer" className="text-[12px] px-3 py-1.5 rounded-lg bg-[#111] text-white hover:bg-[#333]">View on Instagram ↗</a>
-            {onRefresh ? <button onClick={onRefresh} className="text-[12px] px-3 py-1.5 rounded-lg border border-[#e3def9] text-[#555] hover:bg-[#faf9ff]">{refreshing ? 'Fetching…' : 'Load full profile'}</button> : null}
-          </div>
-          <p className="mt-3 text-[11px] text-[#aaa] leading-relaxed">Showing details from search — the full live profile (recent posts) isn&apos;t available right now.</p>
-        </div>
-      );
-    }
+    if (fallback) return <SearchDataCard fallback={fallback} onClose={onClose} onRefresh={onRefresh} refreshing={refreshing} loadingPosts={false} />;
     return (
       <div className="relative rounded-xl border border-[#e3def9] bg-white p-6 text-center" style={{ animation: 'ii-fadeup .3s both' }}>
         <button onClick={onClose} className="absolute top-2.5 right-3 text-[#bbb] hover:text-[#666] text-lg leading-none" title="Close">×</button>
