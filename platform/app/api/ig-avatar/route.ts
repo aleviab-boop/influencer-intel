@@ -80,7 +80,12 @@ export async function GET(req: NextRequest) {
   //    while that endpoint is in cooldown. This is what fills avatars for creators
   //    we've never crawled, at zero cost.
   try {
-    const ogPic = await fetchProfileOgImage(handle);
+    // Bound the og lookup too — it goes through the og proxy, which can be slow,
+    // and without a cap the avatar request stalled ~25s before falling through.
+    const ogPic = await Promise.race([
+      fetchProfileOgImage(handle),
+      new Promise<string | null>((r) => setTimeout(() => r(null), 6_000)),
+    ]);
     if (ogPic) {
       void getBolticClient()
         .query(`UPDATE creators SET profile_photo_url = $2, updated_at = now() WHERE platform = 'instagram' AND lower(handle) = lower($1)`, [handle, ogPic])
