@@ -154,6 +154,11 @@ function sendOnce(url: string, init: RequestInit, authedHeaders: Record<string, 
         ...(RELAY_KEY ? { 'x-relay-key': RELAY_KEY } : {}),
       },
       body: JSON.stringify({ url, headers: authedHeaders }),
+      // Honour the caller's abort signal — WITHOUT it a slow/hanging relay tunnel
+      // never times out, so the request stalls until the serverless function hits
+      // its 30s limit (504). The signal is shared across igFetch's retry loop, so
+      // one deadline caps the whole fetch, not each attempt.
+      signal: init.signal,
     });
   }
   const d = dispatcher();

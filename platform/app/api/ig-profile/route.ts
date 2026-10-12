@@ -98,7 +98,11 @@ interface LiveUser {
 // prune on those. Only a definitive not-found lets us clean up a hallucinated stub.
 async function fetchLiveUser(handle: string): Promise<{ user: LiveUser | null; notFound: boolean }> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  // 8s (was 12s): while live scraping is walled this fetch almost always fails,
+  // so cap it tighter to fall through to the DB / fallback quickly instead of
+  // making the drawer wait. Combined with the relay now honouring this signal,
+  // the endpoint can no longer stall to a 504.
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
   try {
     const res = await igFetch(PROFILE_URL(handle), {
       headers: REQUEST_HEADERS,
