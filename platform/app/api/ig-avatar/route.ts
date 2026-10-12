@@ -57,7 +57,16 @@ export async function GET(req: NextRequest) {
   if (!/^[a-z0-9._]{1,30}$/i.test(handle)) {
     return new NextResponse('bad handle', { status: 400 });
   }
+  // Hard overall cap: the per-stage fetches (cached → og → live) can stack, so a
+  // fully-failing avatar (expired cache + walled og/live) could still run ~25s.
+  // Bound the whole resolution and 404 fast (client shows initials) if it runs long.
+  return Promise.race([
+    resolveAvatar(handle),
+    new Promise<NextResponse>((r) => setTimeout(() => r(new NextResponse('timeout', { status: 404 })), 9_000)),
+  ]);
+}
 
+async function resolveAvatar(handle: string): Promise<NextResponse> {
   // 1) Cached photo URL — no profile API call needed.
   try {
     const rows = await getBolticClient().query<{ profile_photo_url: string | null }>(
