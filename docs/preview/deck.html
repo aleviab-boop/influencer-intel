@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Influencer Intel — Deck Preview</title>
+<style>
+  :root{
+    --ink:#221641; --body:#3B3357; --mute:#8B84A6; --accent:#6C4DF6;
+    --accent-soft:#EBE6FD; --rule:#8B6DF5; --rule-lt:#C9BCF9;
+    --cream:#F7F5FE; --cream-t:#F1ECFD; --card:#FFFFFF; --line:#E1DAF6; --band:#ECE7FB;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#E7E1FA;font-family:'Poppins','Segoe UI',system-ui,Arial,sans-serif;padding:26px 10px 60px;color:var(--body)}
+  .wrap{max-width:1000px;margin:0 auto}
+  .toolbar{max-width:1000px;margin:0 auto 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .toolbar b{color:var(--ink);font-size:15px}
+  .toolbar span{color:var(--mute);font-size:12.5px}
+  .toolbar a{margin-left:auto;background:var(--accent);color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 16px;border-radius:8px}
+  .slide{position:relative;width:1000px;height:562.5px;background:var(--cream);border-radius:10px;
+    box-shadow:0 8px 30px rgba(40,20,90,.14);overflow:hidden;margin:0 auto 22px}
+  @media(max-width:1040px){.slide{width:100%;height:auto;aspect-ratio:1000/562.5}}
+  .slide.title,.slide.closing{background:var(--cream-t)}
+  .wash{position:absolute;left:0;right:0;bottom:0;height:150px;
+    background:linear-gradient(180deg,rgba(236,231,251,0) 0%,rgba(236,231,251,.55) 100%)}
+  .sw{position:absolute;border-radius:40px;filter:blur(.3px)}
+  .heart{position:absolute;right:48px;top:30px;width:36px;height:34px}
+  .abs{position:absolute}
+  .ttl{position:absolute;left:46px;top:30px;font-size:34px;font-weight:800;color:var(--ink);letter-spacing:-.5px}
+  .sub{position:absolute;left:47px;top:95px;font-size:17px;font-weight:700;color:var(--body)}
+  .card{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:12px}
+  .ic{display:block;margin:0 auto}
+  .cap{color:var(--mute)}
+  .num{color:var(--accent);font-weight:800;font-style:italic}
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <b>Influencer Intel — Executive Deck</b>
+  <span>Purple theme · NeoTailor layout · 13 slides · faithful HTML mirror of the .pptx</span>
+  <a href="/Influencer-Intel-Deck.pptx" download>Download .pptx</a>
+</div>
+<div class="wrap" id="stage"></div>
+
+<script>
+const IN = 75; // px per inch (1000px / 13.333in)
+const A='#6C4DF6', INK='#221641', BODY='#3B3357', MUTE='#8B84A6', GOLD='#8B6DF5';
+
+// ---- inline SVG icon set (violet) ----
+function icon(name,s=42){
+  const st=`fill="none" stroke="${A}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const fl=`fill="${A}" stroke="none"`;
+  const P={
+    bolt:`<polygon ${fl} points="13,2 4,14 11,14 10,22 20,9 13,9"/>`,
+    layers:`<rect ${fl} x="4" y="5" width="16" height="3" rx="1"/><rect ${fl} x="4" y="10.5" width="16" height="3" rx="1"/><rect ${fl} x="4" y="16" width="16" height="3" rx="1"/>`,
+    pin:`<path ${fl} d="M12 2c-3.3 0-6 2.7-6 6 0 4.5 6 12 6 12s6-7.5 6-12c0-3.3-2.7-6-6-6z"/><circle fill="#fff" cx="12" cy="8" r="2.2"/>`,
+    up:`<polygon ${fl} points="12,3 20,12 15,12 15,21 9,21 9,12 4,12"/>`,
+    search:`<circle ${st} cx="11" cy="11" r="7"/><line ${st} x1="16.5" y1="16.5" x2="21" y2="21"/>`,
+    at:`<text x="12" y="17" text-anchor="middle" font-size="20" font-weight="700" ${fl}>@</text>`,
+    db:`<ellipse ${st} cx="12" cy="5.5" rx="7" ry="2.6"/><path ${st} d="M5 5.5v13c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-13"/><path ${st} d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/>`,
+    shield:`<path ${fl} d="M12 2l8 3v6c0 5-3.4 8.6-8 11-4.6-2.4-8-6-8-11V5z"/><path fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" d="M8.5 12l2.3 2.3L15.5 9.5"/>`,
+    gauge:`<path ${st} d="M4 15a8 8 0 0 1 16 0"/><line ${st} x1="12" y1="15" x2="16" y2="10"/>`,
+    compete:`<polyline ${st} points="6,5 12,12 6,19"/><polyline fill="none" stroke="${GOLD}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points="13,5 19,12 13,19"/>`,
+    save:`<polygon ${fl} points="12,3 14.6,8.6 21,9.3 16.2,13.6 17.7,20 12,16.7 6.3,20 7.8,13.6 3,9.3 9.4,8.6"/>`,
+    ai:`<path ${fl} d="M12 2c.6 4.4 3.6 7.4 8 8-4.4.6-7.4 3.6-8 8-.6-4.4-3.6-7.4-8-8 4.4-.6 7.4-3.6 8-8z"/>`,
+    chat:`<path ${st} d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 4v-4H6a2 2 0 0 1-2-2z" fill="${A}" stroke="none"/>`,
+    dm:`<line ${st} x1="4" y1="12" x2="18" y2="12"/><polyline ${st} points="13,7 19,12 13,17"/>`,
+    draft:`<rect ${st} x="6" y="3" width="12" height="18" rx="2"/><line ${st} x1="9" y1="8" x2="15" y2="8"/><line ${st} x1="9" y1="12" x2="15" y2="12"/><line ${st} x1="9" y1="16" x2="13" y2="16"/>`,
+    flag:`<polygon ${fl} points="12,2 21,8.6 17.6,19 6.4,19 3,8.6"/>`,
+    bars:`<rect ${fl} x="4" y="13" width="4" height="7" rx="1"/><rect ${fl} x="10" y="9" width="4" height="11" rx="1"/><rect ${fl} x="16" y="4" width="4" height="16" rx="1"/>`,
+    media:`<rect ${st} x="3" y="5" width="18" height="14" rx="2"/><circle ${fl} cx="9" cy="10" r="2"/><path ${st} d="M4 18l5-5 4 3 3-3 4 4"/>`,
+    rupee:`<text x="12" y="18" text-anchor="middle" font-size="19" font-weight="700" ${fl}>₹</text>`,
+    grid:`<rect ${fl} x="4" y="4" width="7" height="7" rx="1.5"/><rect ${fl} x="13" y="4" width="7" height="7" rx="1.5"/><rect ${fl} x="4" y="13" width="7" height="7" rx="1.5"/><rect ${fl} x="13" y="13" width="7" height="7" rx="1.5"/>`,
+    gear:`<circle ${st} cx="12" cy="12" r="3.2"/><path ${st} d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>`,
+    coverage:`<polygon ${st} points="12,3 20,7.5 20,16.5 12,21 4,16.5 4,7.5"/><circle ${fl} cx="12" cy="12" r="2.4"/>`,
+    pie:`<path ${fl} d="M12 12V3a9 9 0 1 0 9 9z"/><path ${st} d="M13 3a9 9 0 0 1 8 8h-9z"/>`,
+    users:`<circle ${fl} cx="9" cy="8" r="3.2"/><circle ${fl} cx="16" cy="9" r="2.6"/><path ${fl} d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5z"/><path ${fl} d="M14 20c0-2 .8-3.6 2.2-4.5 2.6.2 4.8 2.1 4.8 4.5z"/>`,
+    clock:`<circle ${st} cx="12" cy="12" r="8"/><line ${st} x1="12" y1="12" x2="12" y2="8"/><line ${st} x1="12" y1="12" x2="15" y2="13.5"/>`,
+    target:`<circle ${st} cx="12" cy="12" r="8"/><circle ${st} cx="12" cy="12" r="4.5"/><circle ${fl} cx="12" cy="12" r="1.8"/>`,
+    cube:`<path ${st} d="M12 2l8 4.5v9L12 20l-8-4.5v-9z"/><path ${st} d="M4 6.5l8 4.5 8-4.5M12 11v9"/>`,
+    heart:`<path ${fl} d="M12 21C6 16.5 3 12.7 3 9.2 3 6.4 5.2 4.3 7.9 4.3c1.7 0 3.2.8 4.1 2.1.9-1.3 2.4-2.1 4.1-2.1C18.8 4.3 21 6.4 21 9.2c0 3.5-3 7.3-9 11.8z"/>`
+  };
+  return `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24">${P[name]||P.ai}</svg>`;
+}
+function heartMark(){return `<svg class="heart" viewBox="0 0 24 24"><path fill="none" stroke="${INK}" stroke-width="2" d="M12 21C6 16.5 3 12.7 3 9.2 3 6.4 5.2 4.3 7.9 4.3c1.7 0 3.2.8 4.1 2.1.9-1.3 2.4-2.1 4.1-2.1C18.8 4.3 21 6.4 21 9.2c0 3.5-3 7.3-9 11.8z"/><path fill="none" stroke="${INK}" stroke-width="1.6" d="M12 17c-3-2.3-4.6-4.3-4.6-6 0-1.4 1.1-2.4 2.4-2.4.9 0 1.7.5 2.2 1.2.5-.7 1.3-1.2 2.2-1.2 1.3 0 2.4 1 2.4 2.4 0 1.7-1.6 3.7-4.6 6z"/></svg>`;}
+function swoosh(){return `<div class="sw" style="left:-140px;top:-60px;width:430px;height:44px;transform:rotate(-22deg);background:linear-gradient(90deg,${A},${GOLD})"></div>
+  <div class="sw" style="left:-150px;top:8px;width:440px;height:26px;transform:rotate(-22deg);background:linear-gradient(90deg,${GOLD},${'#C9BCF9'});opacity:.6"></div>
+  <div class="sw" style="right:-140px;bottom:-40px;width:460px;height:44px;transform:rotate(-22deg);background:linear-gradient(90deg,${GOLD},${A})"></div>
+  <div class="sw" style="right:-150px;bottom:14px;width:460px;height:26px;transform:rotate(-22deg);background:linear-gradient(90deg,${'#C9BCF9'},${GOLD});opacity:.6"></div>`;}
+
+// position helper: inches -> px
+const P=(x,y,w,h)=>`position:absolute;left:${x*IN}px;top:${y*IN}px;width:${w*IN}px;${h?`height:${h*IN}px;`:''}`;
+function slide(cls,inner){return `<div class="slide ${cls||''}">${inner}</div>`;}
+function ttl(t,sub){return `<div class="ttl">${t}</div>`+(sub?`<div class="sub">${sub}</div>`:'');}
+function chrome(){return heartMark()+`<div class="wash"></div>`;}
+
+// icon card
+function iconCard(x,y,w,h,ic,ti,de){
+  return `<div class="card" style="${P(x,y,w,h)}">
+    <div style="position:absolute;left:0;right:0;top:${.3*IN}px;text-align:center">${icon(ic,40)}</div>
+    <div style="position:absolute;left:9px;right:9px;top:${.82*IN}px;text-align:center;font-size:14px;font-weight:700;color:${INK}">${ti}</div>
+    <div style="position:absolute;left:12px;right:12px;top:${1.18*IN}px;text-align:center;font-size:11px;line-height:1.28;color:${MUTE}">${de}</div>
+  </div>`;
+}
+
+const slides=[];
+
+// 1 TITLE
+slides.push(slide('title', swoosh()+`
+  <div style="position:absolute;left:0;right:0;top:${2.5*IN}px;height:${.8*IN}px;display:flex;align-items:center;justify-content:center;gap:16px">
+    <svg viewBox="0 0 24 24" width="48" height="48"><path fill="none" stroke="${INK}" stroke-width="2.2" d="M12 21C6 16.5 3 12.7 3 9.2 3 6.4 5.2 4.3 7.9 4.3c1.7 0 3.2.8 4.1 2.1.9-1.3 2.4-2.1 4.1-2.1C18.8 4.3 21 6.4 21 9.2c0 3.5-3 7.3-9 11.8z"/></svg>
+    <span style="font-size:40px;font-weight:800;color:${INK};letter-spacing:-.5px">Influencer Intel</span>
+  </div>
+  <div style="${P(3.9,3.6,5.53,0)};border-top:1.5px solid ${GOLD}"></div>
+  <div style="${P(6.55,3.5,.16,.16)};background:${GOLD};transform:rotate(45deg)"></div>
+  <div style="${P(1.5,3.74,10.333,.5)};text-align:center;font-size:20px;color:${BODY}">India-First Influencer Discovery, Built AI-Native</div>
+  <div style="${P(1.5,4.4,10.333,.4)};text-align:center;font-size:15px;font-style:italic;font-weight:700;color:${INK}">2 August 2026</div>
+  <div style="${P(3.8,6.78,5.73,.4)};border:1px solid ${'#C9BCF9'};border-radius:20px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font-size:9.5px;color:${MUTE}">Proprietary &amp; Confidential&nbsp;&nbsp;|&nbsp;&nbsp;Prepared for leadership &amp; investment review</div>
+`));
+
+// 2 EXECUTIVE SUMMARY
+slides.push(slide('', chrome()+ttl('Executive Summary')+`
+  <div style="${P(.62,1.7,11.5,4.8)};font-size:14.5px;line-height:1.5;color:${BODY}">
+    <p style="margin-bottom:14px">Influencer Intel is a search engine for creators. You type in plain English — a full campaign brief or a quick everyday prompt — and get back ranked, real influencers with live profile data, ready to reach out to. No filters to fight, no lists to buy.</p>
+    <p style="margin-bottom:14px">It exists because influencer marketing in India runs on gut feel, WhatsApp forwards and agency spreadsheets. Influencer Intel replaces that with an AI-native discovery engine tuned for India — regional languages, festival campaigns, and the long tail of creators global tools don’t index.</p>
+    <p>And it compounds. Every search is stored and re-ranked, so the underlying database grows on its own with each brief a user runs. The more it’s used, the more defensible it becomes.</p>
+  </div>`));
+
+// 3 WHAT IS
+(()=>{const c=[['bolt','Seconds','A plain-English brief becomes a ranked shortlist — not hours of manual sourcing.'],['layers','3 Engines','AI web search, a live public-profile crawl and the internal database run in parallel.'],['pin','India-First','Vernacular, regional and festival-aware — tuned for how India discovers creators.'],['up','Self-Growing','Every search enriches a private database, so it gets sharper the more it’s used.']];
+let x=.62;let cards='';c.forEach(([i,t,d])=>{cards+=iconCard(x,2.3,2.72,2.9,i,t,d);x+=3.0;});
+slides.push(slide('', chrome()+ttl('What is Influencer Intel?')+cards+`<div style="${P(.62,5.55,12.1,.5)};text-align:center;font-size:13px;font-style:italic;color:${MUTE}">Describe a campaign the way you’d brief a colleague — and get real creators back, ranked for India.</div>`));})();
+
+// 4 WHY IT MATTERS
+(()=>{const r=[['01','Creator spend in India is scaling fast — but discovery stays manual, slow and biased.'],['02','Global tools are US-first; vernacular, regional and festival creators fall through the cracks.'],['03','Bought lists can’t answer the one question that matters: who fits this campaign, right now?'],['04','We answer in seconds — live data, ranked for India, sharper every time someone searches.']];
+let rows='';let y=2.0;r.forEach(([n,t])=>{rows+=`<div class="card" style="${P(6.3,y,6.4,1.02)};display:flex;align-items:center">
+  <div class="num" style="font-size:30px;margin:0 14px 0 18px;min-width:54px">${n}</div>
+  <div style="font-size:12.5px;line-height:1.3;color:${BODY};padding-right:14px">${t}</div></div>`;y+=1.22;});
+slides.push(slide('', chrome()+ttl('Why It Matters')+`
+  <div style="${P(.62,1.95,5.1,2)};font-size:30px;font-weight:800;font-style:italic;color:#55503F;line-height:1.05;color:#4A4266">“Discovery in India is still done by hand.”</div>
+  <div style="${P(.64,4.15,5.0,1)};font-size:14px;line-height:1.3;color:${BODY}">A booming creator market is being sourced from spreadsheets, WhatsApp forwards and whoever the agency already knows.</div>
+  <div style="${P(.64,5.55,4.6,0)};border-top:1.5px solid ${GOLD}"></div>
+  <div style="${P(.64,5.62,5.0,.4)};font-size:13px;font-style:italic;color:${MUTE}">The opportunity is structural, not incremental.</div>
+  `+rows));})();
+
+// 5 FIND & VET
+(()=>{const c=[['search','Influencer search','Type a brief or prompt in plain English; the AI reads intent and returns matching creators.'],['at','@handle lookup','Paste any handle for a full, live profile snapshot on demand — vet a creator instantly.'],['db','Influencer database','A private, self-growing library of every creator the platform has seen — searchable and yours.'],['shield','Authenticity score','A fake-follower check that flags bought audiences before you spend on them.'],['gauge','Engagement rate','Instant ER for any creator, so shortlists rank on real reach, not follower vanity.'],['compete','Competitor collabs','See which creators rival brands already work with — mine their rosters for talent.'],['save','Saved creators','Shortlist and organise creators into lists for a team, a client or a campaign.']];
+let cards='';let x=.62;c.slice(0,4).forEach(([i,t,d])=>{cards+=iconCard(x,1.95,2.72,2.0,i,t,d);x+=3.0;});
+x=.62+3.0*0.5;c.slice(4).forEach(([i,t,d])=>{cards+=iconCard(x,4.15,2.72,2.0,i,t,d);x+=3.0;});
+slides.push(slide('', chrome()+ttl('Find & Vet Creators','The working feature set, live today — not a roadmap.')+cards));})();
+
+// 6 CREATE / REACH / RUN
+(()=>{const c=[['ai','AI content generator','Campaign ideas, hooks and post concepts tailored to the brand and creator.'],['chat','Reply assistant','Drafts and suggests replies, so outreach and negotiation stay fast and on-brand.'],['dm','Comment-to-DM','Turns post comments into direct-message conversations automatically, at scale.'],['draft','Outreach drafts','A first-pass message per creator — shortlist to first contact without leaving the tool.'],['flag','Campaign management','Plan and run campaigns end to end — recruits, briefs, deliverables and status.'],['bars','Campaign analytics','Track performance across creators and campaigns — reach, engagement, outcomes.'],['media','Media management','Collect, review and organise the content creators deliver against each campaign.'],['rupee','Influencer payouts','Track budgets, spend and creator payments so finance and marketing stay in sync.']];
+let cards='';let y=1.7;for(let rr=0;rr<2;rr++){let x=.62;c.slice(rr*4,rr*4+4).forEach(([i,t,d])=>{cards+=iconCard(x,y,2.72,2.0,i,t,d);x+=3.0;});y+=2.3;}
+slides.push(slide('', chrome()+ttl('Create, Reach Out & Run Campaigns')+cards));})();
+
+// 7 DATA SOURCING (two-path comparison)
+(()=>{
+function pathCard(x,dark,label,labelColor,title,titleColor,badge,badgeBg,badgeTx,bullets,bulletColor){
+  return `<div style="${P(x,1.95,5.9,3.35)};border-radius:11px;background:${dark?INK:'#fff'};border:1px solid ${dark?INK:'#E1DAF6'};overflow:hidden">
+    <div style="position:absolute;left:2px;right:2px;top:0;height:7px;background:${A}"></div>
+    <div style="position:absolute;left:24px;top:18px;font-size:11px;font-weight:700;letter-spacing:2px;color:${labelColor}">${label}</div>
+    <div style="position:absolute;left:24px;top:39px;right:24px;font-size:20px;font-weight:800;color:${titleColor}">${title}</div>
+    <div style="position:absolute;left:24px;top:80px;background:${badgeBg};color:${badgeTx};font-size:15px;font-weight:800;padding:9px 16px;border-radius:8px">${badge}</div>
+    <ul style="position:absolute;left:24px;right:22px;top:137px;font-size:12.5px;line-height:1.35;color:${bulletColor};padding-left:16px">${bullets.map(b=>`<li style="margin-bottom:11px">${b}</li>`).join('')}</ul>
+  </div>`;
+}
+let cardsHtml=pathCard(.62,false,'PRIMARY PATH · FREE',A,'Own crawler + cookie pool',INK,'₹0 / profile','#EBE6FD',INK,[
+  'Live profile data pulled through our own relay crawler.',
+  'A rotating pool of real accounts and cookies.',
+  'Zero marginal cost whenever it works.',
+  'The same engagement &amp; ranking math as the fallback.'],BODY);
+cardsHtml+=pathCard(6.82,true,'FALLBACK · PAY-PER-USE','#C9BCF9','Apify scraper','#fff','~a few ¢ / profile',A,'#fff',[
+  'Fires only on a block — 401 / 403 / rate-limit.',
+  'Billed per profile: no block, no bill.',
+  'Cost scales with blocks, not with how much we search.',
+  'Invisible to the user — same ranked result either way.'],'#E8E3FA');
+const stages=['Own crawler','Blocked?','Apify (pay-per-use)','Same ranked result'];let band='';const sw=12.1/4;stages.forEach((s,i)=>{band+=`<div style="${P(.62+i*sw,5.6,sw,.9)};display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;color:${i===3?A:BODY};text-align:center">${s}</div>`;if(i<3)band+=`<div style="${P(.62+(i+1)*sw-.16,5.6,.32,.9)};display:flex;align-items:center;justify-content:center;font-size:20px;color:${GOLD}">›</div>`;});
+slides.push(slide('', chrome()+ttl('How the Data Is Sourced','Free-first. We only pay when we’re blocked.')+cardsHtml+`<div class="card" style="${P(.62,5.6,12.1,.9)}"></div>`+band));})();
+
+// 8 THREE LOGINS
+(()=>{const c=[['cube','BRAND / AGENCY','The marketing team',['Email-and-password login','Full discovery, outreach &amp; campaign toolset','Plain-English search to shortlist']],['heart','INFLUENCER / CREATOR','The creators themselves',['Passwordless — connect Instagram','Their own portal','Performance prediction (about to build)']],['gear','SUPER ADMIN','The operator',['Private control panel','Runs data pipelines &amp; accounts','Coverage, campaigns &amp; analytics']]];
+let x=.62;let cards='';c.forEach(([i,t,sub,items])=>{cards+=`<div class="card" style="${P(x,1.95,3.86,3.5)}">
+  <div style="position:absolute;left:${.3*IN}px;top:${.32*IN}px">${icon(i,44)}</div>
+  <div style="position:absolute;left:${1.0*IN}px;top:${.4*IN}px;font-size:15px;font-weight:800;color:${A}">${t}</div>
+  <div style="position:absolute;left:${.35*IN}px;top:${.95*IN}px;font-size:12.5px;font-style:italic;color:${MUTE}">${sub}</div>
+  <ul style="position:absolute;left:${.35*IN}px;right:14px;top:${1.4*IN}px;font-size:12px;line-height:1.35;color:${BODY};padding-left:15px">${items.map(it=>`<li style="margin-bottom:9px">${it}</li>`).join('')}</ul>
+</div>`;x+=4.12;});
+slides.push(slide('', chrome()+ttl('Three Logins, One Platform','One system, three doors — each with its own login and view.')+cards+`<div style="${P(.62,5.75,12.1,.6)};background:rgba(236,231,251,.75);display:flex;align-items:center;justify-content:center;font-size:13px;font-style:italic;color:${BODY}">Same engine, three tailored surfaces.</div>`));})();
+
+// 9 SUPER ADMIN
+(()=>{const c=[['grid','Dashboard','Database size, 24h scrapes, agency searches, accounts in rotation, job-queue depth.'],['gear','Scraper','Recent scrapes, account health &amp; cooling, pipeline status (healthy / rate-limited / cookie-dead).'],['bars','Metrics','Worker heartbeat, crawl queue, throughput, 7-day search trends, DAU, creator growth.'],['coverage','Coverage','A niche × city heat-map of where the database is strong and where it’s thin.'],['flag','Campaigns','Per-brand oversight — recruits, budget, spend and performance across the platform.'],['pie','Analytics','System-wide KPIs, including prediction accuracy as the creator portal comes online.'],['users','Agency','The brand-side audit — signups, logins and account activity.']];
+let cards='';let x=.62;c.slice(0,4).forEach(([i,t,d])=>{cards+=iconCard(x,1.95,2.72,2.0,i,t,d);x+=3.0;});
+x=.62+3.0*.5;c.slice(4).forEach(([i,t,d])=>{cards+=iconCard(x,4.15,2.72,2.0,i,t,d);x+=3.0;});
+slides.push(slide('', chrome()+ttl('The Super Admin Control Panel','The cockpit behind the product — seven screens.')+cards));})();
+
+// 10 COMPARISON TABLE
+(()=>{const rows=[['India creator depth','US / global-first; thin India coverage','India-first; vernacular, regional & festival creators'],['How you search','Filters, forms & vetted marketplace lists','Plain-English brief — the AI reads intent'],['Data freshness','Marketplace + partner-reported metrics','Live public-profile snapshots on demand'],['Campaign fit','Generic tags and categories','Campaign mode: proven-collaborator, festival-aware'],['Data asset','Static partner network','Self-growing database — every search enriches it'],['Setup','Contracts, enrolment, integration','Type a brief, get creators in seconds']];
+let tr=`<tr><th style="width:24%">Capability</th><th style="width:35%">Impact.com</th><th style="width:41%">Influencer Intel</th></tr>`;
+rows.forEach(([a,b,c])=>{tr+=`<tr><td style="font-weight:700;color:${INK}">${a}</td><td>${b}</td><td class="win">${c}</td></tr>`;});
+slides.push(slide('', chrome()+ttl('Influencer Intel vs. Impact.com')+`
+  <div style="${P(.62,1.35,12.1,.55)};font-size:13px;line-height:1.25;color:${BODY}">Impact.com is a strong global partner-network platform — built for US brands, not for how India discovers creators. That gap is our opening.</div>
+  <table style="${P(.62,2.05,12.1,0)};border-collapse:collapse;font-size:11px;color:${BODY}">
+    <style>table th{background:${A};color:#fff;font-weight:700;text-align:left;padding:7px 9px;font-size:12px}table td{border:1px solid ${'#E1DAF6'};padding:7px 9px;background:#fff;vertical-align:middle;line-height:1.25}table tr:nth-child(even) td{background:#FBFAFE}table td.win{background:#EBE6FD !important;color:${INK};font-weight:600}</style>
+    ${tr}
+  </table>
+  <div style="${P(.62,6.35,12.1,.7)};font-size:12px;font-style:italic;line-height:1.25;color:${MUTE}">Impact.com is where a global brand runs a formal partner program. Influencer Intel is where an Indian brand finds the right creator for a specific campaign — faster, live, and deep in exactly the market Impact under-serves.</div>`));})();
+
+// 11 PORTAL
+(()=>{const c=[['target','Performance prediction','Forecast reach and engagement for a planned reel or post — post what will land.'],['clock','Best-time & format','When to post and which format is likely to perform for their specific audience.'],['compete','Brand-fit signals','Which brands and campaigns they match — feeding back into brand-side discovery.'],['up','Growth tracking','A running view of what’s working, so creators see the effect of the guidance.']];
+let x=.62;let cards='';c.forEach(([i,t,d])=>{cards+=iconCard(x,2.6,2.72,2.35,i,t,d);x+=3.0;});
+slides.push(slide('', chrome()+ttl('About to Build: The Influencer Portal','The next build opens the other side of the market.')+`
+  <div style="${P(.62,1.7,12.1,.7)};font-size:13.5px;line-height:1.35;color:${BODY}">Today the platform serves brands. Next it opens to creators: an influencer connects their account and the platform predicts how their next reel or post will perform — before they publish it.</div>
+  `+cards+`<div style="${P(.62,5.35,12.1,.85)};background:rgba(236,231,251,.8);display:flex;align-items:center;justify-content:center;text-align:center;padding:0 40px;font-size:13px;font-style:italic;line-height:1.3;color:${BODY}">The moment creators log in for predictions, they hand us first-party performance data no scraper can get — turning a discovery tool into a two-sided network.</div>`));})();
+
+// 12 WHERE THIS GOES
+(()=>{const c=[['Today','A working, India-first discovery engine brands can use now.'],['Next','The creator portal with performance prediction — a two-sided network with a proprietary data flywheel.'],['The Moat','Every search and every creator login makes the data — and the predictions — better. That advantage compounds and is hard to copy.']];
+let x=.62;let cards='';c.forEach(([t,d],i)=>{cards+=`<div class="card" style="${P(x,2.1,3.86,3.0)}">
+  <div class="num" style="position:absolute;left:${.35*IN}px;top:${.3*IN}px;font-size:34px">0${i+1}</div>
+  <div style="position:absolute;left:${.35*IN}px;top:${1.05*IN}px;font-size:18px;font-weight:800;color:${INK}">${t}</div>
+  <div style="position:absolute;left:${.35*IN}px;right:${.35*IN}px;top:${1.6*IN}px;font-size:13px;line-height:1.4;color:${BODY}">${d}</div></div>`;x+=4.12;});
+slides.push(slide('', chrome()+ttl('Where This Goes')+cards+`<div style="${P(.62,5.55,12.1,.5)};text-align:center;font-size:14px;font-style:italic;color:${MUTE}">The more it’s used, the more defensible it becomes.</div>`));})();
+
+// 13 CLOSING
+(()=>{const chips=['India-first influencer discovery','Live, ranked, AI-native','Prepared for leadership review'];
+let x=(13.333-(3.6*3+.3*2))/2;let ch='';chips.forEach(t=>{ch+=`<div style="${P(x,4.15,3.6,.5)};border:1px solid ${'#C9BCF9'};border-radius:25px;background:rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font-size:12px;color:${BODY}">${t}</div>`;x+=3.9;});
+slides.push(slide('closing', swoosh()+`
+  <div style="position:absolute;left:0;right:0;top:${2.45*IN}px;height:${.8*IN}px;display:flex;align-items:center;justify-content:center;gap:14px">
+    <svg viewBox="0 0 24 24" width="44" height="44"><path fill="none" stroke="${INK}" stroke-width="2.2" d="M12 21C6 16.5 3 12.7 3 9.2 3 6.4 5.2 4.3 7.9 4.3c1.7 0 3.2.8 4.1 2.1.9-1.3 2.4-2.1 4.1-2.1C18.8 4.3 21 6.4 21 9.2c0 3.5-3 7.3-9 11.8z"/></svg>
+    <span style="font-size:34px;font-weight:800;color:${INK}">Influencer Intel</span>
+  </div>
+  <div style="${P(3.9,3.6,5.53,0)};border-top:1.5px solid ${GOLD}"></div>
+  `+ch));})();
+
+document.getElementById('stage').innerHTML=slides.join('');
+</script>
+</body>
+</html>
