@@ -2451,7 +2451,12 @@ export function LiveSearch({
                           // scrape the moment one lands.
                           const live = liveStats[p.username]?.followers;
                           const f = live ?? p.followers;
-                          if (f > 0) {
+                          // Trust a live scrape outright. Otherwise, an implausibly-low
+                          // count (<1000) on an AI-surfaced creator is almost always
+                          // garbage — a dropped "K" or a bad/stale DB stub — so don't
+                          // show it; fall through to the size estimate instead.
+                          const garbageLow = live == null && (p.from_ai || p.estimated) && f > 0 && f < 1000;
+                          if (f > 0 && !garbageLow) {
                             const est = p.estimated && live == null;
                             return est ? (
                               <span title="Estimated from OpenAI web search — not a live scrape">
