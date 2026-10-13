@@ -76,6 +76,15 @@ async function attachStoredLocations<T extends LiveProfile>(results: T[]): Promi
 // tops up the live results and surfaces curated profiles below them. New live
 // profiles are persisted so the database keeps growing.
 
+// Normalise an IG handle for dedup/membership: lowercase, strip a leading @, and
+// drop dots/underscores. OpenAI's three parallel searches frequently return the
+// SAME creator under punctuation variants ("juhi_godambe" vs "juhigodambe") or a
+// wrong-spelled duplicate of one we already have. Deduping on the exact handle let
+// both through — so a dead variant (no photo, no live stats) showed beside the
+// real row. Collapsing on the stripped form keeps ONE row, preferring the one with
+// real data. (Same equivalence dbBackedAiProfiles already uses for DB matching.)
+const stripHandle = (h: string) => h.trim().toLowerCase().replace(/^@/, '').replace(/[._]/g, '');
+
 // Data-backed lookup for OpenAI-suggested handles: any that already exist in our
 // creators DB (with real follower data) come back INSTANTLY and deterministically
 // — no live IG fetch, no throttle, and the same every run. This is what lets the
@@ -446,16 +455,26 @@ export async function POST(req: NextRequest) {
       // we have after each stage, so a timeout still surfaces the named creators.
       const commitAi = (extra: LiveProfile[]) => {
         const m = new Map<string, LiveProfile>();
+        // dbBacked first, then liveValidated, then estOnly (caller order) — so for a
+        // stripped key the real-data row wins over an estimate-only variant.
         for (const p of [...dbBacked, ...extra]) {
-          const k = p.username.toLowerCase();
+          const k = stripHandle(p.username);
           if (!m.has(k)) m.set(k, p);
         }
         aiProfiles = Array.from(m.values());
       };
       commitAi([]); // floor: DB-backed AI handles are live-independent and instant
 
-      const haveHandles = new Set(dbBacked.map((p) => p.username.toLowerCase()));
-      const missing = handles.filter((h) => !haveHandles.has(h.trim().toLowerCase().replace(/^@/, '')));
+      const haveHandles = new Set(dbBacked.map((p) => stripHandle(p.username)));
+      // Exclude handles already resolved from the DB (any punctuation variant), and
+      // collapse punctuation-variant duplicates so we live-fetch each creator once.
+      const seenMissing = new Set<string>();
+      const missing = handles.filter((h) => {
+        const k = stripHandle(h);
+        if (haveHandles.has(k) || seenMissing.has(k)) return false;
+        seenMissing.add(k);
+        return true;
+      });
       let liveValidated = (
         await profilesFromHandles(missing, tokens, { max: 32, budgetMs: 15_000, delayMs: 200 })
       ).map((p) => ({ ...p, from: 'live' as const }));
@@ -463,7 +482,7 @@ export async function POST(req: NextRequest) {
       // OpenAI's ESTIMATES so the AI creators show numbers immediately. Real
       // scraped data (followers>0) always wins; estimates are tagged estimated=true
       // and are NEVER written to the DB as real (see the persist step below).
-      const validatedKeys = new Set(liveValidated.map((p) => p.username.toLowerCase()));
+      const validatedKeys = new Set(liveValidated.map((p) => stripHandle(p.username)));
       liveValidated = liveValidated.map((p) => {
         const est = estMap.get(p.username.toLowerCase());
         // Fill display name / category from OpenAI when we don't already hold them
@@ -491,14 +510,19 @@ export async function POST(req: NextRequest) {
       // Any OpenAI creator neither in the DB nor returned by the fetch: add it as
       // an estimate-only row so no AI find is silently dropped for lack of a live
       // fetch. (Estimate-only rows without a usable number are left out.)
-      const dbKeys = new Set(dbBacked.map((p) => p.username.toLowerCase()));
+      const dbKeys = new Set(dbBacked.map((p) => stripHandle(p.username)));
+      // Skip any creator already shown as a DB or live-validated row (any punctuation
+      // variant), and collapse estimate-only variants among themselves — so a dead
+      // duplicate spelling never appears beside the real creator.
+      const estSeen = new Set<string>([...dbKeys, ...validatedKeys]);
       const estOnly: LiveProfile[] = creators
-        .filter(
-          (c) =>
-            ((!!c.est_followers && c.est_followers > 0) || !!c.est_tier) &&
-            !dbKeys.has(c.username.toLowerCase()) &&
-            !validatedKeys.has(c.username.toLowerCase()),
-        )
+        .filter((c) => {
+          const k = stripHandle(c.username);
+          if (estSeen.has(k)) return false;
+          if (!((!!c.est_followers && c.est_followers > 0) || !!c.est_tier)) return false;
+          estSeen.add(k);
+          return true;
+        })
         .map((c) => {
           const hasExact = !!c.est_followers && c.est_followers > 0;
           return {
@@ -548,7 +572,7 @@ export async function POST(req: NextRequest) {
       // handful when the live fetch is throttled). Dedupe.
       const merged = new Map<string, LiveProfile>();
       for (const p of [...dbBacked, ...liveValidated, ...estOnly]) {
-        const k = p.username.toLowerCase();
+        const k = stripHandle(p.username); // collapse punctuation-variant duplicates
         if (!merged.has(k)) merged.set(k, p);
       }
       let cand = Array.from(merged.values());
@@ -733,13 +757,21 @@ export async function POST(req: NextRequest) {
       : p.from === 'live' ? 0 : 1;
   const byUser = new Map<string, LiveProfile>();
   for (const p of [...aiProfiles, ...dbMatches, ...liveProfiles]) {
-    const key = p.username.toLowerCase();
+    const key = stripHandle(p.username); // collapse punctuation-variant duplicates across pipelines
     const ex = byUser.get(key);
     if (!ex) {
       byUser.set(key, p);
       continue;
     }
-    const richer = p.followers > ex.followers || (p.followers === ex.followers && p.score > ex.score) ? p : ex;
+    // Prefer a row with real (non-estimated) data over an estimate; then the richer one.
+    const pReal = !p.estimated && p.followers > 0;
+    const exReal = !ex.estimated && ex.followers > 0;
+    const richer =
+      pReal !== exReal
+        ? pReal ? p : ex
+        : p.followers > ex.followers || (p.followers === ex.followers && p.score > ex.score)
+          ? p
+          : ex;
     byUser.set(key, { ...richer, from_ai: p.from_ai || ex.from_ai, loc_match: p.loc_match || ex.loc_match });
   }
   const merged = flagLocals(Array.from(byUser.values()), tokens);
